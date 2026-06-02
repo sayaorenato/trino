@@ -1,0 +1,334 @@
+export interface User {
+  id: string;
+  name: string;
+  avatar_url: string;
+  streak: number;
+  longest_streak: number;
+  total_points: number;
+  email: string;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  description: string;
+  members_count: number;
+  active_challenge_id?: string;
+  role: 'admin' | 'member';
+}
+
+export interface Challenge {
+  id: string;
+  group_id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  total_rounds: number;
+  current_round: number;
+  rules: string;
+}
+
+export interface Round {
+  id: string;
+  challenge_id: string;
+  round_number: number;
+  start_date: string;
+  end_date: string;
+  status: 'active' | 'completed' | 'upcoming';
+}
+
+export type HabitType = 'prayer' | 'bible' | 'exercise';
+
+export interface Checkin {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_avatar: string;
+  group_id: string;
+  habit_type: HabitType;
+  media_url: string;
+  is_late: boolean;
+  caption?: string;
+  points: number;
+  created_at: string;
+  reactions: {
+    emoji: string;
+    users: string[]; // ids dos usuários que reagiram
+  }[];
+}
+
+export interface RankingMember {
+  user_id: string;
+  name: string;
+  avatar_url: string;
+  points: number;
+  streak: number;
+  rounds_won: number;
+  position?: number;
+}
+
+export interface ExtraTask {
+  id: string;
+  challenge_id: string;
+  title: string;
+  description: string;
+  type: 'general' | 'presence' | 'punctuality';
+  points: number;
+  expires_at: string;
+  completed_by: string[]; // ids dos usuários que completaram
+}
+
+// ---------------- MOCK DATA ----------------
+
+export const MOCK_CURRENT_USER: User = {
+  id: 'user_1',
+  name: 'Renato Mello',
+  avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+  streak: 12,
+  longest_streak: 24,
+  total_points: 1340,
+  email: 'renato@trino.app',
+};
+
+export const MOCK_USERS: Record<string, User> = {
+  'user_1': MOCK_CURRENT_USER,
+  'user_2': {
+    id: 'user_2',
+    name: 'Sarah Souza',
+    avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
+    streak: 8,
+    longest_streak: 15,
+    total_points: 1120,
+    email: 'sarah@trino.app',
+  },
+  'user_3': {
+    id: 'user_3',
+    name: 'Mateus Oliveira',
+    avatar_url: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80',
+    streak: 15,
+    longest_streak: 30,
+    total_points: 1450,
+    email: 'mateus@trino.app',
+  },
+  'user_4': {
+    id: 'user_4',
+    name: 'Amanda Costa',
+    avatar_url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&q=80',
+    streak: 5,
+    longest_streak: 10,
+    total_points: 890,
+    email: 'amanda@trino.app',
+  },
+  'user_5': {
+    id: 'user_5',
+    name: 'Thiago Neves',
+    avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+    streak: 0,
+    longest_streak: 18,
+    total_points: 620,
+    email: 'thiago@trino.app',
+  }
+};
+
+export const MOCK_GROUPS: Group[] = [
+  {
+    id: 'group_1',
+    name: 'Célula Videira',
+    description: 'Grupo da nossa célula para crescer espiritualmente e manter o corpo ativo na fé!',
+    members_count: 8,
+    active_challenge_id: 'chal_1',
+    role: 'admin',
+  },
+  {
+    id: 'group_2',
+    name: 'Jovens IMC',
+    description: 'Desafio trimestral da mocidade da Igreja Metodista Central. Foco e constância!',
+    members_count: 24,
+    active_challenge_id: 'chal_2',
+    role: 'member',
+  },
+  {
+    id: 'group_3',
+    name: 'Família em Ação',
+    description: 'Pequeno grupo familiar para prestação de contas diária de hábitos de oração e treinos.',
+    members_count: 5,
+    active_challenge_id: undefined,
+    role: 'admin',
+  }
+];
+
+export const MOCK_CHALLENGES: Record<string, Challenge> = {
+  'chal_1': {
+    id: 'chal_1',
+    group_id: 'group_1',
+    name: 'Fé em Constância',
+    start_date: '2026-05-01',
+    end_date: '2026-06-30',
+    total_rounds: 8, // 8 rounds de 1 semana
+    current_round: 4,
+    rules: 'Check-in diário obrigatório de: 1. Oração (mín. 15min), 2. Leitura Bíblica (mín. 3 caps), 3. Exercício Físico (mín. 30min). Os check-ins devem conter foto de validação. Check-ins atrasados em até 12 horas recebem 50% de penalidade de pontos.',
+  },
+  'chal_2': {
+    id: 'chal_2',
+    group_id: 'group_2',
+    name: 'Mocidade Forte',
+    start_date: '2026-04-01',
+    end_date: '2026-07-01',
+    total_rounds: 3, // 3 rounds de 1 mês
+    current_round: 2,
+    rules: 'Manter a chama acesa! Atividades físicas e oração. Check-in com foto obrigatório.',
+  }
+};
+
+export const MOCK_ROUNDS: Record<string, Round[]> = {
+  'chal_1': [
+    { id: 'round_1_1', challenge_id: 'chal_1', round_number: 1, start_date: '2026-05-01', end_date: '2026-05-07', status: 'completed' },
+    { id: 'round_1_2', challenge_id: 'chal_1', round_number: 2, start_date: '2026-05-08', end_date: '2026-05-14', status: 'completed' },
+    { id: 'round_1_3', challenge_id: 'chal_1', round_number: 3, start_date: '2026-05-15', end_date: '2026-05-21', status: 'completed' },
+    { id: 'round_1_4', challenge_id: 'chal_1', round_number: 4, start_date: '2026-05-22', end_date: '2026-05-28', status: 'active' },
+    { id: 'round_1_5', challenge_id: 'chal_1', round_number: 5, start_date: '2026-05-29', end_date: '2026-06-04', status: 'upcoming' },
+  ]
+};
+
+export const MOCK_RANKINGS: Record<string, RankingMember[]> = {
+  'chal_1': [
+    { user_id: 'user_3', name: 'Mateus Oliveira', avatar_url: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80', points: 345, streak: 15, rounds_won: 2 },
+    { user_id: 'user_1', name: 'Renato Mello', avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80', points: 320, streak: 12, rounds_won: 1 },
+    { user_id: 'user_2', name: 'Sarah Souza', avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80', points: 290, streak: 8, rounds_won: 0 },
+    { user_id: 'user_4', name: 'Amanda Costa', avatar_url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&q=80', points: 210, streak: 5, rounds_won: 0 },
+    { user_id: 'user_5', name: 'Thiago Neves', avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80', points: 120, streak: 0, rounds_won: 0 },
+  ],
+  'chal_2': [
+    { user_id: 'user_1', name: 'Renato Mello', avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80', points: 1020, streak: 12, rounds_won: 1 },
+    { user_id: 'user_3', name: 'Mateus Oliveira', avatar_url: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80', points: 980, streak: 15, rounds_won: 0 },
+  ]
+};
+
+export const MOCK_EXTRA_TASKS: Record<string, ExtraTask[]> = {
+  'chal_1': [
+    {
+      id: 'task_1',
+      challenge_id: 'chal_1',
+      title: 'Vigília da Célula',
+      description: 'Participar da vigília da célula na sexta-feira e fazer um check-in de presença.',
+      type: 'presence',
+      points: 50,
+      expires_at: '2026-05-29T23:59:59Z',
+      completed_by: ['user_2', 'user_3'],
+    },
+    {
+      id: 'task_2',
+      challenge_id: 'chal_1',
+      title: 'Devocional de Madrugada',
+      description: 'Fazer o devocional e oração antes das 06:00 da manhã de terça-feira.',
+      type: 'punctuality',
+      points: 30,
+      expires_at: '2026-05-26T06:00:00Z', // Já expirou ou está no limite
+      completed_by: ['user_1', 'user_3'],
+    },
+    {
+      id: 'task_3',
+      challenge_id: 'chal_1',
+      title: 'Ajudar no Social',
+      description: 'Apoiar o projeto social da igreja no sábado, entregando donativos.',
+      type: 'general',
+      points: 80,
+      expires_at: '2026-05-30T18:00:00Z',
+      completed_by: [],
+    }
+  ]
+};
+
+export const MOCK_FEED: Checkin[] = [
+  {
+    id: 'check_1',
+    user_id: 'user_3',
+    user_name: 'Mateus Oliveira',
+    user_avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80',
+    group_id: 'group_1',
+    habit_type: 'exercise',
+    media_url: 'https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=600&q=80', // Corrida/Caminhada
+    is_late: false,
+    caption: 'Corrida matinal de 5km paga! O templo do Espírito Santo está ativo.',
+    points: 10,
+    created_at: '2026-05-26T07:30:00Z',
+    reactions: [
+      { emoji: '🔥', users: ['user_1', 'user_2'] },
+      { emoji: '👏', users: ['user_4'] }
+    ]
+  },
+  {
+    id: 'check_2',
+    user_id: 'user_2',
+    user_name: 'Sarah Souza',
+    user_avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
+    group_id: 'group_1',
+    habit_type: 'bible',
+    media_url: 'https://images.unsplash.com/photo-1504052434569-70ad5836ab90?auto=format&fit=crop&w=600&q=80', // Bíblia/Estudo
+    is_late: false,
+    caption: 'Lendo Romanos 8 hoje. Que palavra edificante para a nossa caminhada! 🙌📖',
+    points: 10,
+    created_at: '2026-05-26T08:15:00Z',
+    reactions: [
+      { emoji: '❤️', users: ['user_1', 'user_3'] },
+      { emoji: '🙌', users: ['user_5'] }
+    ]
+  },
+  {
+    id: 'check_3',
+    user_id: 'user_1',
+    user_name: 'Renato Mello',
+    user_avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+    group_id: 'group_1',
+    habit_type: 'prayer',
+    media_url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80', // Ambiente de oração/vela/café
+    is_late: false,
+    caption: 'Tempo precioso de intercessão pelo nosso grupo hoje pela manhã. Oração é a chave.',
+    points: 10,
+    created_at: '2026-05-26T06:30:00Z',
+    reactions: [
+      { emoji: '🙌', users: ['user_2', 'user_3'] },
+      { emoji: '🔥', users: ['user_4'] }
+    ]
+  },
+  {
+    id: 'check_4',
+    user_id: 'user_4',
+    user_name: 'Amanda Costa',
+    user_avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=150&q=80',
+    group_id: 'group_1',
+    habit_type: 'exercise',
+    media_url: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80', // Academia
+    is_late: true, // Atrasado
+    caption: 'Treino feito à noite! Cheguei cansada mas fui. Check-in atrasado conta pela metade mas conta!',
+    points: 5,
+    created_at: '2026-05-25T23:45:00Z',
+    reactions: [
+      { emoji: '👏', users: ['user_1'] }
+    ]
+  }
+];
+
+export const HABIT_LABELS = {
+  prayer: {
+    title: 'Oração',
+    description: 'Mínimo de 15 minutos diários',
+    icon: 'hands-pray' as const, // Ícone customizado ou Material
+    color: '#ae8f64',
+    points: 10,
+  },
+  bible: {
+    title: 'Leitura Bíblica',
+    description: 'Mínimo de 3 capítulos',
+    icon: 'book-open-variant' as const,
+    color: '#03192e',
+    points: 10,
+  },
+  exercise: {
+    title: 'Exercício Físico',
+    description: 'Mínimo de 30 minutos',
+    icon: 'run-fast' as const,
+    color: '#4a654a',
+    points: 10,
+  }
+};
