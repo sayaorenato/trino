@@ -24,6 +24,8 @@ import { Avatar } from '../components/ui/Avatar';
 import { WebContainer } from '../components/ui/WebContainer';
 import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
+import { supabase } from '../lib/supabase';
+import { MOCK_EXTRA_TASKS } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -112,6 +114,7 @@ export default function FeedScreen() {
   const [commentInputsText, setCommentInputsText] = useState<Record<string, string>>({});
   const [sendingCommentMap, setSendingCommentMap] = useState<Record<string, boolean>>({});
   const commentInputRefs = React.useRef<Record<string, TextInput | null>>({});
+  const [extraTasksMap, setExtraTasksMap] = useState<Record<string, string>>({});
 
   const PAGE_SIZE = 15;
 
@@ -128,6 +131,43 @@ export default function FeedScreen() {
     setError(null);
 
     try {
+      const isMock = groupId.startsWith('group');
+      
+      // Buscar tarefas extras do grupo para mapear seus títulos
+      const tempTasksMap: Record<string, string> = {};
+      if (isMock) {
+        const mockTasks = MOCK_EXTRA_TASKS['chal_1'] || [];
+        mockTasks.forEach(t => {
+          tempTasksMap[t.id] = t.title;
+        });
+      } else {
+        try {
+          const challenges = await api.getGroupChallenges(groupId);
+          const challengeIds = challenges.map((c: any) => c.id);
+
+          if (challengeIds.length > 0) {
+            const { data: tasksData } = await supabase
+              .from('tasks')
+              .select('id, description')
+              .in('challenge_id', challengeIds);
+
+            (tasksData || []).forEach((t: any) => {
+              let title = 'Tarefa Extra';
+              try {
+                const parsed = JSON.parse(t.description);
+                title = parsed.title || 'Tarefa Extra';
+              } catch (e) {
+                // não era JSON
+              }
+              tempTasksMap[t.id] = title;
+            });
+          }
+        } catch (taskErr) {
+          console.error('Error fetching tasks map:', taskErr);
+        }
+      }
+      setExtraTasksMap(tempTasksMap);
+
       const data = await api.getGroupFeed(groupId, PAGE_SIZE, 0);
 
       const mapped: FeedItem[] = data.map((item: any) => ({
@@ -137,7 +177,6 @@ export default function FeedScreen() {
       }));
 
       // Buscar comentários em lote ou mocks para cada check-in
-      const isMock = groupId.startsWith('group');
       const newCommentsMap: Record<string, CommentItem[]> = {};
 
       if (isMock) {
@@ -253,6 +292,45 @@ export default function FeedScreen() {
       setLoadingMore(false);
     }
   }, [groupId, feedItems.length, loadingMore, hasMore]);
+
+  // Limpar a legenda do post removendo o prefixo de ID de tarefa extra
+  const getCleanNote = (note: string | null) => {
+    if (!note) return null;
+    if (note.startsWith('[EXTRA_TASK_ID:')) {
+      const match = note.match(/^\[EXTRA_TASK_ID:([^\]]+)\]/);
+      if (match) {
+        const cleaned = note.substring(match[0].length).trim();
+        // Se ficou vazio ou for apenas o fallback automático de conclusão manual
+        if (!cleaned || cleaned === 'Concluído manualmente') {
+          return null;
+        }
+        return cleaned;
+      }
+    }
+    return note;
+  };
+
+  // Obter os metadados da tag do post (título, ícone, cor)
+  const getPostBadge = (item: FeedItem) => {
+    if (item.note && item.note.startsWith('[EXTRA_TASK_ID:')) {
+      const match = item.note.match(/^\[EXTRA_TASK_ID:([^\]]+)\]/);
+      const taskId = match ? match[1] : '';
+      const title = extraTasksMap[taskId] || 'Tarefa Extra';
+
+      return {
+        title,
+        icon: 'trophy-outline',
+        color: COLORS.secondary,
+      };
+    }
+
+    const habit = HABIT_META[item.type] ?? HABIT_META.bible;
+    return {
+      title: habit.title,
+      icon: habit.icon,
+      color: habit.color,
+    };
+  };
 
   useEffect(() => {
     fetchFeed();
@@ -535,7 +613,7 @@ export default function FeedScreen() {
 
   // ── Renderização de cada post ──
   const renderItem = ({ item }: { item: FeedItem }) => {
-    const habit = HABIT_META[item.type] ?? HABIT_META.bible;
+    const badge = getPostBadge(item);
     const itemProfile = item.profiles;
     const name = itemProfile?.full_name ?? 'Membro';
     const avatarUrl = itemProfile?.avatar_url ?? undefined;
@@ -564,16 +642,19 @@ export default function FeedScreen() {
               })}
             </Text>
           </View>
-          <View style={[styles.habitBadge, { backgroundColor: habit.color }]}>
-            <MaterialCommunityIcons name={habit.icon as any} size={12} color="#fff" />
-            <Text style={styles.habitBadgeText}>{habit.title}</Text>
+          <View style={[styles.habitBadge, { backgroundColor: badge.color }]}>
+            <MaterialCommunityIcons name={badge.icon as any} size={12} color="#fff" />
+            <Text style={styles.habitBadgeText}>{badge.title}</Text>
           </View>
         </View>
 
         {/* Nota / Legenda */}
-        {item.note ? (
-          <Text style={styles.postCaption}>{item.note}</Text>
-        ) : null}
+        {(() => {
+          const cleanNote = getCleanNote(item.note);
+          return cleanNote ? (
+            <Text style={styles.postCaption}>{cleanNote}</Text>
+          ) : null;
+        })()}
 
         {/* Imagem do Check-in */}
         {item.image_url ? (
