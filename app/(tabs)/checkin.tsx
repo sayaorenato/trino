@@ -12,7 +12,7 @@ import {
   Platform,
   Alert
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from '../../components/ui/Card';
@@ -42,6 +42,7 @@ const HABIT_DB_TYPE: Record<HabitType, 'pray' | 'bible' | 'workout'> = {
 
 export default function CheckinScreen() {
   const router = useRouter();
+  const { challengeId: queryChallengeId, habit: queryHabit } = useLocalSearchParams<{ challengeId?: string, habit?: string }>();
   const { user } = useAuth();
 
   // Estados do Fluxo de Check-in
@@ -99,11 +100,27 @@ export default function CheckinScreen() {
 
       setActiveChallengesList(list);
       if (list.length > 0) {
-        setSelectedChallenge(list[0]);
-        if (list.length === 1) {
+        const targetChalId = queryChallengeId;
+        const found = targetChalId ? list.find(item => item.challengeId === targetChalId) : null;
+        
+        if (found) {
+          setSelectedChallenge(found);
           setChallengeChosen(true);
+          
+          if (queryHabit && (queryHabit === 'prayer' || queryHabit === 'bible' || queryHabit === 'exercise')) {
+            setSelectedHabit(queryHabit as HabitType);
+            setSelectedTask(null);
+            setStep('upload');
+          } else {
+            setStep('select');
+          }
         } else {
-          setChallengeChosen(false);
+          setSelectedChallenge(list[0]);
+          if (list.length === 1) {
+            setChallengeChosen(true);
+          } else {
+            setChallengeChosen(false);
+          }
         }
       } else {
         setSelectedChallenge(null);
@@ -111,7 +128,7 @@ export default function CheckinScreen() {
       }
       setLoadingRound(false);
     });
-  }, [user]);
+  }, [user, queryChallengeId, queryHabit]);
 
   // Atualiza as tarefas extras e o round ativo de acordo com o desafio selecionado
   useEffect(() => {

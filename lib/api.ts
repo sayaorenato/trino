@@ -62,7 +62,7 @@ export const api = {
       .map((r: any) => r.id);
 
     if (allRoundIds.length === 0) {
-      return { groups: groupsWithChallenges, habits: { prayer: false, bible: false, exercise: false } };
+      return { groups: groupsWithChallenges, habits: { prayer: false, bible: false, exercise: false }, todayCheckins: [] };
     }
 
     const today = new Date();
@@ -82,7 +82,7 @@ export const api = {
       if (c.type === 'workout') habitsState.exercise = true;
     });
 
-    return { groups: groupsWithChallenges, habits: habitsState };
+    return { groups: groupsWithChallenges, habits: habitsState, todayCheckins: todayCheckins || [] };
   },
 
   async getTodayCheckins(userId: string, roundId: string) {

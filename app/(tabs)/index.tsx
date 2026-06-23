@@ -25,7 +25,7 @@ import { StreakBadge } from '../../components/ui/StreakBadge';
 import { ProgressBar } from '../../components/ui/ProgressBar';
 import { Button } from '../../components/ui/Button';
 import { WebContainer } from '../../components/ui/WebContainer';
-import { HABIT_LABELS, HabitType, MOCK_RANKINGS, RankingMember, MOCK_CHALLENGE_INVITATIONS } from '../../constants/mock-data';
+import { HABIT_LABELS, HabitType, MOCK_RANKINGS, RankingMember, MOCK_CHALLENGE_INVITATIONS, MOCK_FEED } from '../../constants/mock-data';
 import { COLORS, SPACING, FONTS, SHADOWS, BORDER_RADIUS, ANIMATION } from '../../constants/theme';
 
 const { width } = Dimensions.get('window');
@@ -43,6 +43,7 @@ export default function DashboardScreen() {
 
   const [groups, setGroups] = useState<any[]>([]);
   const [habits, setHabits] = useState({ prayer: false, bible: false, exercise: false });
+  const [todayCheckins, setTodayCheckins] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Entrance animations
@@ -69,7 +70,32 @@ export default function DashboardScreen() {
   const verseIndex = new Date().getDate() % VERSES.length;
   const todayVerse = VERSES[verseIndex];
 
-  const activeChallenges = groups.reduce((acc: any[], g: any) => {
+  // Lista 1: Meus Desafios (Apenas os desafios ativos em que o usuário participa do ranking)
+  const myActiveChallenges = groups.reduce((acc: any[], g: any) => {
+    if (g.challenges && Array.isArray(g.challenges)) {
+      g.challenges.forEach((challenge: any) => {
+        const isChallengeActive = new Date(challenge.end_date) >= new Date();
+        if (isChallengeActive) {
+          const ranking = MOCK_RANKINGS[challenge.id] || [];
+          const userParticipates = ranking.some((m: any) => m.user_id === user?.id);
+          
+          if (userParticipates) {
+            if (!acc.some((item: any) => item.challenge.id === challenge.id)) {
+              acc.push({
+                groupId: g.id,
+                groupName: g.name,
+                challenge: challenge
+              });
+            }
+          }
+        }
+      });
+    }
+    return acc;
+  }, []);
+
+  // Lista 2: Todos os Desafios Ativos de Todos os Grupos (Para os Check-ins de Hoje)
+  const allActiveChallenges = groups.reduce((acc: any[], g: any) => {
     if (g.challenges && Array.isArray(g.challenges)) {
       g.challenges.forEach((challenge: any) => {
         const isChallengeActive = new Date(challenge.end_date) >= new Date();
@@ -88,9 +114,9 @@ export default function DashboardScreen() {
             ];
           }
 
-          // Mostra todos os desafios ativos de todos os grupos do usuário
           if (!acc.some((item: any) => item.challenge.id === challenge.id)) {
             acc.push({
+              groupId: g.id,
               groupName: g.name,
               challenge: challenge
             });
@@ -100,6 +126,25 @@ export default function DashboardScreen() {
     }
     return acc;
   }, []);
+
+  // Helper para verificar se um hábito específico de um desafio foi feito hoje
+  const isHabitDone = (item: any, type: 'prayer' | 'bible' | 'exercise') => {
+    const challenge = item.challenge;
+    const dbType = type === 'prayer' ? 'pray' : type === 'bible' ? 'bible' : 'workout';
+    
+    if (challenge.id.startsWith('chal') && user) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      return MOCK_FEED.some(c => 
+        c.user_id === user.id && 
+        c.group_id === item.groupId && 
+        c.habit_type === type && 
+        c.created_at.split('T')[0] === todayStr
+      );
+    }
+    
+    const roundIds = (challenge.rounds || []).map((r: any) => r.id);
+    return todayCheckins.some((c: any) => c.type === dbType && roundIds.includes(c.round_id));
+  };
 
   const checkPendingInvite = useCallback(async () => {
     const code = getPendingInviteCode();
@@ -310,6 +355,7 @@ export default function DashboardScreen() {
       const data = await api.getDashboardData(user.id);
       setGroups(data.groups);
       setHabits(data.habits);
+      setTodayCheckins(data.todayCheckins || []);
     } catch (err: any) {
       Alert.alert('Erro', err.message || 'Erro ao entrar no grupo.');
     } finally {
@@ -324,6 +370,7 @@ export default function DashboardScreen() {
       api.getDashboardData(user.id).then((data) => {
         setGroups(data.groups);
         setHabits(data.habits);
+        setTodayCheckins(data.todayCheckins || []);
         setLoading(false);
         
         // Verificar se há convites pendentes na memória global
@@ -378,7 +425,7 @@ export default function DashboardScreen() {
             <View style={styles.summaryRow}>
               {[
                 { value: groups.length, label: 'Grupos', color: COLORS.primary },
-                { value: activeChallenges.length, label: 'Desafios', color: COLORS.secondary },
+                { value: myActiveChallenges.length, label: 'Desafios', color: COLORS.secondary },
                 { value: `${totalCheckinsDone}/3`, label: 'Hoje', color: COLORS.gold },
               ].map(({ value, label, color }) => (
                 <View key={label} style={styles.summaryCard}>
@@ -457,109 +504,170 @@ export default function DashboardScreen() {
               </ScrollView>
             )}
 
-            {/* Desafios de Hoje */}
+            {/* Meus Desafios */}
             <View style={[styles.sectionHeader, { marginTop: SPACING.lg }]}>
-              <Text style={styles.sectionTitle}>Desafios de Hoje</Text>
+              <Text style={styles.sectionTitle}>Meus Desafios</Text>
             </View>
 
-            {activeChallenges.length === 0 ? (
+            {myActiveChallenges.length === 0 ? (
               <Card variant="flat" style={styles.noChallengesCard}>
                 <MaterialCommunityIcons name="trophy-outline" size={24} color={COLORS.textLight} />
-                <Text style={styles.noChallengesText}>Nenhum desafio ativo no momento</Text>
+                <Text style={styles.noChallengesText}>Você não participa de nenhum desafio ativo</Text>
               </Card>
             ) : (
-              <View style={styles.compactChallengesContainer}>
-                {activeChallenges.map((item: any, index: number) => {
+              <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={styles.groupsScroll}>
+                {myActiveChallenges.map((item: any) => {
                   const challenge = item.challenge;
                   const daysLeft = Math.ceil((new Date(challenge.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                   return (
                     <TouchableOpacity
                       key={challenge.id}
-                      activeOpacity={0.8}
+                      activeOpacity={0.9}
                       onPress={() => router.push({ pathname: '/(tabs)/challenge', params: { challengeId: challenge.id } })}
-                      style={[
-                        styles.compactChallengeItem,
-                        index === activeChallenges.length - 1 && { borderBottomWidth: 0 }
-                      ]}
                     >
-                      <View style={styles.compactChallengeLeft}>
-                        <View style={styles.compactChallengeIconBg}>
-                          <MaterialCommunityIcons name="trophy" size={16} color={COLORS.gold} />
+                      <Card variant="gradient" gradientColors={COLORS.gradients.primary} style={styles.groupCard}>
+                        <View style={styles.groupCardHeader}>
+                          <View style={[styles.groupAvatar, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                            <MaterialCommunityIcons name="trophy" size={20} color={COLORS.goldLight} />
+                          </View>
                         </View>
-                        <View style={styles.compactChallengeInfo}>
-                          <Text style={styles.compactChallengeTitle} numberOfLines={1}>
-                            {challenge.title || challenge.name}
-                          </Text>
-                          <Text style={styles.compactChallengeSubtitle} numberOfLines={1}>
-                            {item.groupName}
-                          </Text>
+                        <Text style={[styles.groupCardName, { color: '#fff' }]} numberOfLines={1}>
+                          {challenge.title}
+                        </Text>
+                        <Text style={[styles.groupCardChallenge, { color: COLORS.goldLight }]} numberOfLines={1}>
+                          {item.groupName}
+                        </Text>
+                        <View style={styles.groupCardFooter}>
+                          <ProgressBar progress={0.65} height={4} showPercentage={false} style={{ width: '100%' }} />
+                          <Text style={[styles.groupCardDays, { color: 'rgba(255,255,255,0.8)' }]}>{daysLeft}d restantes</Text>
                         </View>
-                      </View>
-                      <View style={styles.compactChallengeRight}>
-                        <Text style={styles.compactChallengeDays}>{daysLeft}d restantes</Text>
-                        <MaterialCommunityIcons name="chevron-right" size={16} color={COLORS.textLight} />
-                      </View>
+                      </Card>
                     </TouchableOpacity>
                   );
                 })}
-              </View>
+              </ScrollView>
             )}
 
-            {/* Today's Check-ins */}
+            {/* Check-ins de Hoje */}
             <View style={[styles.habitsSection, groups.length === 0 && { opacity: 0.6 }]}>
               <Text style={styles.sectionTitle}>Check-ins de Hoje</Text>
               <Text style={styles.sectionSubtitle}>
                 {groups.length === 0 
                   ? 'Crie ou entre em um grupo para fazer check-ins.'
-                  : totalCheckinsDone === 3
-                    ? 'Todos os hábitos concluídos! 🎉'
-                    : `${3 - totalCheckinsDone} hábito(s) pendente(s)`}
+                  : 'Registre o seu hábito tocando nos ícones à direita:'}
               </Text>
 
-              <View style={styles.habitsGrid}>
-                {(['prayer', 'bible', 'exercise'] as HabitType[]).map((type) => {
-                  const done = habits[type];
-                  const label = HABIT_LABELS[type];
-                  const iconColors: Record<HabitType, string> = {
-                    prayer: COLORS.gold,
-                    bible: COLORS.primaryLight,
-                    exercise: COLORS.secondary,
-                  };
-                  return (
-                    <TouchableOpacity
-                      key={type}
-                      activeOpacity={0.8}
-                      style={[
-                        styles.habitCard, 
-                        done && styles.habitCardCompleted,
-                        groups.length === 0 && { backgroundColor: COLORS.surfaceVariant, borderColor: COLORS.border }
-                      ]}
-                      disabled={groups.length === 0}
-                      onPress={() => router.push('/(tabs)/checkin')}
-                    >
-                      <View style={[styles.habitIconBg, { backgroundColor: iconColors[type] }]}>
-                        <MaterialCommunityIcons name={label.icon as any} size={22} color="#fff" />
-                      </View>
-                      <View style={styles.habitInfo}>
-                        <Text style={styles.habitTitle}>{label.title}</Text>
-                        <Text style={styles.habitDesc}>{label.description}</Text>
-                      </View>
-                      <View style={styles.habitStatusContainer}>
-                        {done ? (
-                          <View style={[styles.statusBadge, styles.statusBadgeCompleted]}>
-                            <MaterialCommunityIcons name="check-bold" size={13} color="#fff" />
-                            <Text style={styles.statusTextCompleted}>Feito</Text>
+              {groups.length === 0 ? (
+                <Card variant="flat" style={styles.noChallengesCard}>
+                  <MaterialCommunityIcons name="check-decagram-outline" size={24} color={COLORS.textLight} />
+                  <Text style={styles.noChallengesText}>Nenhum check-in disponível no momento</Text>
+                </Card>
+              ) : allActiveChallenges.length === 0 ? (
+                <Card variant="flat" style={styles.noChallengesCard}>
+                  <MaterialCommunityIcons name="trophy-outline" size={24} color={COLORS.textLight} />
+                  <Text style={styles.noChallengesText}>Nenhum desafio ativo para check-in</Text>
+                </Card>
+              ) : (
+                <View style={styles.compactChallengesContainer}>
+                  {allActiveChallenges.map((item: any, index: number) => {
+                    const challenge = item.challenge;
+                    
+                    const prayerDone = isHabitDone(item, 'prayer');
+                    const bibleDone = isHabitDone(item, 'bible');
+                    const exerciseDone = isHabitDone(item, 'exercise');
+
+                    return (
+                      <View 
+                        key={challenge.id}
+                        style={[
+                          styles.compactChallengeItem,
+                          index === allActiveChallenges.length - 1 && { borderBottomWidth: 0 }
+                        ]}
+                      >
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => router.push({ pathname: '/(tabs)/challenge', params: { challengeId: challenge.id } })}
+                          style={styles.compactChallengeLeft}
+                        >
+                          <View style={styles.compactChallengeIconBg}>
+                            <MaterialCommunityIcons name="trophy" size={16} color={COLORS.gold} />
                           </View>
-                        ) : (
-                          <View style={styles.statusBadge}>
-                            <Text style={styles.statusText}>Pendente</Text>
+                          <View style={styles.compactChallengeInfo}>
+                            <Text style={styles.compactChallengeTitle} numberOfLines={1}>
+                              {challenge.title}
+                            </Text>
+                            <Text style={styles.compactChallengeSubtitle} numberOfLines={1}>
+                              {item.groupName}
+                            </Text>
                           </View>
-                        )}
+                        </TouchableOpacity>
+
+                        <View style={styles.compactHabitsRow}>
+                          {/* Hábito: Oração */}
+                          <TouchableOpacity
+                            activeOpacity={0.8}
+                            disabled={prayerDone}
+                            onPress={() => router.push({ 
+                              pathname: '/(tabs)/checkin', 
+                              params: { challengeId: challenge.id, habit: 'prayer' } 
+                            })}
+                            style={[
+                              styles.miniHabitButton,
+                              prayerDone ? { backgroundColor: COLORS.gold } : styles.miniHabitButtonPending
+                            ]}
+                          >
+                            <MaterialCommunityIcons 
+                              name={prayerDone ? "check-bold" : HABIT_LABELS.prayer.icon as any} 
+                              size={12} 
+                              color="#fff" 
+                            />
+                          </TouchableOpacity>
+
+                          {/* Hábito: Bíblia */}
+                          <TouchableOpacity
+                            activeOpacity={0.8}
+                            disabled={bibleDone}
+                            onPress={() => router.push({ 
+                              pathname: '/(tabs)/checkin', 
+                              params: { challengeId: challenge.id, habit: 'bible' } 
+                            })}
+                            style={[
+                              styles.miniHabitButton,
+                              bibleDone ? { backgroundColor: COLORS.primaryLight } : styles.miniHabitButtonPending
+                            ]}
+                          >
+                            <MaterialCommunityIcons 
+                              name={bibleDone ? "check-bold" : HABIT_LABELS.bible.icon as any} 
+                              size={12} 
+                              color="#fff" 
+                            />
+                          </TouchableOpacity>
+
+                          {/* Hábito: Exercício */}
+                          <TouchableOpacity
+                            activeOpacity={0.8}
+                            disabled={exerciseDone}
+                            onPress={() => router.push({ 
+                              pathname: '/(tabs)/checkin', 
+                              params: { challengeId: challenge.id, habit: 'exercise' } 
+                            })}
+                            style={[
+                              styles.miniHabitButton,
+                              exerciseDone ? { backgroundColor: COLORS.secondary } : styles.miniHabitButtonPending
+                            ]}
+                          >
+                            <MaterialCommunityIcons 
+                              name={exerciseDone ? "check-bold" : HABIT_LABELS.exercise.icon as any} 
+                              size={12} 
+                              color="#fff" 
+                            />
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+                    );
+                  })}
+                </View>
+              )}
             </View>
           </Animated.View>
 
@@ -804,5 +912,20 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: FONTS.family.bodyMedium,
     color: COLORS.textLight,
+  },
+  compactHabitsRow: {
+    flexDirection: 'row',
+    gap: SPACING.xs,
+    alignItems: 'center',
+  },
+  miniHabitButton: {
+    width: 28,
+    height: 28,
+    borderRadius: BORDER_RADIUS.full,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  miniHabitButtonPending: {
+    backgroundColor: COLORS.border,
   },
 });
