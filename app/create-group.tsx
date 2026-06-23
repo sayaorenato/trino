@@ -7,12 +7,14 @@ import {
   TouchableOpacity, 
   SafeAreaView, 
   TextInput,
-  Alert
+  Alert,
+  Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { WebContainer } from '../components/ui/WebContainer';
 import { COLORS, SPACING, FONTS } from '../constants/theme';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/auth';
@@ -35,10 +37,23 @@ export default function CreateGroupScreen() {
 
     setLoading(true);
     try {
-      // 1. Criar o Grupo
+      // 1. Verificar se o grupo com o mesmo nome já existe (case-insensitive)
+      const { data: existingGroup } = await supabase
+        .from('groups')
+        .select('id')
+        .ilike('name', name.trim())
+        .maybeSingle();
+
+      if (existingGroup) {
+        Alert.alert('Erro', 'esse grupo já foi criado');
+        setLoading(false);
+        return;
+      }
+
+      // 2. Criar o Grupo
       const { data: group, error: groupError } = await supabase
         .from('groups')
-        .insert({ name, description })
+        .insert({ name: name.trim(), description })
         .select()
         .single();
 
@@ -55,13 +70,21 @@ export default function CreateGroupScreen() {
 
       if (memberError) throw memberError;
 
-      Alert.alert(
-        'Grupo Criado!', 
-        `O grupo "${name}" foi criado com sucesso. Agora crie um desafio para começar.`,
-        [
-          { text: 'Criar Desafio', onPress: () => router.replace({ pathname: '/create-challenge', params: { groupId: group.id } }) }
-        ]
-      );
+      if (Platform.OS === 'web') {
+        window.alert('Grupo criado com sucesso!');
+        router.replace({ pathname: '/group-dashboard', params: { groupId: group.id } });
+      } else {
+        Alert.alert(
+          'Sucesso', 
+          'Grupo criado com sucesso!',
+          [
+            { 
+              text: 'OK', 
+              onPress: () => router.replace({ pathname: '/group-dashboard', params: { groupId: group.id } }) 
+            }
+          ]
+        );
+      }
     } catch (e: any) {
       Alert.alert('Erro', e.message || 'Ocorreu um erro ao criar o grupo.');
     } finally {
@@ -70,57 +93,59 @@ export default function CreateGroupScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.primary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Criar Grupo</Text>
-        <View style={{ width: 24 }} />
-      </View>
+    <WebContainer>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.primary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Criar Grupo</Text>
+          <View style={{ width: 24 }} />
+        </View>
 
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.subtitle}>
-          Crie um novo grupo para reunir seus amigos ou igreja.
-        </Text>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.subtitle}>
+            Crie um novo grupo para reunir seus amigos ou igreja.
+          </Text>
 
-        <Card variant="default" style={styles.formCard}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Nome do Grupo</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ex: Jovens IBB"
-              value={name}
-              onChangeText={setName}
+          <Card variant="default" style={styles.formCard}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Nome do Grupo</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ex: Jovens IBB"
+                value={name}
+                onChangeText={setName}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Descrição (Opcional)</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="Qual o propósito deste grupo?"
+                multiline
+                numberOfLines={3}
+                value={description}
+                onChangeText={setDescription}
+              />
+            </View>
+
+            <Button
+              title="Criar Grupo"
+              variant="primary"
+              size="lg"
+              loading={loading}
+              onPress={handleCreate}
+              style={styles.submitBtn}
             />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Descrição (Opcional)</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Qual o propósito deste grupo?"
-              multiline
-              numberOfLines={3}
-              value={description}
-              onChangeText={setDescription}
-            />
-          </View>
-
-          <Button
-            title="Criar Grupo"
-            variant="primary"
-            size="lg"
-            loading={loading}
-            onPress={handleCreate}
-            style={styles.submitBtn}
-          />
-        </Card>
-      </ScrollView>
-    </SafeAreaView>
+          </Card>
+        </ScrollView>
+      </SafeAreaView>
+    </WebContainer>
   );
 }
 
@@ -146,6 +171,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: FONTS.size.sm, fontWeight: FONTS.weight.semibold,
     color: COLORS.text, marginBottom: SPACING.xs,
+    fontFamily: FONTS.family.heading,
   },
   input: {
     height: 48, backgroundColor: COLORS.background, borderRadius: 10,

@@ -14,6 +14,7 @@ import { useAuth } from '../../context/auth';
 import { Avatar } from '../../components/ui/Avatar';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { WebContainer } from '../../components/ui/WebContainer';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
 
 export default function ProfileScreen() {
@@ -26,6 +27,7 @@ export default function ProfileScreen() {
   };
 
   return (
+    <WebContainer>
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Meu Perfil</Text>
@@ -198,6 +200,7 @@ export default function ProfileScreen() {
         <View style={{ height: Platform.OS === 'ios' ? 100 : 80 }} />
       </ScrollView>
     </SafeAreaView>
+    </WebContainer>
   );
 }
 
@@ -217,9 +220,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: FONTS.size.lg,
-    fontWeight: FONTS.weight.bold,
-    color: COLORS.primary,
     fontFamily: FONTS.family.heading,
+    color: COLORS.primary,
   },
   scrollContent: {
     paddingHorizontal: SPACING.lg,
@@ -244,7 +246,6 @@ const styles = StyleSheet.create({
   userName: {
     color: '#fff',
     fontSize: FONTS.size.lg,
-    fontWeight: FONTS.weight.bold,
     fontFamily: FONTS.family.heading,
   },
   userEmail: {
@@ -267,12 +268,12 @@ const styles = StyleSheet.create({
   statValue: {
     color: '#fff',
     fontSize: FONTS.size.xl,
-    fontWeight: FONTS.weight.extraBold,
+    fontFamily: FONTS.family.heading,
   },
   statLabel: {
     color: COLORS.goldLight,
     fontSize: 10,
-    fontWeight: FONTS.weight.bold,
+    fontFamily: FONTS.family.bodySemibold,
     textTransform: 'uppercase',
     marginTop: 2,
   },
@@ -281,13 +282,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: FONTS.size.lg,
-    fontWeight: FONTS.weight.bold,
-    color: COLORS.primary,
     fontFamily: FONTS.family.heading,
+    color: COLORS.primary,
     marginBottom: 2,
   },
   sectionSubtitle: {
     fontSize: FONTS.size.xs,
+    fontFamily: FONTS.family.body,
     color: COLORS.textLight,
     marginBottom: SPACING.md,
   },
@@ -296,7 +297,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderRadius: BORDER_RADIUS.xl,
     borderWidth: 1,
-    borderColor: 'rgba(225, 222, 227, 0.4)',
+    borderColor: COLORS.borderLight,
     gap: SPACING.md,
   },
   habitStatItem: {
@@ -321,12 +322,12 @@ const styles = StyleSheet.create({
   },
   habitStatTitle: {
     fontSize: FONTS.size.sm,
-    fontWeight: FONTS.weight.bold,
+    fontFamily: FONTS.family.bodySemibold,
     color: COLORS.primary,
   },
   habitStatPercentage: {
     fontSize: FONTS.size.sm,
-    fontWeight: FONTS.weight.bold,
+    fontFamily: FONTS.family.bodyBold,
     color: COLORS.textSecondary,
   },
   barBg: {
@@ -359,7 +360,7 @@ const styles = StyleSheet.create({
   optionText: {
     marginLeft: SPACING.md,
     fontSize: FONTS.size.sm,
-    fontWeight: FONTS.weight.semibold,
+    fontFamily: FONTS.family.bodySemibold,
     color: COLORS.text,
   },
   logoutContainer: {

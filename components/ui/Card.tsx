@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle, Platform } from 'react-native';
+import { View, StyleSheet, ViewStyle, Platform, StyleProp } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, BORDER_RADIUS, SHADOWS, SPACING } from '../../constants/theme';
 
 interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
-  variant?: 'default' | 'flat' | 'gradient' | 'glass';
+  style?: StyleProp<ViewStyle>;
+  variant?: 'default' | 'flat' | 'gradient' | 'elevated' | 'glass';
   gradientColors?: readonly [string, string, ...string[]];
 }
 
@@ -21,7 +21,7 @@ export function Card({
     return (
       <LinearGradient
         colors={gradientColors}
-        style={[styles.card, styles.gradientCard, SHADOWS.light, style]}
+        style={[styles.card, styles.gradientCard, SHADOWS.medium, style]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
@@ -34,6 +34,8 @@ export function Card({
     switch (variant) {
       case 'flat':
         return styles.flatCard;
+      case 'elevated':
+        return [styles.defaultCard, SHADOWS.strong];
       case 'glass':
         return styles.glassCard;
       case 'default':
@@ -58,7 +60,7 @@ const styles = StyleSheet.create({
   defaultCard: {
     backgroundColor: COLORS.surfaceCard,
     borderWidth: 1,
-    borderColor: 'rgba(225, 222, 227, 0.5)', // borda muito sutil
+    borderColor: COLORS.borderLight,
   },
   flatCard: {
     backgroundColor: COLORS.surfaceVariant,
@@ -68,16 +70,17 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   glassCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    backgroundColor: 'rgba(255, 255, 255, 0.80)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderColor: 'rgba(255, 255, 255, 0.6)',
     ...Platform.select({
-      ios: {
-        backdropFilter: 'blur(20px)', // Apenas funciona em web/ios se suportado nativamente, simulamos com opacidade
-      },
+      ios: {},
       android: {
-        backgroundColor: 'rgba(255, 255, 255, 0.9)', // Menos transparente no Android
-      }
-    })
-  }
+        backgroundColor: 'rgba(255, 255, 255, 0.92)',
+      },
+      web: {
+        backdropFilter: 'blur(20px)',
+      } as any,
+    }),
+  },
 });

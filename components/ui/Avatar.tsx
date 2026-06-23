@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Image, Text, StyleSheet, ViewStyle } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, BORDER_RADIUS, FONTS } from '../../constants/theme';
 
 interface AvatarProps {
@@ -17,7 +18,6 @@ export function Avatar({
 }: AvatarProps) {
   const [hasError, setHasError] = useState(false);
 
-  // Extrair iniciais do nome
   const getInitials = (fullName: string) => {
     const parts = fullName.trim().split(' ');
     if (parts.length === 0 || !parts[0]) return '?';
@@ -27,41 +27,54 @@ export function Avatar({
 
   const hasImage = source && !hasError;
 
-  return (
-    <View 
-      style={[
-        styles.container, 
-        { 
-          width: size, 
-          height: size, 
+  if (hasImage) {
+    return (
+      <View style={[
+        styles.container,
+        {
+          width: size,
+          height: size,
           borderRadius: size / 2,
-          backgroundColor: hasImage ? 'transparent' : COLORS.surfaceVariant,
-          borderColor: COLORS.border,
-          borderWidth: hasImage ? 1 : 1,
-        }, 
-        style
-      ]}
-    >
-      {hasImage ? (
+          borderColor: COLORS.borderLight,
+          borderWidth: 2,
+        },
+        style,
+      ]}>
         <Image
           source={{ uri: source }}
           style={{ width: '100%', height: '100%', borderRadius: size / 2 }}
           onError={() => setHasError(true)}
         />
-      ) : (
-        <Text 
-          style={[
-            styles.initialsText, 
-            { 
-              fontSize: size * 0.4, 
-              color: COLORS.primary 
-            }
-          ]}
-        >
-          {getInitials(name)}
-        </Text>
-      )}
-    </View>
+      </View>
+    );
+  }
+
+  return (
+    <LinearGradient
+      colors={COLORS.gradients.primaryWarm}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[
+        styles.container,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+        },
+        style,
+      ]}
+    >
+      <Text
+        style={[
+          styles.initialsText,
+          {
+            fontSize: size * 0.38,
+          },
+        ]}
+      >
+        {getInitials(name)}
+      </Text>
+    </LinearGradient>
   );
 }
 
@@ -72,7 +85,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   initialsText: {
-    fontWeight: FONTS.weight.bold,
-    fontFamily: FONTS.family.body,
-  }
+    fontFamily: FONTS.family.heading,
+    color: '#FFFFFF',
+  },
 });

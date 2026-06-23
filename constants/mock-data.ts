@@ -15,6 +15,7 @@ export interface Group {
   members_count: number;
   active_challenge_id?: string;
   role: 'admin' | 'member';
+  challenge?: any;
 }
 
 export interface Challenge {
@@ -76,6 +77,8 @@ export interface ExtraTask {
   points: number;
   expires_at: string;
   completed_by: string[]; // ids dos usuários que completaram
+  start_time?: string; // Horário de início no formato "HH:MM"
+  active?: boolean;
 }
 
 // ---------------- MOCK DATA ----------------
@@ -213,18 +216,20 @@ export const MOCK_EXTRA_TASKS: Record<string, ExtraTask[]> = {
       description: 'Participar da vigília da célula na sexta-feira e fazer um check-in de presença.',
       type: 'presence',
       points: 50,
-      expires_at: '2026-05-29T23:59:59Z',
+      expires_at: '2026-06-20T23:59:59Z',
       completed_by: ['user_2', 'user_3'],
+      start_time: '19:30',
     },
     {
       id: 'task_2',
       challenge_id: 'chal_1',
       title: 'Devocional de Madrugada',
-      description: 'Fazer o devocional e oração antes das 06:00 da manhã de terça-feira.',
+      description: 'Fazer o devocional e oração antes das 06:00 da manhã.',
       type: 'punctuality',
       points: 30,
-      expires_at: '2026-05-26T06:00:00Z', // Já expirou ou está no limite
-      completed_by: ['user_1', 'user_3'],
+      expires_at: '2026-06-21T23:59:59Z',
+      completed_by: ['user_2', 'user_3'],
+      start_time: '06:00',
     },
     {
       id: 'task_3',
@@ -233,7 +238,7 @@ export const MOCK_EXTRA_TASKS: Record<string, ExtraTask[]> = {
       description: 'Apoiar o projeto social da igreja no sábado, entregando donativos.',
       type: 'general',
       points: 80,
-      expires_at: '2026-05-30T18:00:00Z',
+      expires_at: '2026-06-25T18:00:00Z',
       completed_by: [],
     }
   ]
@@ -332,3 +337,15 @@ export const HABIT_LABELS = {
     points: 10,
   }
 };
+
+export interface ChallengeInvitation {
+  id: string;
+  challenge_id: string;
+  challenge_name: string;
+  group_name: string;
+  invited_user_id: string;
+  invited_user_name: string;
+  status: 'pending' | 'accepted' | 'declined';
+}
+
+export const MOCK_CHALLENGE_INVITATIONS: ChallengeInvitation[] = [];

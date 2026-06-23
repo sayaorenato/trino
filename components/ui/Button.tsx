@@ -1,18 +1,19 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { 
-  TouchableOpacity, 
   Text, 
   StyleSheet, 
   ActivityIndicator, 
   ViewStyle, 
   TextStyle,
   StyleProp,
-  TouchableOpacityProps,
-  View
+  Pressable,
+  PressableProps,
+  View,
+  Animated,
 } from 'react-native';
-import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../../constants/theme';
+import { COLORS, SPACING, BORDER_RADIUS, FONTS, ANIMATION } from '../../constants/theme';
 
-interface ButtonProps extends TouchableOpacityProps {
+interface ButtonProps extends Omit<PressableProps, 'style'> {
   title: string;
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
@@ -20,6 +21,7 @@ interface ButtonProps extends TouchableOpacityProps {
   icon?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
+  disabled?: boolean;
 }
 
 export function Button({
@@ -33,7 +35,24 @@ export function Button({
   disabled,
   ...props
 }: ButtonProps) {
-  
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: ANIMATION.press.scale,
+      useNativeDriver: true,
+      ...ANIMATION.spring.stiff,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      ...ANIMATION.spring.bouncy,
+    }).start();
+  };
+
   const getButtonStyles = () => {
     const variantStyle = disabled || loading ? styles.disabled :
       variant === 'primary' ? styles.primary :
@@ -66,59 +85,68 @@ export function Button({
   };
 
   return (
-    <TouchableOpacity
-      style={getButtonStyles()}
-      disabled={disabled || loading}
-      activeOpacity={0.7}
-      {...props}
-    >
-      {loading ? (
-        <ActivityIndicator size="small" color={getLoadingColor()} />
-      ) : (
-        <>
-          {icon && <PlatformIconWrapper>{icon}</PlatformIconWrapper>}
-          <Text style={getTextStyle()}>{title}</Text>
-        </>
-      )}
-    </TouchableOpacity>
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <Pressable
+        style={getButtonStyles()}
+        disabled={disabled || loading}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        {...props}
+      >
+        {loading ? (
+          <ActivityIndicator size="small" color={getLoadingColor()} />
+        ) : (
+          <>
+            {icon && <View style={{ marginRight: SPACING.sm }}>{icon}</View>}<Text style={getTextStyle()}>{title}</Text>
+          </>
+        )}
+      </Pressable>
+    </Animated.View>
   );
 }
-
-// Wrapper simples para dar espaçamento ao ícone
-const PlatformIconWrapper = ({ children }: { children: React.ReactNode }) => (
-  <View style={{ marginRight: SPACING.sm }}>{children}</View>
-);
 
 const styles = StyleSheet.create({
   button: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: 'transparent',
   },
   // Tamanhos
   sm: {
-    paddingVertical: SPACING.xs * 1.5,
-    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: BORDER_RADIUS.full,
   },
   md: {
-    paddingVertical: SPACING.sm * 1.5,
-    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xl,
+    borderRadius: BORDER_RADIUS.xl,
   },
   lg: {
-    paddingVertical: SPACING.md * 1.25,
-    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.xxl,
+    borderRadius: BORDER_RADIUS.xl,
   },
   // Variantes
   primary: {
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
   },
   secondary: {
     backgroundColor: COLORS.secondary,
     borderColor: COLORS.secondary,
+    shadowColor: COLORS.secondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.20,
+    shadowRadius: 12,
+    elevation: 4,
   },
   outline: {
     backgroundColor: 'transparent',
@@ -134,8 +162,7 @@ const styles = StyleSheet.create({
   },
   // Textos
   text: {
-    fontFamily: FONTS.family.body,
-    fontWeight: FONTS.weight.semibold,
+    fontFamily: FONTS.family.bodySemibold,
     textAlign: 'center',
   },
   text_sm: {

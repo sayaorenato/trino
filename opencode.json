@@ -3,7 +3,11 @@
   "mcp": {
     "github": {
       "type": "local",
-      "command": ["npx", "-y", "@modelcontextprotocol/github"],
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/github"
+      ],
       "enabled": true,
       "env": {
         "GITHUB_TOKEN": "${GITHUB_TOKEN}"

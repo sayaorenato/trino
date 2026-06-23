@@ -6,149 +6,163 @@ import {
   ScrollView, 
   TouchableOpacity, 
   SafeAreaView, 
-  Platform
+  Platform,
+  ActivityIndicator
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { MOCK_GROUPS, MOCK_CHALLENGES, Group } from '../../constants/mock-data';
+import { WebContainer } from '../../components/ui/WebContainer';
+import { useAuth } from '../../context/auth';
+import { api } from '../../lib/api';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
 
 export default function GroupsScreen() {
   const router = useRouter();
-  const [groups, setGroups] = useState<Group[]>(MOCK_GROUPS);
+  const { user } = useAuth();
+  const [groups, setGroups] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleCreateGroup = () => {
-    // Simula a criação de um novo grupo
-    const newGroup: Group = {
-      id: `group_${groups.length + 1}`,
-      name: `Pequeno Grupo ${groups.length - 1}`,
-      description: 'Novo grupo criado para prestação de contas de leitura e oração.',
-      members_count: 1,
-      role: 'admin',
-    };
-    setGroups(prev => [...prev, newGroup]);
-  };
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!user) return;
+      setLoading(true);
+      api.getDashboardData(user.id).then((data) => {
+        setGroups(data.groups);
+        setLoading(false);
+      });
+    }, [user])
+  );
+
+  if (loading && groups.length === 0) {
+    return (
+      <WebContainer>
+        <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color={COLORS.secondary} />
+        </SafeAreaView>
+      </WebContainer>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Meus Grupos</Text>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={handleCreateGroup}
-        >
-          <MaterialCommunityIcons name="plus" size={24} color={COLORS.secondary} />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.subtitle}>
-          Você participa de {groups.length} grupos ativos. Alterne entre eles no Início para ver os desafios de cada um.
-        </Text>
-
-        <View style={styles.groupsList}>
-          {groups.map(group => {
-            const hasActiveChallenge = !!group.active_challenge_id;
-            const challenge = group.active_challenge_id 
-              ? MOCK_CHALLENGES[group.active_challenge_id] 
-              : null;
-
-            return (
-              <Card key={group.id} variant="default" style={styles.groupCard}>
-                <View style={styles.groupHeader}>
-                  <View style={styles.groupInfoLeft}>
-                    <View style={styles.groupIconBg}>
-                      <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
-                    </View>
-                    <View style={{ marginLeft: SPACING.md }}>
-                      <Text style={styles.groupName}>{group.name}</Text>
-                      <Text style={styles.membersCount}>{group.members_count} participantes</Text>
-                    </View>
-                  </View>
-                  
-                  <View style={[
-                    styles.roleBadge,
-                    { backgroundColor: group.role === 'admin' ? '#eef3f8' : '#f5f5f7' }
-                  ]}>
-                    <Text style={[
-                      styles.roleText,
-                      { color: group.role === 'admin' ? COLORS.primary : COLORS.textSecondary }
-                    ]}>
-                      {group.role === 'admin' ? 'Admin' : 'Membro'}
-                    </Text>
-                  </View>
-                </View>
-
-                <Text style={styles.groupDesc}>{group.description}</Text>
-
-                {hasActiveChallenge && challenge ? (
-                  <View style={styles.challengeBox}>
-                    <View style={styles.challengeBoxHeader}>
-                      <MaterialCommunityIcons name="trophy" size={16} color={COLORS.gold} />
-                      <Text style={styles.challengeBoxTitle}>Desafio Ativo: {challenge.name}</Text>
-                    </View>
-                    <Text style={styles.challengeBoxDates}>
-                      Período: {new Date(challenge.start_date).toLocaleDateString('pt-BR')} até {new Date(challenge.end_date).toLocaleDateString('pt-BR')}
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.noChallengeBox}>
-                    <MaterialCommunityIcons name="trophy-outline" size={16} color={COLORS.textLight} />
-                    <Text style={styles.noChallengeBoxText}>Sem desafio ativo</Text>
-                  </View>
-                )}
-
-                <View style={styles.actionsRow}>
-                  {group.role === 'admin' && !hasActiveChallenge && (
-                    <Button
-                      title="Criar Desafio"
-                      variant="secondary"
-                      size="sm"
-                      icon={<MaterialCommunityIcons name="plus" size={14} color="#fff" />}
-                      onPress={() => router.push({ pathname: '/create-challenge', params: { groupId: group.id } })}
-                      style={styles.actionBtn}
-                    />
-                  )}
-                  {hasActiveChallenge && (
-                    <Button
-                      title="Ver Desafio"
-                      variant="outline"
-                      size="sm"
-                      onPress={() => router.push('/(tabs)/challenge')}
-                      style={styles.actionBtn}
-                    />
-                  )}
-                  <Button
-                    title="Convidar"
-                    variant="ghost"
-                    size="sm"
-                    icon={<MaterialCommunityIcons name="share-variant" size={14} color={COLORS.primary} />}
-                    onPress={() => router.push('/invite')}
-                    style={styles.actionBtn}
-                  />
-                </View>
-              </Card>
-            );
-          })}
+    <WebContainer>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Meus Grupos</Text>
+          <TouchableOpacity 
+            style={styles.addButton}
+            onPress={() => router.push('/create-group')}
+          >
+            <MaterialCommunityIcons name="plus" size={24} color={COLORS.secondary} />
+          </TouchableOpacity>
         </View>
 
-        {/* Card informativo de como funciona */}
-        <Card variant="flat" style={styles.infoBox}>
-          <MaterialCommunityIcons name="information" size={24} color={COLORS.primary} />
-          <Text style={styles.infoBoxText}>
-            Apenas administradores de grupos podem criar novos desafios e definir rounds e tarefas extras semanais.
-          </Text>
-        </Card>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {groups.length === 0 ? (
+            <Card variant="elevated" style={styles.emptyCard}>
+              <View style={styles.emptyIconBg}>
+                <MaterialCommunityIcons name="account-group-outline" size={32} color={COLORS.secondary} />
+              </View>
+              <Text style={styles.emptyTitle}>Nenhum grupo encontrado</Text>
+              <Text style={styles.emptySubtitle}>
+                Crie um grupo ou use um link de convite para começar.
+              </Text>
+              <Button
+                title="Criar Grupo"
+                variant="secondary"
+                size="sm"
+                onPress={() => router.push('/create-group')}
+                style={{ marginTop: SPACING.sm, width: 160, alignSelf: 'center' }}
+              />
+            </Card>
+          ) : (
+            <Text style={styles.subtitle}>
+              Você participa de {groups.length} grupo{groups.length !== 1 ? 's' : ''}. Alterne entre eles no Início para ver os desafios de cada um.
+            </Text>
+          )}
 
-        {/* Espaçamento TabBar */}
-        <View style={{ height: Platform.OS === 'ios' ? 100 : 80 }} />
-      </ScrollView>
-    </SafeAreaView>
+          <View style={styles.groupsList}>
+            {groups.map(group => {
+              const challenge = group.challenge;
+              const hasActiveChallenge = !!challenge;
+
+              return (
+                <TouchableOpacity
+                  key={group.id}
+                  activeOpacity={0.85}
+                  onPress={() => router.push({ pathname: '/group-dashboard', params: { groupId: group.id } })}
+                >
+                  <Card variant="default" style={styles.groupCard}>
+                    <View style={styles.groupHeader}>
+                      <View style={styles.groupInfoLeft}>
+                        <View style={styles.groupIconBg}>
+                          <MaterialCommunityIcons name="account-group" size={24} color={COLORS.primary} />
+                        </View>
+                        <View style={{ marginLeft: SPACING.md, flex: 1 }}>
+                          <Text style={styles.groupName}>{group.name}</Text>
+                          <Text style={styles.membersCount}>{group.member_count ?? group.members_count ?? '–'} participantes</Text>
+                        </View>
+                      </View>
+                      
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
+                        <View style={[
+                          styles.roleBadge,
+                          { backgroundColor: group.role === 'admin' ? '#eef3f8' : '#f5f5f7' }
+                        ]}>
+                          <Text style={[
+                            styles.roleText,
+                            { color: group.role === 'admin' ? COLORS.primary : COLORS.textSecondary }
+                          ]}>
+                            {group.role === 'admin' ? 'Admin' : 'Membro'}
+                          </Text>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} />
+                      </View>
+                    </View>
+
+                    {group.description ? (
+                      <Text style={styles.groupDesc} numberOfLines={2}>{group.description}</Text>
+                    ) : null}
+
+                    {hasActiveChallenge ? (
+                      <View style={styles.challengeBox}>
+                        <View style={styles.challengeBoxHeader}>
+                          <MaterialCommunityIcons name="trophy" size={16} color={COLORS.gold} />
+                          <Text style={styles.challengeBoxTitle}>Desafio Ativo: {challenge.title}</Text>
+                        </View>
+                        <Text style={styles.challengeBoxDates}>
+                          Período: {new Date(challenge.start_date).toLocaleDateString('pt-BR')} até {new Date(challenge.end_date).toLocaleDateString('pt-BR')}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.noChallengeBox}>
+                        <MaterialCommunityIcons name="trophy-outline" size={16} color={COLORS.textLight} />
+                        <Text style={styles.noChallengeBoxText}>Sem desafio ativo</Text>
+                      </View>
+                    )}
+                  </Card>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Card informativo de como funciona */}
+          <Card variant="flat" style={styles.infoBox}>
+            <MaterialCommunityIcons name="information" size={24} color={COLORS.primary} />
+            <Text style={styles.infoBoxText}>
+              Apenas administradores de grupos podem criar novos desafios e definir rounds e tarefas extras semanais.
+            </Text>
+          </Card>
+
+          {/* Espaçamento TabBar */}
+          <View style={{ height: Platform.OS === 'ios' ? 100 : 80 }} />
+        </ScrollView>
+      </SafeAreaView>
+    </WebContainer>
   );
 }
 
@@ -222,10 +236,12 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.md,
     fontWeight: FONTS.weight.bold,
     color: COLORS.primary,
+    fontFamily: FONTS.family.heading,
   },
   membersCount: {
     fontSize: FONTS.size.xs,
     color: COLORS.textLight,
+    fontFamily: FONTS.family.body,
   },
   roleBadge: {
     paddingHorizontal: SPACING.sm,
@@ -235,12 +251,14 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: 10,
     fontWeight: FONTS.weight.bold,
+    fontFamily: FONTS.family.body,
   },
   groupDesc: {
     fontSize: FONTS.size.sm,
     color: COLORS.textSecondary,
     lineHeight: 18,
     marginBottom: SPACING.md,
+    fontFamily: FONTS.family.body,
   },
   challengeBox: {
     backgroundColor: '#fff9eb',
@@ -260,11 +278,13 @@ const styles = StyleSheet.create({
     fontWeight: FONTS.weight.bold,
     color: COLORS.goldDark,
     marginLeft: SPACING.xs,
+    fontFamily: FONTS.family.heading,
   },
   challengeBoxDates: {
     fontSize: 10,
     color: COLORS.textSecondary,
     marginLeft: 20,
+    fontFamily: FONTS.family.body,
   },
   noChallengeBox: {
     backgroundColor: COLORS.surfaceVariant,
@@ -278,18 +298,9 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.xs,
     color: COLORS.textLight,
     marginLeft: SPACING.xs,
+    fontFamily: FONTS.family.body,
   },
-  actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: SPACING.sm,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: SPACING.md,
-  },
-  actionBtn: {
-    paddingVertical: SPACING.xs,
-  },
+
   infoBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -302,5 +313,37 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginLeft: SPACING.md,
     lineHeight: 16,
-  }
+    fontFamily: FONTS.family.body,
+  },
+  emptyCard: {
+    padding: SPACING.xl,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.xl,
+    backgroundColor: COLORS.surface,
+  },
+  emptyIconBg: {
+    width: 64,
+    height: 64,
+    borderRadius: BORDER_RADIUS.xl,
+    backgroundColor: COLORS.secondaryMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  emptyTitle: {
+    fontSize: FONTS.size.md,
+    fontFamily: FONTS.family.heading,
+    color: COLORS.primary,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: FONTS.size.xs,
+    fontFamily: FONTS.family.body,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
 });

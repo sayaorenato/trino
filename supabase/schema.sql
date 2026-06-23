@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS challenges (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
+  rules TEXT,
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

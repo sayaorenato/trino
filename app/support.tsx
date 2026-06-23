@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { WebContainer } from '../components/ui/WebContainer';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 export default function SupportScreen() {
@@ -33,138 +34,140 @@ export default function SupportScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.primary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Apoie o Projeto</Text>
-        <View style={{ width: 24 }} />
-      </View>
+    <WebContainer>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.primary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Apoie o Projeto</Text>
+          <View style={{ width: 24 }} />
+        </View>
 
-      {step === 'donate' ? (
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.iconHeader}>
-            <View style={styles.iconBg}>
-              <MaterialCommunityIcons name="heart-flash" size={40} color={COLORS.gold} />
+        {step === 'donate' ? (
+          <ScrollView 
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.iconHeader}>
+              <View style={styles.iconBg}>
+                <MaterialCommunityIcons name="heart-flash" size={40} color={COLORS.gold} />
+              </View>
+              <Text style={styles.title}>Trino é 100% Gratuito</Text>
+              <Text style={styles.description}>
+                Nosso objetivo é apoiar o seu crescimento físico e espiritual sem anúncios e sem cobrar assinaturas. Sua doação voluntária ajuda a custear os servidores de banco de dados e armazenamento do Supabase.
+              </Text>
             </View>
-            <Text style={styles.title}>Trino é 100% Gratuito</Text>
-            <Text style={styles.description}>
-              Nosso objetivo é apoiar o seu crescimento físico e espiritual sem anúncios e sem cobrar assinaturas. Sua doação voluntária ajuda a custear os servidores de banco de dados e armazenamento do Supabase.
-            </Text>
-          </View>
 
-          {/* Seleção de Valor */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Escolha um valor para ofertar</Text>
-            
-            <View style={styles.amountGrid}>
-              {[10, 25, 50].map(amount => (
+            {/* Seleção de Valor */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Escolha um valor para ofertar</Text>
+              
+              <View style={styles.amountGrid}>
+                {[10, 25, 50].map(amount => (
+                  <TouchableOpacity
+                    key={amount}
+                    style={[
+                      styles.amountCard,
+                      selectedAmount === amount && styles.amountCardActive
+                    ]}
+                    onPress={() => {
+                      setSelectedAmount(amount);
+                      setCustomAmount('');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[
+                      styles.amountText,
+                      selectedAmount === amount && styles.amountTextActive
+                    ]}>
+                      R$ {amount}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                
                 <TouchableOpacity
-                  key={amount}
                   style={[
                     styles.amountCard,
-                    selectedAmount === amount && styles.amountCardActive
+                    selectedAmount === 'other' && styles.amountCardActive
                   ]}
-                  onPress={() => {
-                    setSelectedAmount(amount);
-                    setCustomAmount('');
-                  }}
+                  onPress={() => setSelectedAmount('other')}
                   activeOpacity={0.8}
                 >
                   <Text style={[
                     styles.amountText,
-                    selectedAmount === amount && styles.amountTextActive
+                    selectedAmount === 'other' && styles.amountTextActive
                   ]}>
-                    R$ {amount}
+                    Outro
                   </Text>
                 </TouchableOpacity>
-              ))}
+              </View>
+
+              {selectedAmount === 'other' && (
+                <View style={styles.customInputContainer}>
+                  <Text style={styles.currencyPrefix}>R$</Text>
+                  <TextInput
+                    style={styles.customInput}
+                    placeholder="Digite o valor"
+                    value={customAmount}
+                    onChangeText={setCustomAmount}
+                    keyboardType="numeric"
+                    autoFocus
+                  />
+                </View>
+              )}
+            </View>
+
+            {/* QR CODE E PIX COPIA E COLA */}
+            <Card variant="default" style={styles.pixCard}>
+              <Text style={styles.pixCardTitle}>Doação Rápida via PIX</Text>
+              <Text style={styles.pixCardSubtitle}>Escaneie o QR Code abaixo</Text>
               
-              <TouchableOpacity
-                style={[
-                  styles.amountCard,
-                  selectedAmount === 'other' && styles.amountCardActive
-                ]}
-                onPress={() => setSelectedAmount('other')}
-                activeOpacity={0.8}
-              >
-                <Text style={[
-                  styles.amountText,
-                  selectedAmount === 'other' && styles.amountTextActive
-                ]}>
-                  Outro
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {selectedAmount === 'other' && (
-              <View style={styles.customInputContainer}>
-                <Text style={styles.currencyPrefix}>R$</Text>
-                <TextInput
-                  style={styles.customInput}
-                  placeholder="Digite o valor"
-                  value={customAmount}
-                  onChangeText={setCustomAmount}
-                  keyboardType="numeric"
-                  autoFocus
-                />
+              <View style={styles.qrCodePlaceholder}>
+                {/* Representação visual elegante do QR Code */}
+                <View style={styles.qrBorder}>
+                  <MaterialCommunityIcons name="qrcode" size={140} color={COLORS.primary} />
+                </View>
               </View>
-            )}
-          </View>
 
-          {/* QR CODE E PIX COPIA E COLA */}
-          <Card variant="default" style={styles.pixCard}>
-            <Text style={styles.pixCardTitle}>Doação Rápida via PIX</Text>
-            <Text style={styles.pixCardSubtitle}>Escaneie o QR Code abaixo</Text>
-            
-            <View style={styles.qrCodePlaceholder}>
-              {/* Representação visual elegante do QR Code */}
-              <View style={styles.qrBorder}>
-                <MaterialCommunityIcons name="qrcode" size={140} color={COLORS.primary} />
-              </View>
+              <Button
+                title="Copiar Pix Copia e Cola"
+                variant="outline"
+                size="md"
+                icon={<MaterialCommunityIcons name="content-copy" size={16} color={COLORS.primary} />}
+                onPress={handleCopyPix}
+                style={styles.copyBtn}
+              />
+
+              <Button
+                title="Simular Pagamento Pago"
+                variant="secondary"
+                size="md"
+                onPress={handleSimulatePayment}
+                style={styles.simulateBtn}
+              />
+            </Card>
+          </ScrollView>
+        ) : (
+          <View style={styles.successContainer}>
+            <View style={styles.successCircle}>
+              <MaterialCommunityIcons name="heart" size={60} color={COLORS.secondary} />
             </View>
-
+            <Text style={styles.successTitle}>Muito Obrigado!</Text>
+            <Text style={styles.successText}>
+              Sua oferta foi recebida com sucesso. É uma honra ter você conosco investindo na saúde de corpo, alma e espírito de toda a nossa comunidade. Deus te abençoe!
+            </Text>
             <Button
-              title="Copiar Pix Copia e Cola"
-              variant="outline"
-              size="md"
-              icon={<MaterialCommunityIcons name="content-copy" size={16} color={COLORS.primary} />}
-              onPress={handleCopyPix}
-              style={styles.copyBtn}
+              title="Voltar ao Perfil"
+              variant="primary"
+              size="lg"
+              onPress={() => router.replace('/(tabs)/profile')}
+              style={styles.successBtn}
             />
-
-            <Button
-              title="Simular Pagamento Pago"
-              variant="secondary"
-              size="md"
-              onPress={handleSimulatePayment}
-              style={styles.simulateBtn}
-            />
-          </Card>
-        </ScrollView>
-      ) : (
-        <View style={styles.successContainer}>
-          <View style={styles.successCircle}>
-            <MaterialCommunityIcons name="heart" size={60} color={COLORS.secondary} />
           </View>
-          <Text style={styles.successTitle}>Muito Obrigado!</Text>
-          <Text style={styles.successText}>
-            Sua oferta foi recebida com sucesso. É uma honra ter você conosco investindo na saúde de corpo, alma e espírito de toda a nossa comunidade. Deus te abençoe!
-          </Text>
-          <Button
-            title="Voltar ao Perfil"
-            variant="primary"
-            size="lg"
-            onPress={() => router.replace('/(tabs)/profile')}
-            style={styles.successBtn}
-          />
-        </View>
-      )}
-    </SafeAreaView>
+        )}
+      </SafeAreaView>
+    </WebContainer>
   );
 }
 
@@ -224,6 +227,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: SPACING.sm,
+    fontFamily: FONTS.family.body,
   },
   section: {
     marginBottom: SPACING.xl,
@@ -259,6 +263,7 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.sm,
     fontWeight: FONTS.weight.bold,
     color: COLORS.textSecondary,
+    fontFamily: FONTS.family.body,
   },
   amountTextActive: {
     color: COLORS.goldDark,
@@ -279,6 +284,7 @@ const styles = StyleSheet.create({
     fontWeight: FONTS.weight.bold,
     color: COLORS.goldDark,
     marginRight: SPACING.xs,
+    fontFamily: FONTS.family.heading,
   },
   customInput: {
     flex: 1,
@@ -296,6 +302,7 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.md,
     fontWeight: FONTS.weight.bold,
     color: COLORS.primary,
+    fontFamily: FONTS.family.heading,
   },
   pixCardSubtitle: {
     fontSize: FONTS.size.xs,
@@ -304,6 +311,7 @@ const styles = StyleSheet.create({
     fontWeight: FONTS.weight.bold,
     marginTop: 2,
     marginBottom: SPACING.lg,
+    fontFamily: FONTS.family.body,
   },
   qrCodePlaceholder: {
     backgroundColor: '#fbf9fb',
@@ -358,6 +366,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: SPACING.xxl,
     paddingHorizontal: SPACING.sm,
+    fontFamily: FONTS.family.body,
   },
   successBtn: {
     width: '100%',

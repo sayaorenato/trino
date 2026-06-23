@@ -50,3 +50,128 @@ CREATE POLICY "Usuários podem deletar suas próprias imagens"
 ON storage.objects FOR DELETE
 TO authenticated
 USING ( auth.uid() = owner );
+
+-- 4. Corrigir RLS da tabela groups: só membros enxergam seus grupos
+DROP POLICY IF EXISTS "Groups are viewable by everyone." ON groups;
+CREATE POLICY "Membros podem ver seus grupos"
+ON groups FOR SELECT
+TO authenticated
+USING (
+  id IN (
+    SELECT group_id FROM group_members WHERE user_id = auth.uid()
+  )
+);
+
+-- 5. Habilitar RLS em group_members e criar políticas
+ALTER TABLE group_members ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Membros podem ver membros do seu grupo" ON group_members;
+CREATE POLICY "Membros podem ver membros do seu grupo"
+ON group_members FOR SELECT
+TO authenticated
+USING (
+  group_id IN (
+    SELECT group_id FROM group_members WHERE user_id = auth.uid()
+  )
+);
+
+DROP POLICY IF EXISTS "Usuário pode se inserir como membro" ON group_members;
+CREATE POLICY "Usuário pode se inserir como membro"
+ON group_members FOR INSERT
+TO authenticated
+WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Admins podem gerenciar membros" ON group_members;
+CREATE POLICY "Admins podem gerenciar membros"
+ON group_members FOR ALL
+TO authenticated
+USING (
+  group_id IN (
+    SELECT group_id FROM group_members
+    WHERE user_id = auth.uid() AND role = 'admin'
+  )
+);
+
+-- 6. RLS para desafios: só membros do grupo enxergam, só admins criam/gerenciam
+ALTER TABLE challenges ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Membros podem ver desafios do grupo" ON challenges;
+CREATE POLICY "Membros podem ver desafios do grupo"
+ON challenges FOR SELECT
+TO authenticated
+USING (
+  group_id IN (
+    SELECT group_id FROM group_members WHERE user_id = auth.uid()
+  )
+);
+
+DROP POLICY IF EXISTS "Admins podem gerenciar desafios" ON challenges;
+CREATE POLICY "Admins podem gerenciar desafios"
+ON challenges FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM group_members
+    WHERE group_id = challenges.group_id
+      AND user_id = auth.uid()
+      AND role = 'admin'
+  )
+);
+
+-- 7. RLS para rounds: vinculados aos desafios
+ALTER TABLE rounds ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Membros podem ver rounds do grupo" ON rounds;
+CREATE POLICY "Membros podem ver rounds do grupo"
+ON rounds FOR SELECT
+TO authenticated
+USING (
+  challenge_id IN (
+    SELECT id FROM challenges WHERE group_id IN (
+      SELECT group_id FROM group_members WHERE user_id = auth.uid()
+    )
+  )
+);
+
+DROP POLICY IF EXISTS "Admins podem gerenciar rounds" ON rounds;
+CREATE POLICY "Admins podem gerenciar rounds"
+ON rounds FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM challenges
+    JOIN group_members ON group_members.group_id = challenges.group_id
+    WHERE challenges.id = rounds.challenge_id
+      AND group_members.user_id = auth.uid()
+      AND group_members.role = 'admin'
+  )
+);
+
+-- 8. RLS para check-ins: membros veem, cada um cria os seus
+ALTER TABLE checkins ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Membros podem ver check-ins do grupo" ON checkins;
+CREATE POLICY "Membros podem ver check-ins do grupo"
+ON checkins FOR SELECT
+TO authenticated
+USING (
+  round_id IN (
+    SELECT rounds.id FROM rounds
+    JOIN challenges ON challenges.id = rounds.challenge_id
+    WHERE challenges.group_id IN (
+      SELECT group_id FROM group_members WHERE user_id = auth.uid()
+    )
+  )
+);
+
+DROP POLICY IF EXISTS "Usuários podem criar seus próprios check-ins" ON checkins;
+CREATE POLICY "Usuários podem criar seus próprios check-ins"
+ON checkins FOR INSERT
+TO authenticated
+WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Usuários podem atualizar seus próprios check-ins" ON checkins;
+CREATE POLICY "Usuários podem atualizar seus próprios check-ins"
+ON checkins FOR UPDATE
+TO authenticated
+USING (user_id = auth.uid());
