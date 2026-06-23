@@ -88,9 +88,8 @@ export default function DashboardScreen() {
             ];
           }
 
-          const ranking = MOCK_RANKINGS[challenge.id] || [];
-          const userParticipates = ranking.some((m: any) => m.user_id === user?.id);
-          if (userParticipates) {
+          // Mostra todos os desafios ativos de todos os grupos do usuário
+          if (!acc.some((item: any) => item.challenge.id === challenge.id)) {
             acc.push({
               groupName: g.name,
               challenge: challenge
@@ -458,9 +457,9 @@ export default function DashboardScreen() {
               </ScrollView>
             )}
 
-            {/* Meus Desafios */}
+            {/* Desafios de Hoje */}
             <View style={[styles.sectionHeader, { marginTop: SPACING.lg }]}>
-              <Text style={styles.sectionTitle}>Meus Desafios</Text>
+              <Text style={styles.sectionTitle}>Desafios de Hoje</Text>
             </View>
 
             {activeChallenges.length === 0 ? (
@@ -469,37 +468,41 @@ export default function DashboardScreen() {
                 <Text style={styles.noChallengesText}>Nenhum desafio ativo no momento</Text>
               </Card>
             ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={styles.groupsScroll}>
-                {activeChallenges.map((item: any) => {
+              <View style={styles.compactChallengesContainer}>
+                {activeChallenges.map((item: any, index: number) => {
                   const challenge = item.challenge;
                   const daysLeft = Math.ceil((new Date(challenge.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
                   return (
                     <TouchableOpacity
                       key={challenge.id}
-                      activeOpacity={0.9}
+                      activeOpacity={0.8}
                       onPress={() => router.push({ pathname: '/(tabs)/challenge', params: { challengeId: challenge.id } })}
+                      style={[
+                        styles.compactChallengeItem,
+                        index === activeChallenges.length - 1 && { borderBottomWidth: 0 }
+                      ]}
                     >
-                      <Card variant="gradient" gradientColors={COLORS.gradients.primary} style={styles.groupCard}>
-                        <View style={styles.groupCardHeader}>
-                          <View style={[styles.groupAvatar, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                            <MaterialCommunityIcons name="trophy" size={20} color={COLORS.goldLight} />
-                          </View>
+                      <View style={styles.compactChallengeLeft}>
+                        <View style={styles.compactChallengeIconBg}>
+                          <MaterialCommunityIcons name="trophy" size={16} color={COLORS.gold} />
                         </View>
-                        <Text style={[styles.groupCardName, { color: '#fff' }]} numberOfLines={1}>
-                          {challenge.title}
-                        </Text>
-                        <Text style={[styles.groupCardChallenge, { color: COLORS.goldLight }]} numberOfLines={1}>
-                          {item.groupName}
-                        </Text>
-                        <View style={styles.groupCardFooter}>
-                          <ProgressBar progress={0.65} height={4} showPercentage={false} style={{ width: '100%' }} />
-                          <Text style={[styles.groupCardDays, { color: 'rgba(255,255,255,0.8)' }]}>{daysLeft}d restantes</Text>
+                        <View style={styles.compactChallengeInfo}>
+                          <Text style={styles.compactChallengeTitle} numberOfLines={1}>
+                            {challenge.title || challenge.name}
+                          </Text>
+                          <Text style={styles.compactChallengeSubtitle} numberOfLines={1}>
+                            {item.groupName}
+                          </Text>
                         </View>
-                      </Card>
+                      </View>
+                      <View style={styles.compactChallengeRight}>
+                        <Text style={styles.compactChallengeDays}>{daysLeft}d restantes</Text>
+                        <MaterialCommunityIcons name="chevron-right" size={16} color={COLORS.textLight} />
+                      </View>
                     </TouchableOpacity>
                   );
                 })}
-              </ScrollView>
+              </View>
             )}
 
             {/* Today's Check-ins */}
@@ -744,5 +747,62 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family.body,
     color: COLORS.textSecondary,
     marginTop: 2,
+  },
+  // Compact Challenges
+  compactChallengesContainer: {
+    marginHorizontal: SPACING.xl,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.xl,
+    paddingVertical: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    ...SHADOWS.light,
+  },
+  compactChallengeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  compactChallengeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    flex: 1,
+  },
+  compactChallengeIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  compactChallengeInfo: {
+    flex: 1,
+  },
+  compactChallengeTitle: {
+    fontSize: FONTS.size.sm,
+    fontFamily: FONTS.family.bodySemibold,
+    color: COLORS.primary,
+  },
+  compactChallengeSubtitle: {
+    fontSize: 10,
+    fontFamily: FONTS.family.body,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  compactChallengeRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  compactChallengeDays: {
+    fontSize: 10,
+    fontFamily: FONTS.family.bodyMedium,
+    color: COLORS.textLight,
   },
 });
