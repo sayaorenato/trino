@@ -61,8 +61,17 @@ export const api = {
       .flatMap((g: any) => (g.challenges || []).flatMap((c: any) => c.rounds || []))
       .map((r: any) => r.id);
 
+    const allChallengeIds = groupsWithChallenges
+      .flatMap((g: any) => (g.challenges || []))
+      .map((c: any) => c.id);
+
     if (allRoundIds.length === 0) {
-      return { groups: groupsWithChallenges, habits: { prayer: false, bible: false, exercise: false }, todayCheckins: [] };
+      return { 
+        groups: groupsWithChallenges, 
+        habits: { prayer: false, bible: false, exercise: false }, 
+        todayCheckins: [],
+        tasks: []
+      };
     }
 
     const today = new Date();
@@ -70,10 +79,19 @@ export const api = {
 
     const { data: todayCheckins } = await supabase
       .from('checkins')
-      .select('type, round_id')
+      .select('type, round_id, note')
       .eq('user_id', userId)
       .in('round_id', allRoundIds)
       .gte('created_at', today.toISOString());
+
+    let dbTasks: any[] = [];
+    if (allChallengeIds.length > 0) {
+      const { data: tasksData } = await supabase
+        .from('tasks')
+        .select('*')
+        .in('challenge_id', allChallengeIds);
+      dbTasks = tasksData || [];
+    }
 
     const habitsState = { prayer: false, bible: false, exercise: false };
     (todayCheckins || []).forEach((c: any) => {
@@ -82,7 +100,12 @@ export const api = {
       if (c.type === 'workout') habitsState.exercise = true;
     });
 
-    return { groups: groupsWithChallenges, habits: habitsState, todayCheckins: todayCheckins || [] };
+    return { 
+      groups: groupsWithChallenges, 
+      habits: habitsState, 
+      todayCheckins: todayCheckins || [],
+      tasks: dbTasks
+    };
   },
 
   async getTodayCheckins(userId: string, roundId: string) {

@@ -42,7 +42,7 @@ const HABIT_DB_TYPE: Record<HabitType, 'pray' | 'bible' | 'workout'> = {
 
 export default function CheckinScreen() {
   const router = useRouter();
-  const { challengeId: queryChallengeId, habit: queryHabit } = useLocalSearchParams<{ challengeId?: string, habit?: string }>();
+  const { challengeId: queryChallengeId, habit: queryHabit, taskId: queryTaskId } = useLocalSearchParams<{ challengeId?: string, habit?: string, taskId?: string }>();
   const { user } = useAuth();
 
   // Estados do Fluxo de Check-in
@@ -164,7 +164,18 @@ export default function CheckinScreen() {
     const challengeId = selectedChallenge.challengeId;
 
     if (isMockChallenge) {
-      setExtraTasks((MOCK_EXTRA_TASKS[challengeId] || []).filter(t => t.active !== false));
+      const filteredMock = (MOCK_EXTRA_TASKS[challengeId] || []).filter(t => t.active !== false);
+      setExtraTasks(filteredMock);
+      
+      if (queryTaskId) {
+        const foundTask = filteredMock.find(t => t.id === queryTaskId);
+        const isCompleted = foundTask?.completed_by.includes(user?.id || '');
+        if (foundTask && !isCompleted) {
+          setSelectedTask(foundTask);
+          setSelectedHabit(null);
+          setStep('upload');
+        }
+      }
     } else {
       // Buscar tarefas do Supabase
       supabase
@@ -228,10 +239,21 @@ export default function CheckinScreen() {
             };
           });
 
-          setExtraTasks(parsedTasks.filter(t => t.active !== false));
+          const filteredTasks = parsedTasks.filter(t => t.active !== false);
+          setExtraTasks(filteredTasks);
+          
+          if (queryTaskId) {
+            const foundTask = filteredTasks.find(t => t.id === queryTaskId);
+            const isCompleted = foundTask?.completed_by.includes(user?.id || '');
+            if (foundTask && !isCompleted) {
+              setSelectedTask(foundTask);
+              setSelectedHabit(null);
+              setStep('upload');
+            }
+          }
         });
     }
-  }, [selectedChallenge, step]);
+  }, [selectedChallenge, step, queryTaskId, user]);
 
   // Atualiza hábitos concluídos hoje para o desafio/round ativo
   useEffect(() => {

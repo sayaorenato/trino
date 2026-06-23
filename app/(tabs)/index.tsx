@@ -25,7 +25,7 @@ import { StreakBadge } from '../../components/ui/StreakBadge';
 import { ProgressBar } from '../../components/ui/ProgressBar';
 import { Button } from '../../components/ui/Button';
 import { WebContainer } from '../../components/ui/WebContainer';
-import { HABIT_LABELS, HabitType, MOCK_RANKINGS, RankingMember, MOCK_CHALLENGE_INVITATIONS, MOCK_FEED } from '../../constants/mock-data';
+import { HABIT_LABELS, HabitType, MOCK_RANKINGS, RankingMember, MOCK_CHALLENGE_INVITATIONS, MOCK_FEED, MOCK_EXTRA_TASKS } from '../../constants/mock-data';
 import { COLORS, SPACING, FONTS, SHADOWS, BORDER_RADIUS, ANIMATION } from '../../constants/theme';
 
 const { width } = Dimensions.get('window');
@@ -44,6 +44,7 @@ export default function DashboardScreen() {
   const [groups, setGroups] = useState<any[]>([]);
   const [habits, setHabits] = useState({ prayer: false, bible: false, exercise: false });
   const [todayCheckins, setTodayCheckins] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Entrance animations
@@ -144,6 +145,43 @@ export default function DashboardScreen() {
     
     const roundIds = (challenge.rounds || []).map((r: any) => r.id);
     return todayCheckins.some((c: any) => c.type === dbType && roundIds.includes(c.round_id));
+  };
+
+  // Helper para obter tarefas extras ativas de um desafio
+  const getChallengeExtraTasks = (challengeId: string) => {
+    if (challengeId.startsWith('chal')) {
+      return (MOCK_EXTRA_TASKS[challengeId] || []).filter((t: any) => t.active !== false);
+    }
+    return tasks
+      .filter((t: any) => t.challenge_id === challengeId)
+      .map((t: any) => {
+        let parsed = { title: 'Tarefa Extra', description: '', type: 'general', active: true, points: 30 };
+        try {
+          parsed = JSON.parse(t.description);
+        } catch (e) {}
+        return {
+          id: t.id,
+          challenge_id: t.challenge_id,
+          title: parsed.title || 'Tarefa Extra',
+          description: parsed.description || t.description,
+          type: parsed.type || 'general',
+          points: t.points || 30,
+          active: parsed.active !== false
+        };
+      })
+      .filter((t: any) => t.active !== false);
+  };
+
+  // Helper para verificar se uma tarefa extra foi concluída hoje pelo usuário
+  const isExtraTaskDone = (taskId: string, challengeId: string) => {
+    if (challengeId.startsWith('chal') && user) {
+      if (MOCK_EXTRA_TASKS[challengeId]) {
+        const task = MOCK_EXTRA_TASKS[challengeId].find((t: any) => t.id === taskId);
+        return task ? task.completed_by.includes(user.id) : false;
+      }
+      return false;
+    }
+    return todayCheckins.some((c: any) => c.note && c.note.includes(`[EXTRA_TASK_ID:${taskId}]`));
   };
 
   const checkPendingInvite = useCallback(async () => {
@@ -356,6 +394,7 @@ export default function DashboardScreen() {
       setGroups(data.groups);
       setHabits(data.habits);
       setTodayCheckins(data.todayCheckins || []);
+      setTasks(data.tasks || []);
     } catch (err: any) {
       Alert.alert('Erro', err.message || 'Erro ao entrar no grupo.');
     } finally {
@@ -371,6 +410,7 @@ export default function DashboardScreen() {
         setGroups(data.groups);
         setHabits(data.habits);
         setTodayCheckins(data.todayCheckins || []);
+        setTasks(data.tasks || []);
         setLoading(false);
         
         // Verificar se há convites pendentes na memória global
@@ -581,88 +621,135 @@ export default function DashboardScreen() {
                         key={challenge.id}
                         style={[
                           styles.compactChallengeItem,
-                          index === allActiveChallenges.length - 1 && { borderBottomWidth: 0 }
+                          index === allActiveChallenges.length - 1 && { borderBottomWidth: 0 },
+                          { flexDirection: 'column', alignItems: 'stretch' }
                         ]}
                       >
-                        <TouchableOpacity
-                          activeOpacity={0.7}
-                          onPress={() => router.push({ pathname: '/(tabs)/challenge', params: { challengeId: challenge.id } })}
-                          style={styles.compactChallengeLeft}
-                        >
-                          <View style={styles.compactChallengeIconBg}>
-                            <MaterialCommunityIcons name="trophy" size={16} color={COLORS.gold} />
+                        <View style={styles.compactChallengeHeaderRow}>
+                          <TouchableOpacity
+                            activeOpacity={0.7}
+                            onPress={() => router.push({ pathname: '/(tabs)/challenge', params: { challengeId: challenge.id } })}
+                            style={styles.compactChallengeLeft}
+                          >
+                            <View style={styles.compactChallengeIconBg}>
+                              <MaterialCommunityIcons name="trophy" size={16} color={COLORS.gold} />
+                            </View>
+                            <View style={styles.compactChallengeInfo}>
+                              <Text style={styles.compactChallengeTitle} numberOfLines={1}>
+                                {challenge.title}
+                              </Text>
+                              <Text style={styles.compactChallengeSubtitle} numberOfLines={1}>
+                                {item.groupName}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+
+                          <View style={styles.compactHabitsRow}>
+                            {/* Hábito: Oração */}
+                            <TouchableOpacity
+                              activeOpacity={0.8}
+                              disabled={prayerDone}
+                              onPress={() => router.push({ 
+                                pathname: '/(tabs)/checkin', 
+                                params: { challengeId: challenge.id, habit: 'prayer' } 
+                              })}
+                              style={[
+                                styles.miniHabitButton,
+                                prayerDone ? { backgroundColor: COLORS.gold } : styles.miniHabitButtonPending
+                              ]}
+                            >
+                              <MaterialCommunityIcons 
+                                name={prayerDone ? "check-bold" : HABIT_LABELS.prayer.icon as any} 
+                                size={12} 
+                                color="#fff" 
+                              />
+                            </TouchableOpacity>
+
+                            {/* Hábito: Bíblia */}
+                            <TouchableOpacity
+                              activeOpacity={0.8}
+                              disabled={bibleDone}
+                              onPress={() => router.push({ 
+                                pathname: '/(tabs)/checkin', 
+                                params: { challengeId: challenge.id, habit: 'bible' } 
+                              })}
+                              style={[
+                                styles.miniHabitButton,
+                                bibleDone ? { backgroundColor: COLORS.primaryLight } : styles.miniHabitButtonPending
+                              ]}
+                            >
+                              <MaterialCommunityIcons 
+                                name={bibleDone ? "check-bold" : HABIT_LABELS.bible.icon as any} 
+                                size={12} 
+                                color="#fff" 
+                              />
+                            </TouchableOpacity>
+
+                            {/* Hábito: Exercício */}
+                            <TouchableOpacity
+                              activeOpacity={0.8}
+                              disabled={exerciseDone}
+                              onPress={() => router.push({ 
+                                pathname: '/(tabs)/checkin', 
+                                params: { challengeId: challenge.id, habit: 'exercise' } 
+                              })}
+                              style={[
+                                styles.miniHabitButton,
+                                exerciseDone ? { backgroundColor: COLORS.secondary } : styles.miniHabitButtonPending
+                              ]}
+                            >
+                              <MaterialCommunityIcons 
+                                name={exerciseDone ? "check-bold" : HABIT_LABELS.exercise.icon as any} 
+                                size={12} 
+                                color="#fff" 
+                              />
+                            </TouchableOpacity>
                           </View>
-                          <View style={styles.compactChallengeInfo}>
-                            <Text style={styles.compactChallengeTitle} numberOfLines={1}>
-                              {challenge.title}
-                            </Text>
-                            <Text style={styles.compactChallengeSubtitle} numberOfLines={1}>
-                              {item.groupName}
-                            </Text>
-                          </View>
-                        </TouchableOpacity>
-
-                        <View style={styles.compactHabitsRow}>
-                          {/* Hábito: Oração */}
-                          <TouchableOpacity
-                            activeOpacity={0.8}
-                            disabled={prayerDone}
-                            onPress={() => router.push({ 
-                              pathname: '/(tabs)/checkin', 
-                              params: { challengeId: challenge.id, habit: 'prayer' } 
-                            })}
-                            style={[
-                              styles.miniHabitButton,
-                              prayerDone ? { backgroundColor: COLORS.gold } : styles.miniHabitButtonPending
-                            ]}
-                          >
-                            <MaterialCommunityIcons 
-                              name={prayerDone ? "check-bold" : HABIT_LABELS.prayer.icon as any} 
-                              size={12} 
-                              color="#fff" 
-                            />
-                          </TouchableOpacity>
-
-                          {/* Hábito: Bíblia */}
-                          <TouchableOpacity
-                            activeOpacity={0.8}
-                            disabled={bibleDone}
-                            onPress={() => router.push({ 
-                              pathname: '/(tabs)/checkin', 
-                              params: { challengeId: challenge.id, habit: 'bible' } 
-                            })}
-                            style={[
-                              styles.miniHabitButton,
-                              bibleDone ? { backgroundColor: COLORS.primaryLight } : styles.miniHabitButtonPending
-                            ]}
-                          >
-                            <MaterialCommunityIcons 
-                              name={bibleDone ? "check-bold" : HABIT_LABELS.bible.icon as any} 
-                              size={12} 
-                              color="#fff" 
-                            />
-                          </TouchableOpacity>
-
-                          {/* Hábito: Exercício */}
-                          <TouchableOpacity
-                            activeOpacity={0.8}
-                            disabled={exerciseDone}
-                            onPress={() => router.push({ 
-                              pathname: '/(tabs)/checkin', 
-                              params: { challengeId: challenge.id, habit: 'exercise' } 
-                            })}
-                            style={[
-                              styles.miniHabitButton,
-                              exerciseDone ? { backgroundColor: COLORS.secondary } : styles.miniHabitButtonPending
-                            ]}
-                          >
-                            <MaterialCommunityIcons 
-                              name={exerciseDone ? "check-bold" : HABIT_LABELS.exercise.icon as any} 
-                              size={12} 
-                              color="#fff" 
-                            />
-                          </TouchableOpacity>
                         </View>
+
+                        {/* Fileira de Tarefas Extras Compacta */}
+                        {(() => {
+                          const challengeExtraTasks = getChallengeExtraTasks(challenge.id);
+                          if (challengeExtraTasks.length === 0) return null;
+                          return (
+                            <View style={styles.extraTasksRow}>
+                              {challengeExtraTasks.map((task: any) => {
+                                const done = isExtraTaskDone(task.id, challenge.id);
+                                return (
+                                  <TouchableOpacity
+                                    key={task.id}
+                                    activeOpacity={done ? 1 : 0.8}
+                                    disabled={done}
+                                    onPress={() => router.push({
+                                      pathname: '/(tabs)/checkin',
+                                      params: { challengeId: challenge.id, taskId: task.id }
+                                    })}
+                                    style={[
+                                      styles.miniTaskBadge,
+                                      done ? styles.miniTaskBadgeCompleted : styles.miniTaskBadgePending
+                                    ]}
+                                  >
+                                    <MaterialCommunityIcons 
+                                      name={done ? "star" : "star-outline"} 
+                                      size={10} 
+                                      color={done ? "#fff" : COLORS.goldDark} 
+                                      style={{ marginRight: 2 }}
+                                    />
+                                    <Text 
+                                      style={[
+                                        styles.miniTaskBadgeText,
+                                        done ? styles.miniTaskBadgeTextCompleted : styles.miniTaskBadgeTextPending
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {task.title}
+                                    </Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          );
+                        })()}
                       </View>
                     );
                   })}
@@ -927,5 +1014,44 @@ const styles = StyleSheet.create({
   },
   miniHabitButtonPending: {
     backgroundColor: COLORS.border,
+  },
+  compactChallengeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  extraTasksRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
+    paddingLeft: 48,
+  },
+  miniTaskBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+    borderRadius: BORDER_RADIUS.sm,
+    borderWidth: 1,
+  },
+  miniTaskBadgePending: {
+    backgroundColor: '#fff9eb',
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+  },
+  miniTaskBadgeCompleted: {
+    backgroundColor: COLORS.secondary,
+    borderColor: COLORS.secondary,
+  },
+  miniTaskBadgeText: {
+    fontSize: 9,
+    fontFamily: FONTS.family.bodyMedium,
+  },
+  miniTaskBadgeTextPending: {
+    color: COLORS.goldDark,
+  },
+  miniTaskBadgeTextCompleted: {
+    color: '#fff',
   },
 });
