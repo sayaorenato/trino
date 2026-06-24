@@ -43,10 +43,19 @@ export default function AdminScreen() {
   const [members, setMembers] = useState<any[]>([]);
   const [tasks, setTasks] = useState<ExtraTask[]>([]);
 
-  // Abas do painel: 'tasks' | 'members' | 'challenges'
-  const [activeTab, setActiveTab] = useState<'tasks' | 'members' | 'challenges'>('tasks');
+  // Abas do painel: 'group' | 'tasks' | 'members' | 'challenges'
+  const [activeTab, setActiveTab] = useState<'group' | 'tasks' | 'members' | 'challenges'>('group');
 
-  // Estados de nova/editação de tarefa extra
+  // Estados de Criar Grupo Inline
+  const [showCreateGroupForm, setShowCreateGroupForm] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupDesc, setNewGroupDesc] = useState('');
+
+  // Estados de Editar Grupo Selecionado
+  const [groupName, setGroupName] = useState('');
+  const [groupDesc, setGroupDesc] = useState('');
+
+  // Estados de nova/edição de tarefa extra
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [type, setType] = useState<'general' | 'presence' | 'punctuality'>('general');
@@ -114,7 +123,20 @@ export default function AdminScreen() {
     loadAdminGroups();
   }, [user, groupId, challengeId]);
 
-  // 2. Carregar desafios e participantes toda vez que o grupo selecionado mudar
+  // 2. Sincronizar campos de edição com o grupo selecionado
+  const activeGroup = adminGroups.find(g => g.id === selectedGroupId);
+
+  useEffect(() => {
+    if (activeGroup) {
+      setGroupName(activeGroup.name);
+      setGroupDesc(activeGroup.description || '');
+    } else {
+      setGroupName('');
+      setGroupDesc('');
+    }
+  }, [selectedGroupId, adminGroups]);
+
+  // 3. Carregar desafios e participantes toda vez que o grupo selecionado mudar
   useEffect(() => {
     if (!selectedGroupId) return;
 
@@ -150,7 +172,7 @@ export default function AdminScreen() {
     loadGroupDetails();
   }, [selectedGroupId, challengeId]);
 
-  // 3. Carregar tarefas do desafio ativo selecionado
+  // 4. Carregar tarefas do desafio ativo selecionado
   useEffect(() => {
     if (!selectedChallengeId) {
       setTasks([]);
@@ -231,6 +253,217 @@ export default function AdminScreen() {
     loadChallengeTasks();
   }, [selectedChallengeId]);
 
+  // Ações de CRUD de Grupo
+  const handleCreateGroup = async () => {
+    if (!newGroupName.trim()) {
+      Alert.alert('Erro', 'Por favor, informe o nome do grupo.');
+      return;
+    }
+    
+    if (!user) return;
+
+    setLoadingAction(true);
+    try {
+      // 1. Verificar se o nome alterado já existe
+      const { data: existingGroup } = await supabase
+        .from('groups')
+        .select('id')
+        .ilike('name', newGroupName.trim())
+        .maybeSingle();
+
+      if (existingGroup) {
+        Alert.alert('Erro', 'Já existe um grupo com este nome.');
+        setLoadingAction(false);
+        return;
+      }
+
+      // 2. Inserir o grupo
+      const { data: group, error: groupError } = await supabase
+        .from('groups')
+        .insert({ name: newGroupName.trim(), description: newGroupDesc.trim() })
+        .select()
+        .single();
+
+      if (groupError) throw groupError;
+
+      // 3. Adicionar o criador como admin
+      const { error: memberError } = await supabase
+        .from('group_members')
+        .insert({
+          user_id: user.id,
+          group_id: group.id,
+          role: 'admin'
+        });
+
+      if (memberError) throw memberError;
+
+      Alert.alert('Sucesso', 'Grupo criado com sucesso!');
+
+      // Resetar form
+      setNewGroupName('');
+      setNewGroupDesc('');
+      setShowCreateGroupForm(false);
+
+      // Recarregar grupos
+      const { data: memberData } = await supabase
+        .from('group_members')
+        .select('group_id, role, groups(*)')
+        .eq('user_id', user.id)
+        .eq('role', 'admin');
+
+      const groupsList = (memberData || [])
+        .map((item: any) => ({
+          ...item.groups,
+          role: item.role,
+        }))
+        .filter(g => g.id);
+
+      setAdminGroups(groupsList);
+      setSelectedGroupId(group.id);
+      setActiveTab('group');
+
+    } catch (e: any) {
+      Alert.alert('Erro', e.message || 'Erro ao criar grupo.');
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const handleUpdateGroup = async () => {
+    if (!groupName.trim()) {
+      Alert.alert('Erro', 'Por favor, informe o nome do grupo.');
+      return;
+    }
+
+    if (!selectedGroupId || !user) return;
+
+    setLoadingAction(true);
+    try {
+      // 1. Verificar nome existente
+      const { data: existingGroup } = await supabase
+        .from('groups')
+        .select('id')
+        .ilike('name', groupName.trim())
+        .neq('id', selectedGroupId)
+        .maybeSingle();
+
+      if (existingGroup) {
+        Alert.alert('Erro', 'Já existe um grupo com este nome.');
+        setLoadingAction(false);
+        return;
+      }
+
+      // 2. Atualizar no banco
+      const { error: updateError } = await supabase
+        .from('groups')
+        .update({ name: groupName.trim(), description: groupDesc.trim() })
+        .eq('id', selectedGroupId);
+
+      if (updateError) throw updateError;
+
+      Alert.alert('Sucesso', 'Dados do grupo atualizados com sucesso!');
+
+      // Recarregar os grupos administrados
+      const { data: memberData } = await supabase
+        .from('group_members')
+        .select('group_id, role, groups(*)')
+        .eq('user_id', user.id)
+        .eq('role', 'admin');
+
+      const groupsList = (memberData || [])
+        .map((item: any) => ({
+          ...item.groups,
+          role: item.role,
+        }))
+        .filter(g => g.id);
+
+      setAdminGroups(groupsList);
+
+    } catch (e: any) {
+      Alert.alert('Erro', e.message || 'Erro ao salvar alterações.');
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!selectedGroupId || !user) return;
+
+    const performDelete = async () => {
+      setLoadingAction(true);
+      try {
+        const { error: deleteError } = await supabase
+          .from('groups')
+          .delete()
+          .eq('id', selectedGroupId);
+
+        if (deleteError) throw deleteError;
+
+        Alert.alert('Sucesso', 'Grupo excluído com sucesso!');
+
+        // Recarregar lista de grupos
+        const { data: memberData } = await supabase
+          .from('group_members')
+          .select('group_id, role, groups(*)')
+          .eq('user_id', user.id)
+          .eq('role', 'admin');
+
+        const groupsList = (memberData || [])
+          .map((item: any) => ({
+            ...item.groups,
+            role: item.role,
+          }))
+          .filter(g => g.id);
+
+        setAdminGroups(groupsList);
+
+        if (groupsList.length > 0) {
+          setSelectedGroupId(groupsList[0].id);
+          setActiveTab('group');
+        } else {
+          setSelectedGroupId(null);
+        }
+
+      } catch (e: any) {
+        Alert.alert('Erro', e.message || 'Erro ao excluir grupo.');
+      } finally {
+        setLoadingAction(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmFirst = window.confirm('ATENÇÃO: Você tem certeza absoluta de que deseja excluir este grupo? Todos os desafios, rounds, check-ins e membros serão excluídos para sempre. Esta ação é irreversível!');
+      if (confirmFirst) {
+        const confirmSecond = window.confirm('CONFIRMAÇÃO FINAL: Deseja mesmo deletar o grupo? Pressione OK para excluir definitivamente.');
+        if (confirmSecond) {
+          await performDelete();
+        }
+      }
+    } else {
+      Alert.alert(
+        'Excluir Grupo',
+        'ATENÇÃO: Todos os desafios, rounds e check-ins dos membros deste grupo serão excluídos para sempre. Deseja mesmo excluir este grupo?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { 
+            text: 'Excluir Definitivamente', 
+            style: 'destructive',
+            onPress: () => {
+              Alert.alert(
+                'Confirmação Final',
+                'Você tem certeza absoluta? Esta ação NÃO pode ser desfeita.',
+                [
+                  { text: 'Voltar', style: 'cancel' },
+                  { text: 'Sim, Deletar Tudo', style: 'destructive', onPress: performDelete }
+                ]
+              );
+            }
+          }
+        ]
+      );
+    }
+  };
+
   // Ações de Participantes
   const handleUpdateMemberRole = async (memberId: string, name: string, currentRole: 'admin' | 'member') => {
     if (!selectedGroupId || !user) return;
@@ -278,7 +511,7 @@ export default function AdminScreen() {
   const handleRemoveMember = async (memberId: string, name: string) => {
     if (!selectedGroupId || !user) return;
     if (memberId === user.id) {
-      Alert.alert('Operação Negada', 'Você não pode se remover do grupo por este painel. Use a área de membros geral.');
+      Alert.alert('Operação Negada', 'Você não pode se remover do grupo por este painel.');
       return;
     }
 
@@ -605,7 +838,70 @@ export default function AdminScreen() {
     );
   }
 
-  // Se o usuário não administrar nenhum grupo
+  // Formulário de Criação de Grupo Inline
+  if (showCreateGroupForm) {
+    return (
+      <WebContainer>
+        <SafeAreaView style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => setShowCreateGroupForm(false)} style={styles.backButton}>
+              <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.primary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Criar Grupo</Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          {loadingAction && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color={COLORS.secondary} />
+            </View>
+          )}
+
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <Text style={styles.subtitle}>Crie um novo grupo para reunir seus amigos ou igreja.</Text>
+            <Card variant="default" style={styles.formCard}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Nome do Grupo</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ex: Jovens IBB"
+                  value={newGroupName}
+                  onChangeText={setNewGroupName}
+                />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Descrição (Opcional)</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Qual o propósito deste grupo?"
+                  multiline
+                  numberOfLines={3}
+                  value={newGroupDesc}
+                  onChangeText={setNewGroupDesc}
+                />
+              </View>
+              <Button
+                title="Criar Grupo"
+                variant="primary"
+                size="lg"
+                onPress={handleCreateGroup}
+                style={styles.submitBtn}
+              />
+              <Button
+                title="Cancelar"
+                variant="outline"
+                size="lg"
+                onPress={() => setShowCreateGroupForm(false)}
+                style={{ marginTop: SPACING.md, width: '100%' }}
+              />
+            </Card>
+          </ScrollView>
+        </SafeAreaView>
+      </WebContainer>
+    );
+  }
+
+  // Se o usuário não administrar nenhum grupo (apresenta aviso + botão de criar grupo inline)
   if (adminGroups.length === 0) {
     return (
       <WebContainer>
@@ -621,21 +917,25 @@ export default function AdminScreen() {
             <MaterialCommunityIcons name="shield-lock-outline" size={64} color={COLORS.textLight} />
             <Text style={styles.emptyTitle}>Acesso Restrito</Text>
             <Text style={styles.emptySubtitle}>
-              Você não possui grupos nos quais seja o administrador principal. Crie um grupo no Início para gerenciar.
+              Você não possui nenhum grupo no qual seja o administrador principal. Crie o seu primeiro grupo agora mesmo!
             </Text>
             <Button
-              title="Voltar ao Início"
+              title="Criar Meu Grupo"
               variant="primary"
-              onPress={() => router.replace('/(tabs)')}
+              onPress={() => setShowCreateGroupForm(true)}
               style={{ width: 200, marginTop: SPACING.md }}
+            />
+            <Button
+              title="Voltar ao Início"
+              variant="outline"
+              onPress={() => router.replace('/(tabs)')}
+              style={{ width: 200, marginTop: SPACING.sm }}
             />
           </View>
         </SafeAreaView>
       </WebContainer>
     );
   }
-
-  const activeGroup = adminGroups.find(g => g.id === selectedGroupId);
 
   return (
     <WebContainer>
@@ -659,9 +959,19 @@ export default function AdminScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* SELETOR DE GRUPOS */}
+          {/* SELETOR DE GRUPOS COM BOTAO DE CRIAR GRUPO (+ ) */}
           <View style={styles.groupSelectorContainer}>
-            <Text style={styles.selectorLabel}>Grupo Administrado:</Text>
+            <View style={styles.groupSelectorHeader}>
+              <Text style={styles.selectorLabel}>Grupo Administrado:</Text>
+              <TouchableOpacity 
+                style={styles.inlineCreateGroupBtn}
+                onPress={() => setShowCreateGroupForm(true)}
+              >
+                <MaterialCommunityIcons name="plus" size={16} color={COLORS.secondary} />
+                <Text style={styles.inlineCreateGroupText}>Novo Grupo</Text>
+              </TouchableOpacity>
+            </View>
+            
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.groupSelectorScroll}>
               {adminGroups.map(g => (
                 <TouchableOpacity
@@ -689,15 +999,27 @@ export default function AdminScreen() {
           {/* TAB BAR DO PAINEL */}
           <View style={styles.tabBar}>
             <TouchableOpacity 
+              style={[styles.tabItem, activeTab === 'group' && styles.tabItemActive]}
+              onPress={() => setActiveTab('group')}
+            >
+              <MaterialCommunityIcons 
+                name="cog-outline" 
+                size={18} 
+                color={activeTab === 'group' ? COLORS.secondary : COLORS.textLight} 
+              />
+              <Text style={[styles.tabText, activeTab === 'group' && styles.tabTextActive]}>Grupo</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
               style={[styles.tabItem, activeTab === 'tasks' && styles.tabItemActive]}
               onPress={() => setActiveTab('tasks')}
             >
               <MaterialCommunityIcons 
                 name="star-outline" 
-                size={20} 
+                size={18} 
                 color={activeTab === 'tasks' ? COLORS.secondary : COLORS.textLight} 
               />
-              <Text style={[styles.tabText, activeTab === 'tasks' && styles.tabTextActive]}>Tarefas Extras</Text>
+              <Text style={[styles.tabText, activeTab === 'tasks' && styles.tabTextActive]}>Tarefas</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -706,10 +1028,10 @@ export default function AdminScreen() {
             >
               <MaterialCommunityIcons 
                 name="account-group-outline" 
-                size={20} 
+                size={18} 
                 color={activeTab === 'members' ? COLORS.secondary : COLORS.textLight} 
               />
-              <Text style={[styles.tabText, activeTab === 'members' && styles.tabTextActive]}>Participantes</Text>
+              <Text style={[styles.tabText, activeTab === 'members' && styles.tabTextActive]}>Membros</Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -718,7 +1040,7 @@ export default function AdminScreen() {
             >
               <MaterialCommunityIcons 
                 name="trophy-outline" 
-                size={20} 
+                size={18} 
                 color={activeTab === 'challenges' ? COLORS.secondary : COLORS.textLight} 
               />
               <Text style={[styles.tabText, activeTab === 'challenges' && styles.tabTextActive]}>Desafios</Text>
@@ -729,6 +1051,65 @@ export default function AdminScreen() {
             <ActivityIndicator size="large" color={COLORS.secondary} style={{ marginTop: 40 }} />
           ) : (
             <>
+              {/* ABA: DADOS DO GRUPO (CRUD) */}
+              {activeTab === 'group' && activeGroup && (
+                <View style={styles.listSection}>
+                  <Text style={styles.sectionTitle}>Dados Básicos do Grupo</Text>
+                  
+                  <Card variant="default" style={styles.formCard}>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.label}>Nome do Grupo</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Ex: Jovens IBB"
+                        value={groupName}
+                        onChangeText={setGroupName}
+                      />
+                    </View>
+
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.label}>Descrição</Text>
+                      <TextInput
+                        style={[styles.input, styles.textArea]}
+                        placeholder="Qual o propósito deste grupo?"
+                        multiline
+                        numberOfLines={3}
+                        value={groupDesc}
+                        onChangeText={setGroupDesc}
+                      />
+                    </View>
+
+                    <Button
+                      title="Salvar Alterações"
+                      variant="primary"
+                      size="lg"
+                      onPress={handleUpdateGroup}
+                      style={styles.submitBtn}
+                    />
+                  </Card>
+
+                  {/* Danger Zone */}
+                  <Text style={[styles.sectionTitle, { color: COLORS.error, marginTop: SPACING.md }]}>Zona de Perigo</Text>
+                  <Card variant="flat" style={styles.dangerCard}>
+                    <View style={styles.dangerContent}>
+                      <MaterialCommunityIcons name="alert-octagon" size={24} color={COLORS.error} />
+                      <View style={styles.dangerTextContainer}>
+                        <Text style={styles.dangerTitle}>Excluir este grupo</Text>
+                        <Text style={styles.dangerDesc}>
+                          A exclusão apagará de forma irreversível este grupo e todo o histórico de desafios, check-ins e pontos dos participantes.
+                        </Text>
+                      </View>
+                    </View>
+                    <Button
+                      title="Excluir Grupo"
+                      variant="secondary"
+                      onPress={handleDeleteGroup}
+                      style={styles.deleteBtn}
+                    />
+                  </Card>
+                </View>
+              )}
+
               {/* ABA: TAREFAS EXTRAS */}
               {activeTab === 'tasks' && (
                 <View>
@@ -949,51 +1330,58 @@ export default function AdminScreen() {
                 <View style={styles.listSection}>
                   <Text style={styles.sectionTitle}>Participantes do Grupo ({members.length})</Text>
                   
-                  <Card variant="default" style={{ paddingHorizontal: SPACING.md, paddingVertical: 0 }}>
-                    {members.map((member, index) => (
-                      <View 
-                        key={member.user_id} 
-                        style={[
-                          styles.memberRow,
-                          index === members.length - 1 && { borderBottomWidth: 0 }
-                        ]}
-                      >
-                        <View style={styles.memberInfo}>
-                          <Avatar source={member.avatar_url} name={member.full_name} size={38} />
-                          <View style={{ marginLeft: SPACING.sm, flex: 1 }}>
-                            <Text style={styles.memberName} numberOfLines={1}>{member.full_name}</Text>
-                            <Text style={styles.memberEmail} numberOfLines={1}>{member.email}</Text>
+                  {members.length === 0 ? (
+                    <Card variant="flat" style={styles.emptyTabCard}>
+                      <MaterialCommunityIcons name="account-multiple-outline" size={24} color={COLORS.textLight} />
+                      <Text style={styles.emptyTabText}>Nenhum participante no grupo.</Text>
+                    </Card>
+                  ) : (
+                    <Card variant="default" style={{ paddingHorizontal: SPACING.md, paddingVertical: 0 }}>
+                      {members.map((member, index) => (
+                        <View 
+                          key={member.user_id} 
+                          style={[
+                            styles.memberRow,
+                            index === members.length - 1 && { borderBottomWidth: 0 }
+                          ]}
+                        >
+                          <View style={styles.memberInfo}>
+                            <Avatar source={member.avatar_url} name={member.full_name} size={38} />
+                            <View style={{ marginLeft: SPACING.sm, flex: 1 }}>
+                              <Text style={styles.memberName} numberOfLines={1}>{member.full_name}</Text>
+                              <Text style={styles.memberEmail} numberOfLines={1}>{member.email}</Text>
+                            </View>
+                          </View>
+
+                          <View style={styles.memberActions}>
+                            <TouchableOpacity
+                              style={[
+                                styles.actionBadgeBtn,
+                                member.role === 'admin' ? styles.actionBadgeAdmin : styles.actionBadgeMember
+                              ]}
+                              onPress={() => handleUpdateMemberRole(member.user_id, member.full_name, member.role)}
+                            >
+                              <Text style={[
+                                  styles.actionBadgeText,
+                                  member.role === 'admin' ? styles.actionBadgeTextAdmin : styles.actionBadgeTextMember
+                              ]}>
+                                {member.role === 'admin' ? 'Admin' : 'Membro'}
+                              </Text>
+                            </TouchableOpacity>
+
+                            {member.user_id !== user?.id && (
+                              <TouchableOpacity 
+                                onPress={() => handleRemoveMember(member.user_id, member.full_name)}
+                                style={styles.kickBtn}
+                              >
+                                <MaterialCommunityIcons name="account-remove" size={18} color={COLORS.error} />
+                              </TouchableOpacity>
+                            )}
                           </View>
                         </View>
-
-                        <View style={styles.memberActions}>
-                          <TouchableOpacity
-                            style={[
-                              styles.actionBadgeBtn,
-                              member.role === 'admin' ? styles.actionBadgeAdmin : styles.actionBadgeMember
-                            ]}
-                            onPress={() => handleUpdateMemberRole(member.user_id, member.full_name, member.role)}
-                          >
-                            <Text style={[
-                              styles.actionBadgeText,
-                              member.role === 'admin' ? styles.actionBadgeTextAdmin : styles.actionBadgeTextMember
-                            ]}>
-                              {member.role === 'admin' ? 'Admin' : 'Membro'}
-                            </Text>
-                          </TouchableOpacity>
-
-                          {member.user_id !== user?.id && (
-                            <TouchableOpacity 
-                              onPress={() => handleRemoveMember(member.user_id, member.full_name)}
-                              style={styles.kickBtn}
-                            >
-                              <MaterialCommunityIcons name="account-remove" size={18} color={COLORS.error} />
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      </View>
-                    ))}
-                  </Card>
+                      ))}
+                    </Card>
+                  )}
                 </View>
               )}
 
@@ -1064,19 +1452,6 @@ export default function AdminScreen() {
                   )}
                 </View>
               )}
-
-              {/* DADOS DO GRUPO (BOTÃO DE REDIRECIONAMENTO RÁPIDO) */}
-              {activeGroup && (
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  style={styles.groupSettingsRow}
-                  onPress={() => router.push({ pathname: '/edit-group', params: { groupId: activeGroup.id } })}
-                >
-                  <MaterialCommunityIcons name="cog-outline" size={20} color={COLORS.primary} />
-                  <Text style={styles.groupSettingsText}>Editar Nome/Descrição ou Excluir o Grupo</Text>
-                  <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} style={{ marginLeft: 'auto' }} />
-                </TouchableOpacity>
-              )}
             </>
           )}
         </ScrollView>
@@ -1122,13 +1497,32 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
     marginBottom: SPACING.md,
   },
+  groupSelectorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
   selectorLabel: {
     fontSize: 10,
     fontFamily: FONTS.family.bodyBold,
     color: COLORS.textLight,
     textTransform: 'uppercase',
-    marginBottom: SPACING.xs,
     letterSpacing: 0.5,
+  },
+  inlineCreateGroupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.secondaryMuted,
+  },
+  inlineCreateGroupText: {
+    fontSize: 10,
+    fontFamily: FONTS.family.bodyBold,
+    color: COLORS.secondary,
   },
   groupSelectorScroll: {
     gap: SPACING.xs,
@@ -1204,7 +1598,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.secondary,
   },
   tabText: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: FONTS.family.bodySemibold,
     color: COLORS.textLight,
   },
@@ -1243,7 +1637,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
 
-  // Formulário Tarefas
+  // Formulário Geral
   formCard: {
     padding: SPACING.md,
     marginBottom: SPACING.xl,
@@ -1530,23 +1924,41 @@ const styles = StyleSheet.create({
     color: COLORS.secondary,
   },
 
-  // Redirecionamento de configurações rápidas do grupo
-  groupSettingsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.md,
-    backgroundColor: COLORS.surface,
+  // Danger Zone do Grupo
+  dangerCard: {
     padding: SPACING.md,
-    borderRadius: BORDER_RADIUS.xl,
+    backgroundColor: '#fff5f5',
+    borderColor: 'rgba(235, 94, 94, 0.2)',
     borderWidth: 1,
-    borderColor: COLORS.border,
-    marginTop: SPACING.lg,
+    borderRadius: BORDER_RADIUS.xl,
     ...SHADOWS.light,
   },
-  groupSettingsText: {
-    fontSize: FONTS.size.sm,
-    fontFamily: FONTS.family.bodySemibold,
-    color: COLORS.primary,
+  dangerContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  dangerTextContainer: {
+    flex: 1,
+  },
+  dangerTitle: {
+    fontSize: FONTS.size.md,
+    fontFamily: FONTS.family.heading,
+    color: COLORS.error,
+    fontWeight: FONTS.weight.bold,
+  },
+  dangerDesc: {
+    fontSize: FONTS.size.xs,
+    fontFamily: FONTS.family.body,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  deleteBtn: {
+    backgroundColor: COLORS.error,
+    borderColor: COLORS.error,
+    width: '100%',
   },
 
   // Overlays & Estilizações da Tela de Acesso Negado
@@ -1570,6 +1982,12 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  subtitle: {
+    fontSize: FONTS.size.sm,
+    fontFamily: FONTS.family.body,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.md,
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFill,
