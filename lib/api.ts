@@ -53,7 +53,33 @@ export const api = {
       groups.map(async (group: any) => {
         const challenges = await this.getGroupChallenges(group.id);
         const challenge = challenges.length > 0 ? challenges[0] : null;
-        return { ...group, challenges, challenge };
+
+        // Contar membros do grupo
+        let memberCount = 0;
+        if (group.id.startsWith('group')) {
+          memberCount = 5; // fallback para dados mockados
+        } else {
+          const { count, error } = await supabase
+            .from('group_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('group_id', group.id);
+          if (!error && count !== null) {
+            memberCount = count;
+          }
+        }
+
+        const now = new Date();
+        const activeChallengesCount = challenges.filter(
+          (c: any) => new Date(c.end_date) >= now
+        ).length;
+
+        return { 
+          ...group, 
+          challenges, 
+          challenge, 
+          memberCount, 
+          activeChallengesCount 
+        };
       })
     );
 

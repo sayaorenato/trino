@@ -104,7 +104,9 @@ export default function GroupsScreen() {
                         </View>
                         <View style={{ marginLeft: SPACING.md, flex: 1 }}>
                           <Text style={styles.groupName}>{group.name}</Text>
-                          <Text style={styles.membersCount}>{group.member_count ?? group.members_count ?? '–'} participantes</Text>
+                          <Text style={styles.membersCount}>
+                            {group.memberCount ?? 0} {group.memberCount === 1 ? 'participante' : 'participantes'}
+                          </Text>
                         </View>
                       </View>
                       

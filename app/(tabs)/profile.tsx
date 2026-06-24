@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -6,7 +6,8 @@ import {
   ScrollView, 
   TouchableOpacity, 
   SafeAreaView, 
-  Platform
+  Platform,
+  ActivityIndicator
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -16,14 +17,92 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { WebContainer } from '../../components/ui/WebContainer';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
+import { supabase } from '../../lib/supabase';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, profile, signOut } = useAuth();
 
+  const [totalPoints, setTotalPoints] = useState(0);
+  const [habitAverages, setHabitAverages] = useState({ prayer: 0, bible: 0, exercise: 0 });
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchUserStats = async () => {
+      try {
+        setLoadingStats(true);
+
+        // 1. Buscar todos os check-ins do usuário no Supabase
+        const { data: allCheckins, error: checkinsError } = await supabase
+          .from('checkins')
+          .select('type, note, created_at')
+          .eq('user_id', user.id);
+
+        if (checkinsError) throw checkinsError;
+
+        let points = 0;
+        const fourWeeksAgo = new Date();
+        fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+        fourWeeksAgo.setHours(0, 0, 0, 0);
+
+        // Conjuntos para guardar dias únicos de check-in de cada hábito nas últimas 4 semanas
+        const prayDays = new Set<string>();
+        const bibleDays = new Set<string>();
+        const workoutDays = new Set<string>();
+
+        if (allCheckins) {
+          allCheckins.forEach((c: any) => {
+            // Calcular pontuação histórica total
+            if (c.type === 'pray') {
+              points += 10;
+            } else if (c.type === 'bible') {
+              points += 15;
+            } else if (c.type === 'workout') {
+              points += 20;
+            }
+            
+            if (c.note && c.note.includes('[EXTRA_TASK_ID:')) {
+              points += 30;
+            }
+
+            // Calcular a média móvel das últimas 4 semanas
+            const checkinDate = new Date(c.created_at);
+            if (checkinDate >= fourWeeksAgo) {
+              const dayStr = checkinDate.toISOString().split('T')[0];
+              if (c.type === 'pray') prayDays.add(dayStr);
+              if (c.type === 'bible') bibleDays.add(dayStr);
+              if (c.type === 'workout') workoutDays.add(dayStr);
+            }
+          });
+        }
+
+        setTotalPoints(points);
+
+        // Média de conclusão baseada no número de dias únicos com check-in nos últimos 28 dias
+        const prayerAvg = Math.round((prayDays.size / 28) * 100);
+        const bibleAvg = Math.round((bibleDays.size / 28) * 100);
+        const exerciseAvg = Math.round((workoutDays.size / 28) * 100);
+
+        setHabitAverages({
+          prayer: Math.min(100, prayerAvg),
+          bible: Math.min(100, bibleAvg),
+          exercise: Math.min(100, exerciseAvg),
+        });
+
+      } catch (err) {
+        console.error('Erro ao buscar estatísticas do perfil:', err);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    fetchUserStats();
+  }, [user]);
+
   const handleSignOut = async () => {
     await signOut();
-    // O layout raiz cuidará do redirecionamento
   };
 
   return (
@@ -65,7 +144,11 @@ export default function ProfileScreen() {
               <Text style={styles.statLabel}>Recorde</Text>
             </View>
             <View style={styles.statCol}>
-              <Text style={styles.statValue}>{0}</Text>
+              {loadingStats ? (
+                <ActivityIndicator size="small" color="#fff" style={{ height: 27 }} />
+              ) : (
+                <Text style={styles.statValue}>{totalPoints}</Text>
+              )}
               <Text style={styles.statLabel}>Pontos</Text>
             </View>
           </View>
@@ -77,53 +160,59 @@ export default function ProfileScreen() {
           <Text style={styles.sectionSubtitle}>Média de conclusão nas últimas 4 semanas</Text>
 
           <View style={styles.habitsStats}>
-            {/* ORAÇÃO */}
-            <View style={styles.habitStatItem}>
-              <View style={[styles.habitIconBg, { backgroundColor: COLORS.gold }]}>
-                <MaterialCommunityIcons name="hands-pray" size={20} color="#fff" />
-              </View>
-              <View style={styles.habitStatDetails}>
-                <View style={styles.habitStatHeader}>
-                  <Text style={styles.habitStatTitle}>Oração</Text>
-                  <Text style={styles.habitStatPercentage}>85%</Text>
+            {loadingStats ? (
+              <ActivityIndicator size="small" color={COLORS.primary} style={{ paddingVertical: SPACING.md }} />
+            ) : (
+              <>
+                {/* ORAÇÃO */}
+                <View style={styles.habitStatItem}>
+                  <View style={[styles.habitIconBg, { backgroundColor: COLORS.gold }]}>
+                    <MaterialCommunityIcons name="hands-pray" size={20} color="#fff" />
+                  </View>
+                  <View style={styles.habitStatDetails}>
+                    <View style={styles.habitStatHeader}>
+                      <Text style={styles.habitStatTitle}>Oração</Text>
+                      <Text style={styles.habitStatPercentage}>{habitAverages.prayer}%</Text>
+                    </View>
+                    <View style={styles.barBg}>
+                      <View style={[styles.barFill, { width: `${habitAverages.prayer}%`, backgroundColor: COLORS.gold }]} />
+                    </View>
+                  </View>
                 </View>
-                <View style={styles.barBg}>
-                  <View style={[styles.barFill, { width: '85%', backgroundColor: COLORS.gold }]} />
-                </View>
-              </View>
-            </View>
 
-            {/* BÍBLIA */}
-            <View style={styles.habitStatItem}>
-              <View style={[styles.habitIconBg, { backgroundColor: COLORS.primary }]}>
-                <MaterialCommunityIcons name="book-open-variant" size={20} color="#fff" />
-              </View>
-              <View style={styles.habitStatDetails}>
-                <View style={styles.habitStatHeader}>
-                  <Text style={styles.habitStatTitle}>Leitura Bíblica</Text>
-                  <Text style={styles.habitStatPercentage}>70%</Text>
+                {/* BÍBLIA */}
+                <View style={styles.habitStatItem}>
+                  <View style={[styles.habitIconBg, { backgroundColor: COLORS.primary }]}>
+                    <MaterialCommunityIcons name="book-open-variant" size={20} color="#fff" />
+                  </View>
+                  <View style={styles.habitStatDetails}>
+                    <View style={styles.habitStatHeader}>
+                      <Text style={styles.habitStatTitle}>Leitura Bíblica</Text>
+                      <Text style={styles.habitStatPercentage}>{habitAverages.bible}%</Text>
+                    </View>
+                    <View style={styles.barBg}>
+                      <View style={[styles.barFill, { width: `${habitAverages.bible}%`, backgroundColor: COLORS.primary }]} />
+                    </View>
+                  </View>
                 </View>
-                <View style={styles.barBg}>
-                  <View style={[styles.barFill, { width: '70%', backgroundColor: COLORS.primary }]} />
-                </View>
-              </View>
-            </View>
 
-            {/* EXERCÍCIO */}
-            <View style={styles.habitStatItem}>
-              <View style={[styles.habitIconBg, { backgroundColor: COLORS.secondary }]}>
-                <MaterialCommunityIcons name="run-fast" size={20} color="#fff" />
-              </View>
-              <View style={styles.habitStatDetails}>
-                <View style={styles.habitStatHeader}>
-                  <Text style={styles.habitStatTitle}>Exercício Físico</Text>
-                  <Text style={styles.habitStatPercentage}>60%</Text>
+                {/* EXERCÍCIO */}
+                <View style={styles.habitStatItem}>
+                  <View style={[styles.habitIconBg, { backgroundColor: COLORS.secondary }]}>
+                    <MaterialCommunityIcons name="run-fast" size={20} color="#fff" />
+                  </View>
+                  <View style={styles.habitStatDetails}>
+                    <View style={styles.habitStatHeader}>
+                      <Text style={styles.habitStatTitle}>Exercício Físico</Text>
+                      <Text style={styles.habitStatPercentage}>{habitAverages.exercise}%</Text>
+                    </View>
+                    <View style={styles.barBg}>
+                      <View style={[styles.barFill, { width: `${habitAverages.exercise}%`, backgroundColor: COLORS.secondary }]} />
+                    </View>
+                  </View>
                 </View>
-                <View style={styles.barBg}>
-                  <View style={[styles.barFill, { width: '60%', backgroundColor: COLORS.secondary }]} />
-                </View>
-              </View>
-            </View>
+              </>
+            )}
           </View>
         </View>
 

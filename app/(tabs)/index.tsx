@@ -421,7 +421,28 @@ export default function DashboardScreen() {
     }, [user, checkPendingInvite, checkChallengeInvitations])
   );
 
-  const totalCheckinsDone = Object.values(habits).filter(Boolean).length;
+  // Calcular soma de tarefas e check-ins concluídos de todos os desafios ativos hoje
+  let totalTasksCount = 0;
+  let completedTasksCount = 0;
+
+  allActiveChallenges.forEach((item: any) => {
+    // 3 hábitos diários por desafio
+    totalTasksCount += 3;
+    
+    if (isHabitDone(item, 'prayer')) completedTasksCount += 1;
+    if (isHabitDone(item, 'bible')) completedTasksCount += 1;
+    if (isHabitDone(item, 'exercise')) completedTasksCount += 1;
+
+    // Tarefas extras
+    const extraTasks = getChallengeExtraTasks(item.challenge.id);
+    totalTasksCount += extraTasks.length;
+
+    extraTasks.forEach((task: any) => {
+      if (isExtraTaskDone(task.id, item.challenge.id)) {
+        completedTasksCount += 1;
+      }
+    });
+  });
 
   if (loading && groups.length === 0) {
     return (
@@ -466,7 +487,7 @@ export default function DashboardScreen() {
               {[
                 { value: groups.length, label: 'Grupos', color: COLORS.primary },
                 { value: myActiveChallenges.length, label: 'Desafios', color: COLORS.secondary },
-                { value: `${totalCheckinsDone}/3`, label: 'Hoje', color: COLORS.gold },
+                { value: `${completedTasksCount}/${totalTasksCount}`, label: 'Hoje', color: COLORS.gold },
               ].map(({ value, label, color }) => (
                 <View key={label} style={styles.summaryCard}>
                   <Text style={[styles.summaryNumber, { color }]}>{value}</Text>
@@ -503,10 +524,6 @@ export default function DashboardScreen() {
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={styles.groupsScroll}>
                 {groups.map((group: any) => {
-                  const challenge = group.challenge;
-                  const daysLeft = challenge
-                    ? Math.ceil((new Date(challenge.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-                    : 0;
                   return (
                     <TouchableOpacity
                       key={group.id}
@@ -526,17 +543,21 @@ export default function DashboardScreen() {
                           )}
                         </View>
                         <Text style={styles.groupCardName} numberOfLines={1}>{group.name}</Text>
-                        {challenge ? (
-                          <>
-                            <Text style={styles.groupCardChallenge} numberOfLines={1}>{challenge.title}</Text>
-                            <View style={styles.groupCardFooter}>
-                              <ProgressBar progress={0.65} height={4} showPercentage={false} style={{ width: '100%' }} />
-                              <Text style={styles.groupCardDays}>{daysLeft}d restantes</Text>
-                            </View>
-                          </>
-                        ) : (
-                          <Text style={styles.groupCardNoChallenge}>+ Criar desafio</Text>
-                        )}
+                        
+                        <View style={styles.groupMetaContainer}>
+                          <View style={styles.groupMetaItem}>
+                            <MaterialCommunityIcons name="account-group-outline" size={14} color={COLORS.textSecondary} />
+                            <Text style={styles.groupMetaText}>
+                              {group.memberCount ?? 0} {group.memberCount === 1 ? 'membro' : 'membros'}
+                            </Text>
+                          </View>
+                          <View style={styles.groupMetaItem}>
+                            <MaterialCommunityIcons name="trophy-outline" size={14} color={COLORS.gold} />
+                            <Text style={styles.groupMetaText}>
+                              {group.activeChallengesCount ?? 0} {group.activeChallengesCount === 1 ? 'ativo' : 'ativos'}
+                            </Text>
+                          </View>
+                        </View>
                       </Card>
                     </TouchableOpacity>
                   );
@@ -827,6 +848,20 @@ const styles = StyleSheet.create({
   },
   groupAvatarText: { color: '#fff', fontFamily: FONTS.family.heading, fontSize: FONTS.size.md },
   groupCardName: { fontSize: FONTS.size.sm, fontFamily: FONTS.family.bodySemibold, color: COLORS.primary },
+  groupMetaContainer: {
+    marginTop: SPACING.xs,
+    gap: 4,
+  },
+  groupMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  groupMetaText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontFamily: FONTS.family.body,
+  },
   groupCardChallenge: { fontSize: FONTS.size.xs, fontFamily: FONTS.family.body, color: COLORS.textSecondary, marginTop: 2 },
   groupCardNoChallenge: { fontSize: FONTS.size.xs, color: COLORS.secondary, marginTop: SPACING.sm, fontFamily: FONTS.family.bodySemibold },
   groupCardFooter: { marginTop: SPACING.sm },

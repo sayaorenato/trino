@@ -126,7 +126,16 @@ export default function GroupDashboardScreen() {
               </Text>
             </View>
           </View>
-          <View style={{ width: 24 }} />
+          {isAdmin ? (
+            <TouchableOpacity 
+              onPress={() => router.push({ pathname: '/edit-group', params: { groupId: group.id } })}
+              style={styles.backButton}
+            >
+              <MaterialCommunityIcons name="cog" size={24} color={COLORS.primary} />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 24 }} />
+          )}
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
