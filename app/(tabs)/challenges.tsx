@@ -18,6 +18,7 @@ import { useAuth } from '../../context/auth';
 import { api } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
+import { SupportCard } from '../../components/SupportCard';
 
 export default function ChallengesDashboardScreen() {
   const router = useRouter();
@@ -161,6 +162,8 @@ export default function ChallengesDashboardScreen() {
               </View>
             )}
           </View>
+
+          <SupportCard />
 
           <View style={{ height: Platform.OS === 'ios' ? 100 : 80 }} />
         </ScrollView>

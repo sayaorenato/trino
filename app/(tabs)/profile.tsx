@@ -16,6 +16,7 @@ import { Avatar } from '../../components/ui/Avatar';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { WebContainer } from '../../components/ui/WebContainer';
+import { SupportCard } from '../../components/SupportCard';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
 
@@ -284,6 +285,8 @@ export default function ProfileScreen() {
           />
           <Text style={styles.versionText}>Trino v1.0.0 — Fé em Constância</Text>
         </View>
+
+        <SupportCard />
 
         {/* Espaçamento TabBar */}
         <View style={{ height: Platform.OS === 'ios' ? 100 : 80 }} />

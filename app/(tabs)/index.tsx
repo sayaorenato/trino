@@ -25,6 +25,7 @@ import { StreakBadge } from '../../components/ui/StreakBadge';
 import { ProgressBar } from '../../components/ui/ProgressBar';
 import { Button } from '../../components/ui/Button';
 import { WebContainer } from '../../components/ui/WebContainer';
+import { SupportCard } from '../../components/SupportCard';
 import { HABIT_LABELS, HabitType, MOCK_RANKINGS, RankingMember, MOCK_CHALLENGE_INVITATIONS, MOCK_FEED, MOCK_EXTRA_TASKS } from '../../constants/mock-data';
 import { COLORS, SPACING, FONTS, SHADOWS, BORDER_RADIUS, ANIMATION } from '../../constants/theme';
 
@@ -778,6 +779,8 @@ export default function DashboardScreen() {
               )}
             </View>
           </Animated.View>
+
+          <SupportCard />
 
           <View style={{ height: Platform.OS === 'ios' ? 100 : 80 }} />
         </ScrollView>

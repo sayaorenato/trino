@@ -17,6 +17,7 @@ import { WebContainer } from '../../components/ui/WebContainer';
 import { useAuth } from '../../context/auth';
 import { api } from '../../lib/api';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
+import { SupportCard } from '../../components/SupportCard';
 
 export default function GroupsScreen() {
   const router = useRouter();
@@ -159,6 +160,8 @@ export default function GroupsScreen() {
               Apenas administradores de grupos podem criar novos desafios e definir rounds e tarefas extras semanais.
             </Text>
           </Card>
+
+          <SupportCard />
 
           {/* Espaçamento TabBar */}
           <View style={{ height: Platform.OS === 'ios' ? 100 : 80 }} />
