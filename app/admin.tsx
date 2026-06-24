@@ -20,8 +20,24 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
-import { MOCK_EXTRA_TASKS, ExtraTask } from '../constants/mock-data';
+import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
+
+function formatDateForInput(isoDateStr: string): string {
+  if (!isoDateStr) return '';
+  const parts = isoDateStr.split('T')[0].split('-');
+  if (parts.length !== 3) return isoDateStr;
+  const [year, month, day] = parts;
+  return `${day}/${month}/${year}`;
+}
+
+function parseDate(dateStr: string): Date | null {
+  const parts = dateStr.split('/');
+  if (parts.length !== 3) return null;
+  const [day, month, year] = parts.map(Number);
+  if (!day || !month || !year) return null;
+  return new Date(year, month - 1, day);
+}
 
 export default function AdminScreen() {
   const router = useRouter();
@@ -54,6 +70,12 @@ export default function AdminScreen() {
   // Estados de Editar Grupo Selecionado
   const [groupName, setGroupName] = useState('');
   const [groupDesc, setGroupDesc] = useState('');
+
+  // Estados de Editar Desafio Selecionado
+  const [challengeName, setChallengeName] = useState('');
+  const [challengeStartDate, setChallengeStartDate] = useState('');
+  const [challengeEndDate, setChallengeEndDate] = useState('');
+  const [challengeRules, setChallengeRules] = useState('');
 
   // Estados de nova/edição de tarefa extra
   const [title, setTitle] = useState('');
@@ -135,6 +157,23 @@ export default function AdminScreen() {
       setGroupDesc('');
     }
   }, [selectedGroupId, adminGroups]);
+
+  // Sincronizar campos de edição com o desafio selecionado
+  const activeChallenge = challenges.find(c => c.id === selectedChallengeId);
+
+  useEffect(() => {
+    if (activeChallenge) {
+      setChallengeName(activeChallenge.title || activeChallenge.name || '');
+      setChallengeStartDate(formatDateForInput(activeChallenge.start_date));
+      setChallengeEndDate(formatDateForInput(activeChallenge.end_date));
+      setChallengeRules(activeChallenge.rules || '');
+    } else {
+      setChallengeName('');
+      setChallengeStartDate('');
+      setChallengeEndDate('');
+      setChallengeRules('');
+    }
+  }, [selectedChallengeId, challenges]);
 
   // 3. Carregar desafios e participantes toda vez que o grupo selecionado mudar
   useEffect(() => {
@@ -455,6 +494,155 @@ export default function AdminScreen() {
                 [
                   { text: 'Voltar', style: 'cancel' },
                   { text: 'Sim, Deletar Tudo', style: 'destructive', onPress: performDelete }
+                ]
+              );
+            }
+          }
+        ]
+      );
+    }
+  };
+
+  const handleUpdateChallenge = async () => {
+    if (!challengeName.trim()) {
+      Alert.alert('Erro', 'Por favor, informe o nome do desafio.');
+      return;
+    }
+
+    if (!selectedChallengeId || !selectedGroupId || !user) return;
+
+    const start = parseDate(challengeStartDate);
+    const end = parseDate(challengeEndDate);
+    if (!start || !end) {
+      Alert.alert('Erro', 'Datas inválidas. Use o formato DD/MM/AAAA.');
+      return;
+    }
+
+    setLoadingAction(true);
+    try {
+      const isMock = selectedChallengeId.startsWith('chal');
+      if (isMock) {
+        // Mock Update
+        const existingChallenge = MOCK_CHALLENGES[selectedChallengeId];
+        if (existingChallenge) {
+          existingChallenge.name = challengeName.trim();
+          existingChallenge.rules = challengeRules;
+          existingChallenge.start_date = start.toISOString().split('T')[0];
+          existingChallenge.end_date = end.toISOString().split('T')[0];
+
+          // Atualizar lista local
+          setChallenges(prev => prev.map(c => c.id === selectedChallengeId ? { ...c, name: challengeName.trim(), rules: challengeRules, start_date: existingChallenge.start_date, end_date: existingChallenge.end_date } : c));
+        }
+      } else {
+        // Supabase Update
+        const { error: challengeError } = await supabase
+          .from('challenges')
+          .update({
+            title: challengeName.trim(),
+            rules: challengeRules,
+            start_date: start.toISOString().split('T')[0],
+            end_date: end.toISOString().split('T')[0],
+          })
+          .eq('id', selectedChallengeId);
+
+        if (challengeError) throw challengeError;
+
+        // Atualizar lista local
+        setChallenges(prev => prev.map(c => c.id === selectedChallengeId ? { ...c, title: challengeName.trim(), rules: challengeRules, start_date: start.toISOString().split('T')[0], end_date: end.toISOString().split('T')[0] } : c));
+      }
+
+      Alert.alert('Sucesso', 'Configurações do desafio atualizadas com sucesso!');
+    } catch (e: any) {
+      Alert.alert('Erro', e.message || 'Erro ao atualizar o desafio.');
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const handleDeleteChallenge = async () => {
+    if (!selectedChallengeId || !selectedGroupId || !user) return;
+
+    const performDelete = async () => {
+      setLoadingAction(true);
+      try {
+        const isMock = selectedChallengeId.startsWith('chal');
+        if (isMock) {
+          // Mock Delete
+          delete MOCK_CHALLENGES[selectedChallengeId];
+          delete MOCK_ROUNDS[selectedChallengeId];
+          delete MOCK_RANKINGS[selectedChallengeId];
+          delete MOCK_EXTRA_TASKS[selectedChallengeId];
+        } else {
+          // Supabase Delete
+          const { data: roundsData } = await supabase
+            .from('rounds')
+            .select('id')
+            .eq('challenge_id', selectedChallengeId);
+          
+          const roundIds = (roundsData || []).map(r => r.id);
+          if (roundIds.length > 0) {
+            // Deletar checkins primeiro devido às chaves estrangeiras
+            await supabase.from('checkins').delete().in('round_id', roundIds);
+          }
+
+          // Deletar rounds
+          await supabase.from('rounds').delete().eq('challenge_id', selectedChallengeId);
+          
+          // Deletar tarefas extras
+          await supabase.from('tasks').delete().eq('challenge_id', selectedChallengeId);
+
+          // Deletar o desafio principal
+          const { error } = await supabase
+            .from('challenges')
+            .delete()
+            .eq('id', selectedChallengeId);
+
+          if (error) throw error;
+        }
+
+        Alert.alert('Sucesso', 'Desafio excluído com sucesso!');
+
+        // Atualizar lista de desafios do grupo
+        const challengesData = await api.getGroupChallenges(selectedGroupId);
+        setChallenges(challengesData);
+
+        if (challengesData.length > 0) {
+          setSelectedChallengeId(challengesData[0].id);
+        } else {
+          setSelectedChallengeId(null);
+        }
+
+      } catch (e: any) {
+        Alert.alert('Erro', e.message || 'Erro ao excluir o desafio.');
+      } finally {
+        setLoadingAction(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmFirst = window.confirm(`ATENÇÃO: Tem certeza de que deseja excluir permanentemente o desafio "${challengeName}"? Todos os rounds, check-ins e pontos deste desafio serão excluídos de forma irreversível!`);
+      if (confirmFirst) {
+        const confirmSecond = window.confirm('CONFIRMAÇÃO FINAL: Deseja mesmo deletar o desafio? Pressione OK para excluir definitivamente.');
+        if (confirmSecond) {
+          await performDelete();
+        }
+      }
+    } else {
+      Alert.alert(
+        'Excluir Desafio',
+        `ATENÇÃO: Todos os rounds, check-ins e pontos deste desafio serão excluídos para sempre. Deseja mesmo excluir o desafio "${challengeName}"?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { 
+            text: 'Excluir Definitivamente', 
+            style: 'destructive',
+            onPress: () => {
+              Alert.alert(
+                'Confirmação Final',
+                'Você tem certeza absoluta? Esta ação NÃO pode ser desfeita.',
+                [
+                  { text: 'Voltar', style: 'cancel' },
+                  { text: 'Sim, Deletar Desafio', style: 'destructive', onPress: performDelete }
                 ]
               );
             }
@@ -1388,15 +1576,48 @@ export default function AdminScreen() {
               {/* ABA: LISTAGEM DE DESAFIOS */}
               {activeTab === 'challenges' && (
                 <View style={styles.listSection}>
-                  <View style={styles.challengesHeaderRow}>
-                    <Text style={styles.sectionTitle}>Histórico de Desafios</Text>
-                    <Button
-                      title="Novo Desafio"
-                      variant="secondary"
-                      size="sm"
-                      icon={<MaterialCommunityIcons name="plus" size={14} color="#fff" />}
-                      onPress={() => router.push({ pathname: '/create-challenge', params: { groupId: selectedGroupId } })}
-                    />
+                  {/* Seletor de Desafios com botão inline de criar (+ Novo Desafio) */}
+                  <View style={styles.groupSelectorContainer}>
+                    <View style={styles.groupSelectorHeader}>
+                      <Text style={styles.selectorLabel}>Desafios do Grupo:</Text>
+                      <TouchableOpacity 
+                        style={styles.inlineCreateGroupBtn}
+                        onPress={() => router.push({ pathname: '/create-challenge', params: { groupId: selectedGroupId } })}
+                      >
+                        <MaterialCommunityIcons name="plus" size={16} color={COLORS.secondary} />
+                        <Text style={styles.inlineCreateGroupText}>Novo Desafio</Text>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    {challenges.length === 0 ? (
+                      <Text style={{ fontSize: 12, color: COLORS.textLight, fontFamily: FONTS.family.body, marginTop: 4 }}>
+                        Nenhum desafio criado neste grupo.
+                      </Text>
+                    ) : (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.groupSelectorScroll}>
+                        {challenges.map(c => {
+                          const now = new Date();
+                          const isActive = new Date(c.end_date) >= now;
+                          return (
+                            <TouchableOpacity
+                              key={c.id}
+                              style={[
+                                styles.groupSelectBadge,
+                                selectedChallengeId === c.id && styles.groupSelectBadgeActive
+                              ]}
+                              onPress={() => setSelectedChallengeId(c.id)}
+                            >
+                              <Text style={[
+                                styles.groupSelectBadgeText,
+                                selectedChallengeId === c.id && styles.groupSelectBadgeTextActive
+                              ]}>
+                                {c.title || c.name} {isActive ? '(Ativo)' : '(Encerrado)'}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    )}
                   </View>
 
                   {challenges.length === 0 ? (
@@ -1404,52 +1625,100 @@ export default function AdminScreen() {
                       <MaterialCommunityIcons name="trophy-outline" size={32} color={COLORS.textLight} style={{ marginBottom: SPACING.sm }} />
                       <Text style={styles.emptyTabTitle}>Nenhum desafio registrado</Text>
                       <Text style={styles.emptyTabSubtitle}>Inicie o primeiro desafio para motivar os membros!</Text>
+                      <Button
+                        title="Criar Desafio"
+                        variant="secondary"
+                        size="sm"
+                        onPress={() => router.push({ pathname: '/create-challenge', params: { groupId: selectedGroupId } })}
+                        style={{ marginTop: SPACING.md, width: 150 }}
+                      />
                     </Card>
-                  ) : (
-                    <View style={styles.challengesList}>
-                      {challenges.map(c => {
-                        const now = new Date();
-                        const isActive = new Date(c.end_date) >= now;
-                        return (
-                          <Card key={c.id} variant="default" style={styles.challengeCard}>
-                            <View style={styles.challengeCardHeader}>
-                              <View style={styles.challengeCardTitleRow}>
-                                <MaterialCommunityIcons 
-                                  name="trophy" 
-                                  size={18} 
-                                  color={isActive ? COLORS.gold : COLORS.textLight} 
-                                />
-                                <Text style={styles.challengeCardTitle} numberOfLines={1}>{c.title}</Text>
-                              </View>
-                              <View style={[
-                                styles.challengeStatusBadge,
-                                { backgroundColor: isActive ? COLORS.secondaryMuted : COLORS.surfaceVariant }
-                              ]}>
-                                <Text style={[
-                                  styles.challengeStatusText,
-                                  { color: isActive ? COLORS.secondary : COLORS.textLight }
-                                ]}>
-                                  {isActive ? 'Ativo' : 'Encerrado'}
-                                </Text>
-                              </View>
-                            </View>
-                            
-                            <Text style={styles.challengeCardDates}>
-                              Duração: {new Date(c.start_date).toLocaleDateString('pt-BR')} até {new Date(c.end_date).toLocaleDateString('pt-BR')}
-                            </Text>
+                  ) : activeChallenge ? (
+                    <View>
+                      <Text style={styles.sectionTitle}>Dados Básicos do Desafio</Text>
+                      
+                      <Card variant="default" style={styles.formCard}>
+                        <View style={styles.inputGroup}>
+                          <Text style={styles.label}>Nome do Desafio</Text>
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Ex: Fé em Constância 2.0"
+                            value={challengeName}
+                            onChangeText={setChallengeName}
+                          />
+                        </View>
 
-                            <TouchableOpacity 
-                              style={styles.challengeLink}
-                              onPress={() => router.push({ pathname: '/(tabs)/challenge', params: { challengeId: c.id } })}
-                            >
-                              <Text style={styles.challengeLinkText}>Ver detalhes do desafio</Text>
-                              <MaterialCommunityIcons name="arrow-right" size={14} color={COLORS.secondary} />
-                            </TouchableOpacity>
-                          </Card>
-                        );
-                      })}
+                        <View style={styles.row}>
+                          <View style={[styles.inputGroup, { width: '48%' }]}>
+                            <Text style={styles.label}>Data de Início</Text>
+                            <TextInput
+                              style={styles.input}
+                              value={challengeStartDate}
+                              onChangeText={setChallengeStartDate}
+                              placeholder="DD/MM/AAAA"
+                            />
+                          </View>
+                          <View style={[styles.inputGroup, { width: '48%' }]}>
+                            <Text style={styles.label}>Data de Término</Text>
+                            <TextInput
+                              style={styles.input}
+                              value={challengeEndDate}
+                              onChangeText={setChallengeEndDate}
+                              placeholder="DD/MM/AAAA"
+                            />
+                          </View>
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                          <Text style={styles.label}>Regras e Descrição</Text>
+                          <TextInput
+                            style={[styles.input, styles.textArea]}
+                            placeholder="Regras do desafio..."
+                            multiline
+                            numberOfLines={4}
+                            value={challengeRules}
+                            onChangeText={setChallengeRules}
+                          />
+                        </View>
+
+                        <Button
+                          title="Salvar Alterações do Desafio"
+                          variant="primary"
+                          size="lg"
+                          onPress={handleUpdateChallenge}
+                          style={styles.submitBtn}
+                        />
+                        
+                        <TouchableOpacity
+                          style={styles.challengeLink}
+                          onPress={() => router.push({ pathname: '/(tabs)/challenge', params: { challengeId: selectedChallengeId } })}
+                        >
+                          <Text style={styles.challengeLinkText}>Ver detalhes na aba Desafio</Text>
+                          <MaterialCommunityIcons name="arrow-right" size={14} color={COLORS.secondary} />
+                        </TouchableOpacity>
+                      </Card>
+
+                      {/* Danger Zone do Desafio */}
+                      <Text style={[styles.sectionTitle, { color: COLORS.error, marginTop: SPACING.md }]}>Zona de Perigo</Text>
+                      <Card variant="flat" style={styles.dangerCard}>
+                        <View style={styles.dangerContent}>
+                          <MaterialCommunityIcons name="alert-octagon" size={24} color={COLORS.error} />
+                          <View style={styles.dangerTextContainer}>
+                            <Text style={styles.dangerTitle}>Excluir este desafio</Text>
+                            <Text style={styles.dangerDesc}>
+                              A exclusão apagará de forma irreversível este desafio e todos os check-ins, rounds e pontos dos membros associados a ele.
+                            </Text>
+                          </View>
+                        </View>
+                        <Button
+                          title="Excluir Desafio"
+                          variant="secondary"
+                          onPress={handleDeleteChallenge}
+                          style={styles.deleteBtn}
+                        />
+                      </Card>
                     </View>
-                  )}
+                  ) : null}
                 </View>
               )}
             </>
