@@ -155,7 +155,7 @@ export default function SupportScreen() {
             </View>
             <Text style={styles.successTitle}>Muito Obrigado!</Text>
             <Text style={styles.successText}>
-              Sua oferta foi recebida com sucesso. É uma honra ter você conosco investindo na saúde de corpo, alma e espírito de toda a nossa comunidade. Deus te abençoe!
+              Sua oferta foi recebida com sucesso. Nosso desejo é que esse app ajude você e a sua comunidade a se manterem firmes nos propósitos de leitura da palavra, vida de oração e saúde do corpo. Deus te abençoe!
             </Text>
             <Button
               title="Voltar ao Perfil"
