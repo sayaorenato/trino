@@ -172,7 +172,7 @@ export default function DashboardScreen() {
     return tasks
       .filter((t: any) => t.challenge_id === challengeId)
       .map((t: any) => {
-        let parsed = { title: 'Tarefa Extra', description: '', type: 'general', active: true, points: 30, expires_at: '' };
+        let parsed = { title: 'Tarefa Extra', description: '', type: 'general', active: true, points: 30, expires_at: '', start_time: '' };
         try {
           parsed = JSON.parse(t.description);
         } catch (e) {}
@@ -184,10 +184,28 @@ export default function DashboardScreen() {
           type: parsed.type || 'general',
           points: t.points || 30,
           active: parsed.active !== false,
-          expires_at: parsed.expires_at || ''
+          expires_at: parsed.expires_at || '',
+          start_time: parsed.start_time || undefined
         };
       })
       .filter((t: any) => t.active !== false && isToday(t.expires_at));
+  };
+
+  // Helper para verificar se a tarefa extra já foi liberada pelo horário de início
+  const isTimeReleased = (startTime?: string) => {
+    if (!startTime) return true;
+    try {
+      const [startHours, startMinutes] = startTime.split(':').map(Number);
+      const now = new Date();
+      const currentHours = now.getHours();
+      const currentMinutes = now.getMinutes();
+
+      if (currentHours > startHours) return true;
+      if (currentHours === startHours && currentMinutes >= startMinutes) return true;
+      return false;
+    } catch (e) {
+      return true;
+    }
   };
 
   // Helper para verificar se uma tarefa extra foi concluída hoje pelo usuário
@@ -754,34 +772,55 @@ export default function DashboardScreen() {
                             <View style={styles.extraTasksRow}>
                               {challengeExtraTasks.map((task: any) => {
                                 const done = isExtraTaskDone(task.id, challenge.id);
+                                const released = isTimeReleased(task.start_time);
+                                
+                                const handlePress = () => {
+                                  if (done) return;
+                                  if (!released) {
+                                    Alert.alert(
+                                      'Tarefa Não Liberada',
+                                      `Esta tarefa estará disponível para check-in somente a partir das ${task.start_time}.`
+                                    );
+                                    return;
+                                  }
+                                  router.push({
+                                    pathname: '/(tabs)/checkin',
+                                    params: { challengeId: challenge.id, taskId: task.id }
+                                  });
+                                };
+
                                 return (
                                   <TouchableOpacity
                                     key={task.id}
                                     activeOpacity={done ? 1 : 0.8}
-                                    disabled={done}
-                                    onPress={() => router.push({
-                                      pathname: '/(tabs)/checkin',
-                                      params: { challengeId: challenge.id, taskId: task.id }
-                                    })}
+                                    onPress={handlePress}
                                     style={[
                                       styles.miniTaskBadge,
-                                      done ? styles.miniTaskBadgeCompleted : styles.miniTaskBadgePending
+                                      done 
+                                        ? styles.miniTaskBadgeCompleted 
+                                        : !released 
+                                          ? styles.miniTaskBadgeLocked 
+                                          : styles.miniTaskBadgePending
                                     ]}
                                   >
                                     <MaterialCommunityIcons 
-                                      name={done ? "star" : "star-outline"} 
+                                      name={done ? "star" : !released ? "lock-outline" : "star-outline"} 
                                       size={10} 
-                                      color={done ? "#fff" : COLORS.goldDark} 
+                                      color={done ? "#fff" : !released ? '#8e8e93' : COLORS.goldDark} 
                                       style={{ marginRight: 2 }}
                                     />
                                     <Text 
                                       style={[
                                         styles.miniTaskBadgeText,
-                                        done ? styles.miniTaskBadgeTextCompleted : styles.miniTaskBadgeTextPending
+                                        done 
+                                          ? styles.miniTaskBadgeTextCompleted 
+                                          : !released 
+                                            ? styles.miniTaskBadgeTextLocked 
+                                            : styles.miniTaskBadgeTextPending
                                       ]}
                                       numberOfLines={1}
                                     >
-                                      {task.title}
+                                      {task.title}{!released && task.start_time ? ` (Libera às ${task.start_time})` : ''}
                                     </Text>
                                   </TouchableOpacity>
                                 );
@@ -1099,6 +1138,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.secondary,
     borderColor: COLORS.secondary,
   },
+  miniTaskBadgeLocked: {
+    backgroundColor: '#f5f5f5',
+    borderColor: '#e0e0e0',
+  },
   miniTaskBadgeText: {
     fontSize: 9,
     fontFamily: FONTS.family.bodyMedium,
@@ -1108,5 +1151,8 @@ const styles = StyleSheet.create({
   },
   miniTaskBadgeTextCompleted: {
     color: '#fff',
+  },
+  miniTaskBadgeTextLocked: {
+    color: '#8e8e93',
   },
 });
