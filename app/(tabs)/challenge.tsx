@@ -236,6 +236,19 @@ export default function ChallengeScreen() {
       return;
     }
 
+    const isExpired = new Date(task.expires_at) < new Date();
+    if (isExpired) {
+      if (Platform.OS === 'web') {
+        window.alert('Aviso: Esta tarefa já expirou e não está mais disponível para check-in.');
+      } else {
+        Alert.alert(
+          'Tarefa Expirada',
+          'Esta tarefa já expirou e não está mais disponível para check-in.'
+        );
+      }
+      return;
+    }
+
     // Calcular bloqueio
     let isLocked = false;
     let warningText = '';
@@ -496,97 +509,122 @@ export default function ChallengeScreen() {
             )}
 
             <View style={styles.tasksList}>
-              {extraTasks.map(task => {
-                const isCompleted = task.completed_by.includes('user_1');
-                
-                // Determina bloqueio
-                let isLocked = false;
-                let warningText = '';
-                if (!isCompleted && (task.type === 'presence' || task.type === 'punctuality')) {
-                  const taskDateStr = task.expires_at.split('T')[0];
-                  const [hour, minute] = (task.start_time || '00:00').split(':');
-                  const startDateTime = new Date(`${taskDateStr}T${hour}:${minute}:00`);
-                  const now = new Date();
-                  isLocked = now < startDateTime;
+              {[...extraTasks]
+                .sort((a, b) => new Date(b.expires_at).getTime() - new Date(a.expires_at).getTime())
+                .map(task => {
+                  const isCompleted = task.completed_by.includes(user?.id || 'user_1');
+                  const isExpired = new Date(task.expires_at) < new Date();
                   
-                  if (isLocked) {
-                    const day = String(startDateTime.getDate()).padStart(2, '0');
-                    const month = String(startDateTime.getMonth() + 1).padStart(2, '0');
-                    warningText = `Indisponível antes de ${day}/${month} às ${task.start_time}`;
-                  }
-                }
-
-                return (
-                  <TouchableOpacity
-                    key={task.id}
-                    style={[
-                      styles.taskItem,
-                      isCompleted && styles.taskItemCompleted,
-                      isLocked && styles.taskItemLocked
-                    ]}
-                    onPress={() => handleToggleTask(task.id)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={[
-                      styles.taskIconContainer,
-                      { backgroundColor: isCompleted ? COLORS.secondary : isLocked ? COLORS.border : COLORS.surfaceVariant }
-                    ]}>
-                      <MaterialCommunityIcons 
-                        name={isLocked ? 'lock' : getTaskIcon(task.type)} 
-                        size={22} 
-                        color={isCompleted ? '#fff' : isLocked ? COLORS.textLight : COLORS.textSecondary} 
-                      />
-                    </View>
+                  // Determina bloqueio
+                  let isLocked = false;
+                  let warningText = '';
+                  if (!isCompleted && !isExpired && (task.type === 'presence' || task.type === 'punctuality')) {
+                    const taskDateStr = task.expires_at.split('T')[0];
+                    const [hour, minute] = (task.start_time || '00:00').split(':');
+                    const startDateTime = new Date(`${taskDateStr}T${hour}:${minute}:00`);
+                    const now = new Date();
+                    isLocked = now < startDateTime;
                     
-                    <View style={styles.taskDetails}>
-                      <Text style={[
-                        styles.taskTitle,
-                        isCompleted && styles.taskTitleCompleted,
-                        isLocked && styles.taskTitleLocked
-                      ]}>
-                        {task.title}
-                      </Text>
-                      {isLocked ? (
-                        <Text style={styles.warningText}>{warningText}</Text>
-                      ) : (
-                        <Text style={styles.taskDesc} numberOfLines={2}>
-                          {task.description}
-                        </Text>
-                      )}
-                      <Text style={styles.taskExpiry}>
-                        Expira em: {new Date(task.expires_at).toLocaleDateString('pt-BR')}
-                      </Text>
-                    </View>
+                    if (isLocked) {
+                      const day = String(startDateTime.getDate()).padStart(2, '0');
+                      const month = String(startDateTime.getMonth() + 1).padStart(2, '0');
+                      warningText = `Indisponível antes de ${day}/${month} às ${task.start_time}`;
+                    }
+                  }
 
-                    <View style={styles.taskRight}>
+                  return (
+                    <TouchableOpacity
+                      key={task.id}
+                      style={[
+                        styles.taskItem,
+                        isCompleted && styles.taskItemCompleted,
+                        isLocked && styles.taskItemLocked,
+                        isExpired && styles.taskItemExpired
+                      ]}
+                      onPress={() => handleToggleTask(task.id)}
+                      activeOpacity={isCompleted || isExpired ? 1 : 0.8}
+                    >
                       <View style={[
-                        styles.pointsBadge,
-                        isCompleted && styles.pointsBadgeCompleted,
-                        isLocked && styles.pointsBadgeLocked
+                        styles.taskIconContainer,
+                        { 
+                          backgroundColor: isCompleted 
+                            ? COLORS.secondary 
+                            : isExpired 
+                              ? '#f0f0f0' 
+                              : isLocked 
+                                ? COLORS.border 
+                                : COLORS.surfaceVariant 
+                        }
                       ]}>
+                        <MaterialCommunityIcons 
+                          name={isCompleted ? getTaskIcon(task.type) : isLocked ? 'lock' : isExpired ? 'calendar-clock' : getTaskIcon(task.type)} 
+                          size={22} 
+                          color={isCompleted ? '#fff' : isExpired || isLocked ? COLORS.textLight : COLORS.textSecondary} 
+                        />
+                      </View>
+                      
+                      <View style={styles.taskDetails}>
                         <Text style={[
-                          styles.pointsText,
-                          isCompleted && styles.pointsTextCompleted,
-                          isLocked && styles.pointsTextLocked
+                          styles.taskTitle,
+                          isCompleted && styles.taskTitleCompleted,
+                          isLocked && styles.taskTitleLocked,
+                          isExpired && styles.taskTitleExpired
                         ]}>
-                          +{task.points} pts
+                          {task.title}
                         </Text>
+                        {isLocked ? (
+                          <Text style={styles.warningText}>{warningText}</Text>
+                        ) : (
+                          <Text style={styles.taskDesc} numberOfLines={2}>
+                            {task.description}
+                          </Text>
+                        )}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                          <Text style={styles.taskExpiry}>
+                            Expira em: {new Date(task.expires_at).toLocaleDateString('pt-BR')}
+                          </Text>
+                          {isExpired && (
+                            <View style={styles.expiredBadge}>
+                              <Text style={styles.expiredBadgeText}>Expirada</Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
-                      <View style={[
-                        styles.checkbox,
-                        isCompleted && styles.checkboxChecked,
-                        isLocked && styles.checkboxLocked
-                      ]}>
-                        {isCompleted ? (
-                          <MaterialCommunityIcons name="check" size={14} color="#fff" />
-                        ) : isLocked ? (
-                          <MaterialCommunityIcons name="lock" size={12} color={COLORS.textLight} />
-                        ) : null}
+
+                      <View style={styles.taskRight}>
+                        <View style={[
+                          styles.pointsBadge,
+                          isCompleted && styles.pointsBadgeCompleted,
+                          isLocked && styles.pointsBadgeLocked,
+                          isExpired && styles.pointsBadgeLocked
+                        ]}>
+                          <Text style={[
+                            styles.pointsText,
+                            isCompleted && styles.pointsTextCompleted,
+                            isLocked && styles.pointsTextLocked,
+                            isExpired && styles.pointsTextLocked
+                          ]}>
+                            +{task.points} pts
+                          </Text>
+                        </View>
+                        <View style={[
+                          styles.checkbox,
+                          isCompleted && styles.checkboxChecked,
+                          isLocked && styles.checkboxLocked,
+                          isExpired && styles.checkboxLocked
+                        ]}>
+                          {isCompleted ? (
+                            <MaterialCommunityIcons name="check" size={14} color="#fff" />
+                          ) : isLocked ? (
+                            <MaterialCommunityIcons name="lock" size={12} color={COLORS.textLight} />
+                          ) : isExpired ? (
+                            <MaterialCommunityIcons name="close" size={12} color={COLORS.textLight} />
+                          ) : null}
+                        </View>
                       </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
+                    </TouchableOpacity>
+                  );
+                })}
             </View>
           </View>
 
@@ -1109,6 +1147,28 @@ const styles = StyleSheet.create({
   },
   pointsTextLocked: {
     color: COLORS.textLight,
+  },
+  taskItemExpired: {
+    opacity: 0.55,
+    backgroundColor: '#fafafa',
+    borderColor: '#e8e8e8',
+  },
+  taskTitleExpired: {
+    color: '#8e8e93',
+  },
+  expiredBadge: {
+    backgroundColor: '#ffebeb',
+    borderColor: 'rgba(255, 78, 80, 0.2)',
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  expiredBadgeText: {
+    fontSize: 9,
+    color: COLORS.error,
+    fontWeight: 'bold',
   },
   podiumContainer: {
     flexDirection: 'row',
