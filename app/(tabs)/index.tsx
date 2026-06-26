@@ -150,13 +150,29 @@ export default function DashboardScreen() {
 
   // Helper para obter tarefas extras ativas de um desafio
   const getChallengeExtraTasks = (challengeId: string) => {
+    const isToday = (dateString: string) => {
+      if (!dateString) return false;
+      try {
+        const date = new Date(dateString);
+        const today = new Date();
+        return (
+          date.getFullYear() === today.getFullYear() &&
+          date.getMonth() === today.getMonth() &&
+          date.getDate() === today.getDate()
+        );
+      } catch (e) {
+        return false;
+      }
+    };
+
     if (challengeId.startsWith('chal')) {
-      return (MOCK_EXTRA_TASKS[challengeId] || []).filter((t: any) => t.active !== false);
+      return (MOCK_EXTRA_TASKS[challengeId] || [])
+        .filter((t: any) => t.active !== false && isToday(t.expires_at));
     }
     return tasks
       .filter((t: any) => t.challenge_id === challengeId)
       .map((t: any) => {
-        let parsed = { title: 'Tarefa Extra', description: '', type: 'general', active: true, points: 30 };
+        let parsed = { title: 'Tarefa Extra', description: '', type: 'general', active: true, points: 30, expires_at: '' };
         try {
           parsed = JSON.parse(t.description);
         } catch (e) {}
@@ -167,10 +183,11 @@ export default function DashboardScreen() {
           description: parsed.description || t.description,
           type: parsed.type || 'general',
           points: t.points || 30,
-          active: parsed.active !== false
+          active: parsed.active !== false,
+          expires_at: parsed.expires_at || ''
         };
       })
-      .filter((t: any) => t.active !== false);
+      .filter((t: any) => t.active !== false && isToday(t.expires_at));
   };
 
   // Helper para verificar se uma tarefa extra foi concluída hoje pelo usuário
