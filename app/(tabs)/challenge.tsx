@@ -392,6 +392,12 @@ export default function ChallengeScreen() {
             )}
             <TouchableOpacity 
               style={styles.headerActionButton}
+              onPress={() => router.push({ pathname: '/create-challenge' })}
+            >
+              <MaterialCommunityIcons name="plus" size={22} color={COLORS.secondary} />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.headerActionButton}
               onPress={() => router.push('/ranking')}
             >
               <MaterialCommunityIcons name="podium" size={20} color={COLORS.secondary} />

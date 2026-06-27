@@ -29,6 +29,10 @@ export default function CreateChallengeScreen() {
   
   const [group, setGroup] = useState<any>(null);
   const [loadingGroup, setLoadingGroup] = useState(true);
+  
+  // Estado para armazenar grupos administrados se groupId não for provido
+  const [adminGroups, setAdminGroups] = useState<any[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
 
   const isEditing = !!challengeId;
 
@@ -48,6 +52,24 @@ export default function CreateChallengeScreen() {
       }
       
       let currentGroupId = groupId;
+
+      // Se não houver groupId e nem challengeId (novo desafio geral), buscar grupos onde o usuário é admin
+      if (!currentGroupId && !challengeId) {
+        try {
+          const { api } = require('../lib/api');
+          const userGroups = await api.getUserGroups(user.id);
+          const admins = userGroups.filter((g: any) => g.role === 'admin');
+          setAdminGroups(admins);
+          if (admins.length > 0) {
+            setGroup(admins[0]);
+            setSelectedGroupId(admins[0].id);
+          }
+        } catch (e) {
+          console.error('Erro ao buscar grupos do admin:', e);
+        }
+        setLoadingGroup(false);
+        return;
+      }
 
       // Se for edição, precisamos pegar o grupo do desafio se groupId não foi fornecido
       if (challengeId) {
@@ -77,6 +99,7 @@ export default function CreateChallengeScreen() {
       if (currentGroupId.startsWith('group')) {
         const mockGroup = MOCK_GROUPS.find(g => g.id === currentGroupId) || MOCK_GROUPS[0];
         setGroup(mockGroup);
+        setSelectedGroupId(mockGroup.id);
       } else {
         const { data, error } = await supabase
           .from('groups')
@@ -85,6 +108,7 @@ export default function CreateChallengeScreen() {
           .single();
         if (data && !error) {
           setGroup(data);
+          setSelectedGroupId(data.id);
         }
       }
 
@@ -353,7 +377,7 @@ export default function CreateChallengeScreen() {
       }
 
       // --- MODO CRIAÇÃO ---
-      const currentGroupId = groupId || group?.id;
+      const currentGroupId = selectedGroupId || groupId || group?.id;
       if (!currentGroupId) throw new Error('Grupo não identificado.');
 
       if (currentGroupId.startsWith('group')) {
@@ -639,11 +663,18 @@ export default function CreateChallengeScreen() {
     );
   }
 
-  if (!group) {
+  if (!group && adminGroups.length === 0) {
     return (
       <WebContainer>
-        <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-          <Text style={{ color: COLORS.textSecondary, fontFamily: FONTS.family.body }}>Grupo não encontrado.</Text>
+        <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: SPACING.xl }]}>
+          <MaterialCommunityIcons name="shield-alert-outline" size={48} color={COLORS.error} style={{ marginBottom: SPACING.md }} />
+          <Text style={{ color: COLORS.text, fontFamily: FONTS.family.heading, fontSize: FONTS.size.md, fontWeight: 'bold', marginBottom: SPACING.sm, textAlign: 'center' }}>
+            Acesso Restrito
+          </Text>
+          <Text style={{ color: COLORS.textSecondary, fontFamily: FONTS.family.body, fontSize: FONTS.size.sm, textAlign: 'center', marginBottom: SPACING.lg }}>
+            Você precisa ser administrador de pelo menos um grupo para poder criar um desafio.
+          </Text>
+          <Button title="Voltar" variant="primary" onPress={() => router.back()} style={{ width: 120 }} />
         </SafeAreaView>
       </WebContainer>
     );
@@ -667,12 +698,57 @@ export default function CreateChallengeScreen() {
           <Text style={styles.subtitle}>
             {isEditing 
               ? `Atualize as configurações e regras do desafio para o grupo `
-              : `Configure um novo desafio de constância para o grupo `
+              : `Configure um novo desafio de constância. `
             }
-            <Text style={styles.groupBold}>{group.name}</Text>.
+            {group && !isEditing && (
+              <>
+                para o grupo <Text style={styles.groupBold}>{group.name}</Text>.
+              </>
+            )}
           </Text>
 
           <Card variant="default" style={styles.formCard}>
+            {/* Escolha do Grupo se criado fora do contexto de grupo */}
+            {!groupId && !isEditing && adminGroups.length > 0 && (
+              <View style={[styles.inputGroup, { marginBottom: SPACING.md }]}>
+                <Text style={styles.label}>Escolha o Grupo</Text>
+                <View style={{ gap: SPACING.xs }}>
+                  {adminGroups.map((g: any) => {
+                    const isSelected = selectedGroupId === g.id;
+                    return (
+                      <TouchableOpacity
+                        key={g.id}
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setSelectedGroupId(g.id);
+                          setGroup(g);
+                        }}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          padding: SPACING.sm,
+                          borderRadius: BORDER_RADIUS.md,
+                          borderWidth: 1,
+                          borderColor: isSelected ? COLORS.secondary : COLORS.border,
+                          backgroundColor: isSelected ? COLORS.secondaryMuted : COLORS.surface,
+                        }}
+                      >
+                        <MaterialCommunityIcons 
+                          name={isSelected ? "checkbox-marked-circle" : "checkbox-blank-circle-outline"} 
+                          size={20} 
+                          color={isSelected ? COLORS.secondary : COLORS.textLight} 
+                          style={{ marginRight: SPACING.sm }}
+                        />
+                        <Text style={{ fontFamily: FONTS.family.heading, fontSize: FONTS.size.sm, color: COLORS.text, fontWeight: 'bold' }}>
+                          {g.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
             {/* Nome do Desafio */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Nome do Desafio</Text>
