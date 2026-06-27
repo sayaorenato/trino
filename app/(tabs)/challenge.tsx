@@ -43,146 +43,189 @@ export default function ChallengeScreen() {
   const [userRole, setUserRole] = useState<'admin' | 'member'>('member');
   const [rounds, setRounds] = useState<any[]>([]);
   const [extraTasks, setExtraTasks] = useState<ExtraTask[]>([]);
-  const [loading, setLoading] = useState(true);  useFocusEffect(
+  const [loading, setLoading] = useState(true);
+  
+  // Estados de controle de acesso a desafios
+  const [hasNoAccess, setHasNoAccess] = useState(false);
+  const [hasNoChallenges, setHasNoChallenges] = useState(false);
+
+  useFocusEffect(
     React.useCallback(() => {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
-      
-      // Buscar dados dinâmicos no Supabase
-      supabase
-        .from('challenges')
-        .select('*, groups(*), rounds(*)')
-        .eq('id', currentChallengeId)
-        .maybeSingle()
-        .then(({ data, error }) => {
-          if (data && !error) {
-            setChallenge({
-              id: data.id,
-              group_id: data.group_id,
-              name: data.title || data.name,
-              start_date: data.start_date,
-              end_date: data.end_date,
-              total_rounds: data.rounds?.length || 1,
-              current_round: data.rounds?.filter((r: any) => new Date(r.end_date) < new Date()).length + 1 || 1,
-              rules: data.rules || 'Sem regras cadastradas.'
-            });
-            setGroup(data.groups);
+      setHasNoAccess(false);
+      setHasNoChallenges(false);
+
+      // 1. Descobrir todos os grupos e desafios que o usuário realmente participa
+      const { api } = require('../../lib/api');
+      api.getDashboardData(user.id).then(async ({ groups: userGroups }: any) => {
+        const allowedChallenges: any[] = [];
+        
+        userGroups.forEach((g: any) => {
+          if (!g.challenges || !Array.isArray(g.challenges)) return;
+          g.challenges.forEach((c: any) => {
+            const ranking = MOCK_RANKINGS[c.id] || [];
+            const isUserAdmin = g.role === 'admin';
+            const userParticipates = isUserAdmin || ranking.some((m: any) => m.user_id === user.id);
             
-            // Buscar role do usuário no grupo do Supabase
-            if (user) {
-              supabase
-                .from('group_members')
-                .select('role')
-                .eq('group_id', data.group_id)
-                .eq('user_id', user.id)
-                .maybeSingle()
-                .then(({ data: memberData }) => {
-                  if (memberData) {
-                    setUserRole(memberData.role as 'admin' | 'member');
-                  } else {
-                    setUserRole('member');
-                  }
-                });
-            } else {
-              setUserRole('member');
-            }
-
-            // Ordenar rounds
-            const sortedRounds = (data.rounds || []).sort((a: any, b: any) => a.round_number - b.round_number);
-            const now = new Date();
-            const roundsWithStatus = sortedRounds.map((r: any) => {
-              let status: 'active' | 'completed' | 'upcoming' = 'upcoming';
-              if (new Date(r.end_date) < now) status = 'completed';
-              else if (new Date(r.start_date) <= now && new Date(r.end_date) >= now) status = 'active';
-              return { ...r, status };
-            });
-            setRounds(roundsWithStatus);
-
-            // Carregar tarefas extras do Supabase
-            const activeRound = roundsWithStatus.find((r: any) => r.status === 'active') || roundsWithStatus[0];
-            const roundId = activeRound?.id || null;
-
-            supabase
-              .from('tasks')
-              .select('*')
-              .eq('challenge_id', currentChallengeId)
-              .then(async ({ data: tasksData, error: tasksError }) => {
-                if (tasksError) {
-                  console.error('Erro ao buscar tarefas do banco:', tasksError);
-                  setExtraTasks([]);
-                  setLoading(false);
-                  return;
-                }
-                if (!tasksData || tasksData.length === 0) {
-                  setExtraTasks([]);
-                  setLoading(false);
-                  return;
-                }
-
-                // Buscar quais check-ins desse round ativo já foram concluídos como tarefas extras
-                let completedMap: Record<string, string[]> = {};
-                if (roundId) {
-                  const { data: checkinsData, error: checkinsError } = await supabase
-                    .from('checkins')
-                    .select('user_id, note')
-                    .eq('round_id', roundId);
-
-                  if (!checkinsError) {
-                    (checkinsData || []).forEach((c: any) => {
-                      if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
-                        const match = c.note.match(/^\[EXTRA_TASK_ID:([^\]]+)\]/);
-                        if (match) {
-                          const taskId = match[1];
-                          if (!completedMap[taskId]) {
-                            completedMap[taskId] = [];
-                          }
-                          completedMap[taskId].push(c.user_id);
-                        }
-                      }
-                    });
-                  }
-                }
-
-                // Converter registros de tasks para a interface ExtraTask
-                const parsedTasks: ExtraTask[] = tasksData.map((t: any) => {
-                  let parsed = { title: 'Tarefa Extra', description: t.description, type: 'general' as const, expires_at: t.created_at, start_time: undefined, active: true };
-                  try {
-                    parsed = JSON.parse(t.description);
-                  } catch (e) {
-                    // não era JSON
-                  }
-                  return {
-                    id: t.id,
-                    challenge_id: t.challenge_id,
-                    title: parsed.title || 'Tarefa Extra',
-                    description: parsed.description || t.description,
-                    type: (parsed.type || 'general') as 'general' | 'presence' | 'punctuality',
-                    points: t.points || 30,
-                    expires_at: parsed.expires_at || t.created_at,
-                    start_time: parsed.start_time,
-                    completed_by: completedMap[t.id] || [],
-                    active: parsed.active !== false
-                  };
-                });
-
-                setExtraTasks(parsedTasks.filter(t => t.active !== false));
-                setLoading(false);
+            if (userParticipates) {
+              allowedChallenges.push({
+                groupId: g.id,
+                groupName: g.name,
+                challengeId: c.id,
+                challengeTitle: c.title || c.name || 'Desafio',
+                rounds: c.rounds || [],
+                isMock: g.id?.startsWith('group')
               });
-          } else {
-            // Fallback para mock se não encontrar no banco
-            const mockChal = MOCK_CHALLENGES[currentChallengeId] || MOCK_CHALLENGES['chal_1'];
-            setChallenge(mockChal);
-            const mockGroup = MOCK_GROUPS.find(g => g.id === mockChal.group_id) || MOCK_GROUPS[0];
-            setGroup(mockGroup);
-            setUserRole(mockGroup.role || 'member');
-            setRounds(MOCK_ROUNDS[currentChallengeId] || MOCK_ROUNDS['chal_1'] || []);
-            setExtraTasks((MOCK_EXTRA_TASKS[currentChallengeId] || []).filter(t => t.active !== false));
-            setLoading(false);
-          }
+            }
+          });
         });
-    }, [currentChallengeId, user])
+
+        // Se o usuário não participa de NENHUM desafio
+        if (allowedChallenges.length === 0) {
+          setHasNoChallenges(true);
+          setLoading(false);
+          return;
+        }
+
+        // Determinar qual desafio carregar
+        let targetChallengeId = challengeId;
+        if (!targetChallengeId) {
+          // Se não especificou ID, pega o primeiro que ele tem acesso
+          targetChallengeId = allowedChallenges[0].challengeId;
+        } else {
+          // Se especificou ID, verifica se ele de fato tem acesso
+          const hasAccessToTarget = allowedChallenges.some(ac => ac.challengeId === targetChallengeId);
+          if (!hasAccessToTarget) {
+            setHasNoAccess(true);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // 2. Carregar os dados do desafio selecionado
+        const selectedAllowed = allowedChallenges.find(ac => ac.challengeId === targetChallengeId);
+        
+        // Buscar dados no Supabase ou no mock
+        if (selectedAllowed.isMock) {
+          const mockChal = MOCK_CHALLENGES[targetChallengeId!];
+          setChallenge(mockChal);
+          const mockGroup = MOCK_GROUPS.find(g => g.id === mockChal.group_id) || MOCK_GROUPS[0];
+          setGroup(mockGroup);
+          setUserRole(mockGroup.role || 'member');
+          setRounds(MOCK_ROUNDS[targetChallengeId!] || []);
+          setExtraTasks((MOCK_EXTRA_TASKS[targetChallengeId!] || []).filter((t: ExtraTask) => t.active !== false));
+          setLoading(false);
+        } else {
+          supabase
+            .from('challenges')
+            .select('*, groups(*), rounds(*)')
+            .eq('id', targetChallengeId)
+            .maybeSingle()
+            .then(async ({ data, error }) => {
+              if (data && !error) {
+                setChallenge({
+                  id: data.id,
+                  group_id: data.group_id,
+                  name: data.title || data.name,
+                  start_date: data.start_date,
+                  end_date: data.end_date,
+                  total_rounds: data.rounds?.length || 1,
+                  current_round: data.rounds?.filter((r: any) => new Date(r.end_date) < new Date()).length + 1 || 1,
+                  rules: data.rules || 'Sem regras cadastradas.'
+                });
+                setGroup(data.groups);
+                
+                // Buscar role no grupo
+                const { data: memberData } = await supabase
+                  .from('group_members')
+                  .select('role')
+                  .eq('group_id', data.group_id)
+                  .eq('user_id', user.id)
+                  .maybeSingle();
+                setUserRole(memberData?.role as 'admin' | 'member' || 'member');
+
+                // Ordenar rounds
+                const sortedRounds = (data.rounds || []).sort((a: any, b: any) => a.round_number - b.round_number);
+                const now = new Date();
+                const roundsWithStatus = sortedRounds.map((r: any) => {
+                  let status: 'active' | 'completed' | 'upcoming' = 'upcoming';
+                  if (new Date(r.end_date) < now) status = 'completed';
+                  else if (new Date(r.start_date) <= now && new Date(r.end_date) >= now) status = 'active';
+                  return { ...r, status };
+                });
+                setRounds(roundsWithStatus);
+
+                const activeRound = roundsWithStatus.find((r: any) => r.status === 'active') || roundsWithStatus[0];
+                const roundId = activeRound?.id || null;
+
+                // Carregar tarefas extras do Supabase
+                supabase
+                  .from('tasks')
+                  .select('*')
+                  .eq('challenge_id', targetChallengeId)
+                  .then(async ({ data: tasksData, error: tasksError }) => {
+                    if (tasksError || !tasksData) {
+                      setExtraTasks([]);
+                      setLoading(false);
+                      return;
+                    }
+
+                    let completedMap: Record<string, string[]> = {};
+                    if (roundId) {
+                      const { data: checkinsData } = await supabase
+                        .from('checkins')
+                        .select('user_id, note')
+                        .eq('round_id', roundId);
+
+                      (checkinsData || []).forEach((c: any) => {
+                        if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
+                          const match = c.note.match(/^\[EXTRA_TASK_ID:([^\]]+)\]/);
+                          if (match) {
+                            const tId = match[1];
+                            if (!completedMap[tId]) completedMap[tId] = [];
+                            completedMap[tId].push(c.user_id);
+                          }
+                        }
+                      });
+                    }
+
+                    const parsedTasks: ExtraTask[] = tasksData.map((t: any) => {
+                      let parsed = { title: 'Tarefa Extra', description: t.description, type: 'general' as const, expires_at: t.created_at, start_time: undefined, active: true };
+                      try { parsed = JSON.parse(t.description); } catch (e) {}
+                      return {
+                        id: t.id,
+                        challenge_id: t.challenge_id,
+                        title: parsed.title || 'Tarefa Extra',
+                        description: parsed.description || t.description,
+                        type: (parsed.type || 'general') as 'general' | 'presence' | 'punctuality',
+                        points: t.points || 30,
+                        expires_at: parsed.expires_at || t.created_at,
+                        start_time: parsed.start_time,
+                        completed_by: completedMap[t.id] || [],
+                        active: parsed.active !== false
+                      };
+                    });
+
+                    setExtraTasks(parsedTasks.filter(t => t.active !== false));
+                    setLoading(false);
+                  });
+              } else {
+                setLoading(false);
+              }
+            });
+        }
+      }).catch((err: any) => {
+        console.error('Erro ao buscar grupos e desafios:', err);
+        setLoading(false);
+      });
+    }, [challengeId, user])
   );
 
-  if (loading || !challenge) {
+  if (loading) {
     return (
       <WebContainer>
         <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -192,7 +235,43 @@ export default function ChallengeScreen() {
     );
   }
 
-  const rankingData = MOCK_RANKINGS[currentChallengeId] || [];
+  // RENDER SE O USUÁRIO TENTOU ACESSAR UM DESAFIO ESPECÍFICO E NÃO PARTICIPA DELE AINDA
+  if (hasNoAccess) {
+    return (
+      <WebContainer>
+        <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: SPACING.xl }]}>
+          <MaterialCommunityIcons name="lock-outline" size={48} color={COLORS.gold} style={{ marginBottom: SPACING.md }} />
+          <Text style={{ color: COLORS.text, fontFamily: FONTS.family.heading, fontSize: FONTS.size.md, fontWeight: 'bold', marginBottom: SPACING.sm, textAlign: 'center' }}>
+            Acesso Restrito
+          </Text>
+          <Text style={{ color: COLORS.textSecondary, fontFamily: FONTS.family.body, fontSize: FONTS.size.sm, textAlign: 'center', marginBottom: SPACING.lg }}>
+            Você precisa ser aceito no desafio deste grupo para poder visualizar os rankings e rounds. Peça acesso na aba de Grupos.
+          </Text>
+          <Button title="Voltar" variant="primary" onPress={() => router.back()} style={{ width: 120 }} />
+        </SafeAreaView>
+      </WebContainer>
+    );
+  }
+
+  // RENDER SE O USUÁRIO NÃO PARTICIPA DE NENHUM DESAFIO ATIVO
+  if (hasNoChallenges || !challenge) {
+    return (
+      <WebContainer>
+        <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: SPACING.xl }]}>
+          <MaterialCommunityIcons name="trophy-outline" size={48} color={COLORS.textLight} style={{ marginBottom: SPACING.md }} />
+          <Text style={{ color: COLORS.text, fontFamily: FONTS.family.heading, fontSize: FONTS.size.md, fontWeight: 'bold', marginBottom: SPACING.sm, textAlign: 'center' }}>
+            Nenhum Desafio Ativo
+          </Text>
+          <Text style={{ color: COLORS.textSecondary, fontFamily: FONTS.family.body, fontSize: FONTS.size.sm, textAlign: 'center', marginBottom: SPACING.lg }}>
+            Você não participa de nenhum desafio de constância ativo no momento. Peça acesso em algum desafio na aba de Grupos.
+          </Text>
+          <Button title="Ir para Meus Grupos" variant="primary" onPress={() => router.push('/(tabs)')} style={{ width: 180 }} />
+        </SafeAreaView>
+      </WebContainer>
+    );
+  }
+
+  const rankingData = MOCK_RANKINGS[challenge.id] || [];
   const sortedRanking = [...rankingData]
     .sort((a, b) => b.points - a.points)
     .map((member, index) => ({ ...member, position: index + 1 }));
@@ -306,8 +385,8 @@ export default function ChallengeScreen() {
         });
 
         // Somar pontos no ranking do usuário logado
-        const userRankings = MOCK_RANKINGS[currentChallengeId] || [];
-        MOCK_RANKINGS[currentChallengeId] = userRankings.map((member: RankingMember) => {
+        const userRankings = MOCK_RANKINGS[challenge.id] || [];
+        MOCK_RANKINGS[challenge.id] = userRankings.map((member: RankingMember) => {
           if (member.user_id === user.id) {
             return {
               ...member,
@@ -317,7 +396,7 @@ export default function ChallengeScreen() {
           return member;
         });
 
-        setExtraTasks((MOCK_EXTRA_TASKS[currentChallengeId] || []).filter(t => t.active !== false));
+        setExtraTasks((MOCK_EXTRA_TASKS[challenge.id] || []).filter(t => t.active !== false));
       } else {
         // Gravar check-in de conclusão na tabela checkins do Supabase
         const activeRound = rounds.find(r => r.status === 'active') || rounds[0];
@@ -385,7 +464,7 @@ export default function ChallengeScreen() {
             {userRole === 'admin' && (
               <TouchableOpacity 
                 style={styles.headerActionButton}
-                onPress={() => router.push({ pathname: '/create-challenge', params: { challengeId: currentChallengeId, groupId: challenge.group_id } })}
+                onPress={() => router.push({ pathname: '/create-challenge', params: { challengeId: challenge.id, groupId: challenge.group_id } })}
               >
                 <MaterialCommunityIcons name="pencil" size={20} color={COLORS.secondary} />
               </TouchableOpacity>
