@@ -102,14 +102,16 @@ export default function GroupDashboardScreen() {
   // Filtrar os desafios ativos gerais do grupo (end_date >= agora)
   const activeGroupChallenges = challenges.filter(c => new Date(c.end_date) >= now);
 
-  // Desafios ativos nos quais o usuário já participa do ranking
+  // Desafios ativos nos quais o usuário já participa do ranking (ou se for o admin do grupo)
   const activeChallenges = activeGroupChallenges.filter(c => {
+    if (isAdmin) return true;
     const ranking = MOCK_RANKINGS[c.id] || [];
     return ranking.some((m: any) => m.user_id === user?.id);
   });
 
-  // Desafios disponíveis nos quais o usuário ainda não participa do ranking
+  // Desafios disponíveis nos quais o usuário ainda não participa do ranking (admins nunca veem disponíveis)
   const availableChallenges = activeGroupChallenges.filter(c => {
+    if (isAdmin) return false;
     const ranking = MOCK_RANKINGS[c.id] || [];
     return !ranking.some((m: any) => m.user_id === user?.id);
   });

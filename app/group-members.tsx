@@ -17,6 +17,8 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
+import { supabase } from '../lib/supabase';
+import { MOCK_RANKINGS } from '../constants/mock-data';
 
 interface MemberItem {
   user_id: string;
@@ -36,6 +38,7 @@ export default function GroupMembersScreen() {
   const [currentUserRole, setCurrentUserRole] = useState<'admin' | 'member'>('member');
   const [loading, setLoading] = useState(true);
   const [promoting, setPromoting] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
 
   const loadMembers = async () => {
     if (!groupId) return;
@@ -80,6 +83,67 @@ export default function GroupMembersScreen() {
             }
           },
         },
+      ]
+    );
+  };
+
+  const handleRemoveMember = (member: MemberItem) => {
+    const showAlertMessage = (title: string, message: string, buttons?: any[]) => {
+      if (Platform.OS === 'web') {
+        const confirm = window.confirm(`${title}\n\n${message}`);
+        if (confirm && buttons && buttons.length > 1) {
+          buttons[1].onPress();
+        }
+      } else {
+        Alert.alert(title, message, buttons);
+      }
+    };
+
+    showAlertMessage(
+      'Remover Participante',
+      `Tem certeza que deseja remover "${member.full_name}" deste grupo?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Remover',
+          style: 'destructive',
+          onPress: async () => {
+            if (!groupId) return;
+            setRemoving(member.user_id);
+            try {
+              const isMock = groupId.startsWith('group');
+              if (isMock) {
+                const challengeId = groupId === 'group_1' ? 'chal_1' : 'chal_2';
+                if (MOCK_RANKINGS[challengeId]) {
+                  MOCK_RANKINGS[challengeId] = MOCK_RANKINGS[challengeId].filter(m => m.user_id !== member.user_id);
+                }
+              } else {
+                const { error } = await supabase
+                  .from('group_members')
+                  .delete()
+                  .eq('group_id', groupId)
+                  .eq('user_id', member.user_id);
+
+                if (error) throw error;
+              }
+
+              if (Platform.OS === 'web') {
+                window.alert('Participante removido com sucesso!');
+              } else {
+                Alert.alert('Sucesso', 'Participante removido com sucesso!');
+              }
+              await loadMembers();
+            } catch (err: any) {
+              if (Platform.OS === 'web') {
+                window.alert(err.message || 'Erro ao remover participante.');
+              } else {
+                Alert.alert('Erro', err.message || 'Erro ao remover participante.');
+              }
+            } finally {
+              setRemoving(null);
+            }
+          }
+        }
       ]
     );
   };
@@ -168,21 +232,39 @@ export default function GroupMembersScreen() {
                       </View>
                     )}
                     {isAdmin && member.user_id !== user?.id && (
-                      <TouchableOpacity
-                        style={styles.promoteBtn}
-                        onPress={() => handlePromote(member)}
-                        disabled={promoting === member.user_id}
-                        activeOpacity={0.7}
-                      >
-                        {promoting === member.user_id ? (
-                          <ActivityIndicator size="small" color={COLORS.secondary} />
-                        ) : (
-                          <>
-                            <MaterialCommunityIcons name="arrow-up-bold" size={14} color={COLORS.secondary} />
-                            <Text style={styles.promoteBtnText}>Promover</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', gap: SPACING.xs, alignItems: 'center' }}>
+                        <TouchableOpacity
+                          style={styles.promoteBtn}
+                          onPress={() => handlePromote(member)}
+                          disabled={promoting === member.user_id}
+                          activeOpacity={0.7}
+                        >
+                          {promoting === member.user_id ? (
+                            <ActivityIndicator size="small" color={COLORS.secondary} />
+                          ) : (
+                            <>
+                              <MaterialCommunityIcons name="arrow-up-bold" size={14} color={COLORS.secondary} />
+                              <Text style={styles.promoteBtnText}>Promover</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.promoteBtn, { backgroundColor: 'rgba(239, 68, 68, 0.08)', borderColor: 'rgba(239, 68, 68, 0.15)' }]}
+                          onPress={() => handleRemoveMember(member)}
+                          disabled={removing === member.user_id}
+                          activeOpacity={0.7}
+                        >
+                          {removing === member.user_id ? (
+                            <ActivityIndicator size="small" color={COLORS.error} />
+                          ) : (
+                            <>
+                              <MaterialCommunityIcons name="account-remove" size={14} color={COLORS.error} />
+                              <Text style={[styles.promoteBtnText, { color: COLORS.error }]}>Remover</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      </View>
                     )}
                   </View>
                 </View>
