@@ -86,10 +86,8 @@ export default function CheckinScreen() {
       groups.forEach((g: any) => {
         if (!g.challenges || !Array.isArray(g.challenges)) return;
 
-        // Para cada grupo, pega o primeiro desafio ativo (mais recente)
-        const activeChallenge = g.challenges.find(
-          (c: any) => new Date(c.end_date) >= new Date()
-        );
+        // Para cada grupo, pega o desafio mais recente
+        const activeChallenge = g.challenges[0];
         if (!activeChallenge) return;
 
         const isMockGroup = Boolean(g.id?.startsWith('group'));
