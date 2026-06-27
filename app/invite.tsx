@@ -6,7 +6,8 @@ import {
   TouchableOpacity, 
   SafeAreaView, 
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Platform
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -48,12 +49,20 @@ export default function InviteScreen() {
 
   const handleCopyLink = async () => {
     await Clipboard.setStringAsync(inviteLink);
-    Alert.alert('Link Copiado!', 'O link de convite foi copiado para a área de transferência.');
+    if (Platform.OS === 'web') {
+      window.alert('Link Copiado! O link de convite foi copiado para a área de transferência.');
+    } else {
+      Alert.alert('Link Copiado!', 'O link de convite foi copiado para a área de transferência.');
+    }
   };
 
   const handleCopyCode = async () => {
     await Clipboard.setStringAsync(inviteCode);
-    Alert.alert('Código Copiado!', 'O código do grupo foi copiado para a área de transferência.');
+    if (Platform.OS === 'web') {
+      window.alert('Código Copiado! O código do grupo foi copiado para a área de transferência.');
+    } else {
+      Alert.alert('Código Copiado!', 'O código do grupo foi copiado para a área de transferência.');
+    }
   };
 
   if (loading) {

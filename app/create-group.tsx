@@ -19,6 +19,13 @@ import { COLORS, SPACING, FONTS } from '../constants/theme';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/auth';
 
+function generateInviteCode(groupName: string): string {
+  const cleanName = groupName.replace(/[^A-Za-z]/g, '').toUpperCase();
+  const prefix = cleanName.substring(0, 3).padEnd(3, 'T');
+  const randomNum = Math.floor(100 + Math.random() * 900);
+  return `TRI-${prefix}-${randomNum}`;
+}
+
 export default function CreateGroupScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -50,10 +57,11 @@ export default function CreateGroupScreen() {
         return;
       }
 
-      // 2. Criar o Grupo
+      // 2. Criar o Grupo com invite_code
+      const inviteCode = generateInviteCode(name);
       const { data: group, error: groupError } = await supabase
         .from('groups')
-        .insert({ name: name.trim(), description })
+        .insert({ name: name.trim(), description, invite_code: inviteCode })
         .select()
         .single();
 

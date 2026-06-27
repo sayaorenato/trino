@@ -50,6 +50,20 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [inviteCode, setInviteCode] = useState('');
 
+  const showAlert = (title: string, message: string, buttons?: any[]) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}\n\n${message}`);
+      if (buttons && buttons.length > 0) {
+        const actionButton = buttons.find((b: any) => b.onPress && b.text !== 'Cancelar');
+        if (actionButton) {
+          actionButton.onPress();
+        }
+      }
+    } else {
+      Alert.alert(title, message, buttons);
+    }
+  };
+
   // Entrance animations
   const headerFade = useRef(new Animated.Value(0)).current;
   const verseFade = useRef(new Animated.Value(0)).current;
@@ -378,11 +392,11 @@ export default function DashboardScreen() {
 
   const handleJoinWithCode = async (code: string) => {
     if (!user) {
-      Alert.alert('Erro', 'Você precisa estar logado para entrar em um grupo.');
+      showAlert('Erro', 'Você precisa estar logado para entrar em um grupo.');
       return;
     }
     if (!code || code.trim() === '') {
-      Alert.alert('Erro', 'Por favor, digite um código de convite válido.');
+      showAlert('Erro', 'Por favor, digite um código de convite válido.');
       return;
     }
 
@@ -407,7 +421,7 @@ export default function DashboardScreen() {
         .maybeSingle();
 
       if (groupError || !group) {
-        Alert.alert(
+        showAlert(
           'Grupo não encontrado',
           'Não encontramos nenhum grupo para este código.\n\nSe estiver utilizando o Supabase de produção, certifique-se de que a política RLS (Row Level Security) de SELECT da tabela "groups" permite que usuários autenticados leiam os registros (ou utilize o código mockado MOCK123 para testes locais).'
         );
@@ -428,7 +442,7 @@ export default function DashboardScreen() {
       setInviteCode('');
     } catch (err: any) {
       console.error('Erro ao entrar no grupo com código:', err);
-      Alert.alert('Erro', err.message || 'Falha ao entrar no grupo.');
+      showAlert('Erro', err.message || 'Falha ao entrar no grupo.');
     } finally {
       setLoading(false);
     }
@@ -444,7 +458,7 @@ export default function DashboardScreen() {
         setLoading(false);
       }
     } else {
-      Alert.alert(
+      showAlert(
         'Simulador de Leitor QR Code',
         'Câmera do dispositivo aberta. Posicione o QR Code do convite no centro da tela...',
         [
@@ -493,7 +507,7 @@ export default function DashboardScreen() {
         if (joinError) {
           // Se já for membro, o insert falhará com primary key violation
           if (joinError.code === '23505' || joinError.message.includes('duplicate key') || joinError.message.includes('already exists')) {
-            Alert.alert('Aviso', `Você já faz parte do grupo "${groupName}".`);
+            showAlert('Aviso', `Você já faz parte do grupo "${groupName}".`);
             
             // Recarregar os dados do dashboard mesmo se já for membro
             const data = await api.getDashboardData(user.id);
@@ -522,7 +536,7 @@ export default function DashboardScreen() {
         }
       }
 
-      Alert.alert(
+      showAlert(
         'Sucesso!', 
         joinChallenge 
           ? `Você entrou no grupo "${groupName}" e está participando do desafio ativo!` 
@@ -536,7 +550,7 @@ export default function DashboardScreen() {
       setTodayCheckins(data.todayCheckins || []);
       setTasks(data.tasks || []);
     } catch (err: any) {
-      Alert.alert('Erro', err.message || 'Erro ao entrar no grupo.');
+      showAlert('Erro', err.message || 'Erro ao entrar no grupo.');
     } finally {
       setLoading(false);
     }
