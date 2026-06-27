@@ -768,6 +768,35 @@ export default function DashboardScreen() {
                     </TouchableOpacity>
                   );
                 })}
+
+                {/* Card de Acesso para novo grupo */}
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    if (Platform.OS === 'web') {
+                      const code = window.prompt("Digite o código de acesso do convite para entrar no grupo:");
+                      if (code) handleJoinWithCode(code);
+                    } else {
+                      Alert.prompt(
+                        "Entrar em um Grupo",
+                        "Digite o código de acesso do convite:",
+                        [
+                          { text: "Cancelar", style: "cancel" },
+                          { text: "Entrar", onPress: (code?: string) => { if (code) handleJoinWithCode(code); } }
+                        ],
+                        "plain-text"
+                      );
+                    }
+                  }}
+                >
+                  <Card variant="flat" style={[styles.groupCard, { justifyContent: 'center', alignItems: 'center', borderStyle: 'dashed', borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: 'transparent' }]}>
+                    <View style={[styles.groupAvatar, { backgroundColor: COLORS.surfaceVariant, marginBottom: SPACING.xs }]}>
+                      <MaterialCommunityIcons name="plus" size={24} color={COLORS.secondary} />
+                    </View>
+                    <Text style={[styles.groupCardName, { color: COLORS.secondary, textAlign: 'center', fontWeight: 'bold' }]}>Entrar em Grupo</Text>
+                    <Text style={{ fontSize: 9, color: COLORS.textLight, textAlign: 'center', marginTop: 4 }}>Código do convite</Text>
+                  </Card>
+                </TouchableOpacity>
               </ScrollView>
             )}
 

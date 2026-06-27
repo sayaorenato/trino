@@ -10,10 +10,12 @@ export const api = {
 
     let userGroups: any[] = [];
     if (!error && data) {
-      userGroups = data.map((item: any) => ({
-        ...item.groups,
-        role: item.role,
-      }));
+      userGroups = data
+        .filter((item: any) => item.groups !== null && item.groups !== undefined)
+        .map((item: any) => ({
+          ...item.groups,
+          role: item.role,
+        }));
     } else if (error) {
       console.error('Error fetching user groups:', error);
     }
@@ -28,7 +30,12 @@ export const api = {
       }
     });
 
-    return combinedGroups;
+    // Ordenar grupos colocando os administrados no topo
+    return combinedGroups.sort((a, b) => {
+      if (a.role === 'admin' && b.role !== 'admin') return -1;
+      if (a.role !== 'admin' && b.role === 'admin') return 1;
+      return 0;
+    });
   },
 
   async getActiveChallenge(groupId: string) {
