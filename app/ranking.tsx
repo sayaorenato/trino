@@ -67,7 +67,12 @@ export default function RankingScreen() {
             }
 
             // 3. Calcular pontos reais (10 pts por check-in diário e 30 pts por tarefa extra)
-            const calculatedRanking: RankingMember[] = members.map((m: any) => {
+            const allowedRanking = MOCK_RANKINGS[targetChalId] || [];
+            const activeMembers = members.filter((m: any) => 
+              m.role === 'admin' || allowedRanking.some((r: any) => r.user_id === m.user_id)
+            );
+
+            const calculatedRanking: RankingMember[] = activeMembers.map((m: any) => {
               const userCheckins = dbCheckins.filter((c: any) => c.user_id === m.user_id);
               
               let points = 0;

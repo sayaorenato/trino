@@ -192,8 +192,13 @@ export default function ChallengeScreen() {
                     dbCheckins = cData || [];
                   }
 
-                  // Mapeia pontuação de cada membro
-                  const calculatedRanking: RankingMember[] = members.map((m: any) => {
+                  // Mapeia pontuação de cada membro participante aprovado
+                  const allowedRanking = MOCK_RANKINGS[targetChallengeId!] || [];
+                  const activeMembers = members.filter((m: any) => 
+                    m.role === 'admin' || allowedRanking.some((r: any) => r.user_id === m.user_id)
+                  );
+
+                  const calculatedRanking: RankingMember[] = activeMembers.map((m: any) => {
                     const userCheckins = dbCheckins.filter((c: any) => c.user_id === m.user_id);
                     
                     let points = 0;
