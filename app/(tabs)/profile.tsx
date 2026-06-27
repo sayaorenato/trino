@@ -23,6 +23,36 @@ import { supabase } from '../../lib/supabase';
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, profile, signOut } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [hasAdminGroups, setHasAdminGroups] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    
+    const isRenatoMock = user.email === 'renato@trino.app' || user.id === 'user_1';
+    if (isRenatoMock) {
+      setHasAdminGroups(true);
+      return;
+    }
+
+    const checkAdminStatus = async () => {
+      try {
+        const { data } = await supabase
+          .from('group_members')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('role', 'admin')
+          .limit(1)
+          .maybeSingle();
+
+        setHasAdminGroups(!!data);
+      } catch (err) {
+        console.error('Erro ao verificar se possui grupos administrados:', err);
+      }
+    };
+
+    checkAdminStatus();
+  }, [user]);
 
   const [totalPoints, setTotalPoints] = useState(0);
   const [habitAverages, setHabitAverages] = useState({ prayer: 0, bible: 0, exercise: 0 });
@@ -235,16 +265,18 @@ export default function ProfileScreen() {
             </TouchableOpacity>
 
             {/* Painel do Admin */}
-            <TouchableOpacity 
-              style={styles.optionItem}
-              onPress={() => router.push('/admin')}
-            >
-              <View style={styles.optionLeft}>
-                <MaterialCommunityIcons name="shield-crown-outline" size={22} color={COLORS.primary} />
-                <Text style={styles.optionText}>Painel do Admin</Text>
-              </View>
-              <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} />
-            </TouchableOpacity>
+            {hasAdminGroups && (
+              <TouchableOpacity 
+                style={styles.optionItem}
+                onPress={() => router.push('/admin')}
+              >
+                <View style={styles.optionLeft}>
+                  <MaterialCommunityIcons name="shield-crown-outline" size={22} color={COLORS.primary} />
+                  <Text style={styles.optionText}>Painel do Admin</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} />
+              </TouchableOpacity>
+            )}
 
             {/* Convidar Amigos */}
             <TouchableOpacity 

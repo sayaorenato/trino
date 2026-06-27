@@ -114,15 +114,18 @@ export default function AdminScreen() {
           }))
           .filter(g => g.id);
 
-        // Injetar grupo mockado de testes locais para viabilizar testes no MVP
-        const alreadyHasMock = groupsList.some(g => g.id === 'group_1');
-        if (!alreadyHasMock) {
-          groupsList.push({
-            id: 'group_1',
-            name: 'Célula Videira (Mock)',
-            description: 'Grupo da nossa célula para crescer espiritualmente e manter o corpo ativo na fé!',
-            role: 'admin',
-          });
+        // Injetar grupo mockado de testes locais APENAS para o Renato/mock para viabilizar testes no MVP
+        const isRenatoMock = user.email === 'renato@trino.app' || user.id === 'user_1';
+        if (isRenatoMock) {
+          const alreadyHasMock = groupsList.some(g => g.id === 'group_1');
+          if (!alreadyHasMock) {
+            groupsList.push({
+              id: 'group_1',
+              name: 'Célula Videira (Mock)',
+              description: 'Grupo da nossa célula para crescer espiritualmente e manter o corpo ativo na fé!',
+              role: 'admin',
+            });
+          }
         }
 
         setAdminGroups(groupsList);
