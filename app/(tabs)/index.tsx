@@ -95,7 +95,9 @@ export default function DashboardScreen() {
         const isChallengeActive = new Date(challenge.end_date) >= new Date();
         if (isChallengeActive) {
           const ranking = MOCK_RANKINGS[challenge.id] || [];
-          const userParticipates = ranking.some((m: any) => m.user_id === user?.id);
+          const isUserAdmin = g.role === 'admin';
+          const isRealGroup = !g.id.startsWith('group');
+          const userParticipates = isUserAdmin || isRealGroup || ranking.some((m: any) => m.user_id === user?.id);
           
           if (userParticipates) {
             if (!acc.some((item: any) => item.challenge.id === challenge.id)) {
