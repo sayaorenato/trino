@@ -74,7 +74,10 @@ export default function CheckinScreen() {
 
   // Busca todos os grupos do usuário com desafios ativos
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setLoadingRound(false);
+      return;
+    }
     setLoadingRound(true);
 
     api.getDashboardData(user.id).then(({ groups }) => {
