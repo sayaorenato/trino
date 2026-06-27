@@ -20,7 +20,7 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
-import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS } from '../constants/mock-data';
+import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 function formatDateForInput(isoDateStr: string): string {
@@ -760,6 +760,48 @@ export default function AdminScreen() {
         }
       ]
     );
+  };
+
+  const handleApproveRequest = (requestId: string, approve: boolean) => {
+    const request = CHALLENGE_REQUESTS.find(r => r.id === requestId);
+    if (!request) return;
+
+    if (approve) {
+      request.status = 'approved';
+      
+      // Adicionar o participante no MOCK_RANKINGS do desafio
+      if (!MOCK_RANKINGS[request.challenge_id]) {
+        MOCK_RANKINGS[request.challenge_id] = [];
+      }
+      
+      const alreadyInRank = MOCK_RANKINGS[request.challenge_id].some(m => m.user_id === request.user_id);
+      if (!alreadyInRank) {
+        MOCK_RANKINGS[request.challenge_id].push({
+          user_id: request.user_id,
+          name: request.user_name,
+          avatar_url: request.user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+          points: 0,
+          streak: 0,
+          rounds_won: 0
+        });
+      }
+      
+      if (Platform.OS === 'web') {
+        window.alert(`Solicitação de ${request.user_name} aprovada! Ele agora participa do desafio.`);
+      } else {
+        Alert.alert('Sucesso', `Solicitação de ${request.user_name} aprovada! Ele agora participa do desafio.`);
+      }
+    } else {
+      request.status = 'declined';
+      if (Platform.OS === 'web') {
+        window.alert(`Solicitação de ${request.user_name} recusada.`);
+      } else {
+        Alert.alert('Sucesso', `Solicitação de ${request.user_name} recusada.`);
+      }
+    }
+    
+    // Forçar re-render da tela
+    setMembers([...members]);
   };
 
   // Ações de Tarefas Extras
@@ -1539,9 +1581,52 @@ export default function AdminScreen() {
               )}
 
               {/* ABA: GERENCIAR PARTICIPANTES */}
-              {activeTab === 'members' && (
-                <View style={styles.listSection}>
-                  <Text style={styles.sectionTitle}>Participantes do Grupo ({members.length})</Text>
+              {activeTab === 'members' && (() => {
+                const pendingRequests = CHALLENGE_REQUESTS.filter(
+                  r => r.group_id === selectedGroupId && r.status === 'pending'
+                );
+                return (
+                  <View style={styles.listSection}>
+                    {/* Solicitações de Entrada em Desafios */}
+                    {pendingRequests.length > 0 && (
+                      <View style={{ marginBottom: SPACING.lg }}>
+                        <Text style={[styles.sectionTitle, { color: COLORS.secondary }]}>
+                          Solicitações de Entrada em Desafios ({pendingRequests.length})
+                        </Text>
+                        <View style={{ gap: SPACING.md }}>
+                          {pendingRequests.map(request => (
+                            <Card key={request.id} variant="default" style={styles.requestCard}>
+                              <View style={styles.requestCardHeader}>
+                                <Avatar source={request.user_avatar || undefined} name={request.user_name} size={36} />
+                                <View style={{ marginLeft: SPACING.sm, flex: 1 }}>
+                                  <Text style={styles.requestName} numberOfLines={1}>{request.user_name}</Text>
+                                  <Text style={styles.requestHint}>Solicitou entrar no desafio:</Text>
+                                  <Text style={styles.requestChallengeName} numberOfLines={1}>{request.challenge_name}</Text>
+                                </View>
+                              </View>
+                              <View style={styles.requestCardActions}>
+                                <TouchableOpacity
+                                  style={[styles.btnActionApprove, { marginRight: SPACING.sm }]}
+                                  onPress={() => handleApproveRequest(request.id, true)}
+                                >
+                                  <MaterialCommunityIcons name="check" size={16} color="#fff" />
+                                  <Text style={styles.btnActionApproveText}>Aprovar</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={styles.btnActionDecline}
+                                  onPress={() => handleApproveRequest(request.id, false)}
+                                >
+                                  <MaterialCommunityIcons name="close" size={16} color={COLORS.textSecondary} />
+                                  <Text style={styles.btnActionDeclineText}>Recusar</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </Card>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+
+                    <Text style={styles.sectionTitle}>Participantes do Grupo ({members.length})</Text>
                   
                   {members.length === 0 ? (
                     <Card variant="flat" style={styles.emptyTabCard}>
@@ -1596,7 +1681,7 @@ export default function AdminScreen() {
                     </Card>
                   )}
                 </View>
-              )}
+              )})()}
 
               {/* ABA: LISTAGEM DE DESAFIOS */}
               {activeTab === 'challenges' && (
@@ -2289,5 +2374,71 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 999,
-  }
+  },
+  requestCard: {
+    padding: SPACING.md,
+    backgroundColor: '#fff',
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: SPACING.sm,
+    ...SHADOWS.light,
+  },
+  requestCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  requestName: {
+    fontSize: FONTS.size.sm,
+    fontFamily: FONTS.family.bodyBold,
+    color: COLORS.primary,
+  },
+  requestHint: {
+    fontSize: 10,
+    fontFamily: FONTS.family.body,
+    color: COLORS.textLight,
+    marginTop: 1,
+  },
+  requestChallengeName: {
+    fontSize: FONTS.size.xs,
+    fontFamily: FONTS.family.bodySemibold,
+    color: COLORS.secondary,
+    marginTop: 2,
+  },
+  requestCardActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+    paddingTop: SPACING.sm,
+  },
+  btnActionApprove: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.secondary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  btnActionApproveText: {
+    color: '#fff',
+    fontSize: 11,
+    fontFamily: FONTS.family.bodyBold,
+  },
+  btnActionDecline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.surfaceVariant,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  btnActionDeclineText: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontFamily: FONTS.family.bodyBold,
+  },
 });

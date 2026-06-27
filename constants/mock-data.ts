@@ -20,6 +20,19 @@ export interface Group {
 
 export let USER_MOCK_GROUPS: any[] = [];
 
+export interface ChallengeRequest {
+  id: string;
+  challenge_id: string;
+  challenge_name: string;
+  group_id: string;
+  user_id: string;
+  user_name: string;
+  user_avatar: string | null;
+  status: 'pending' | 'approved' | 'declined';
+}
+
+export let CHALLENGE_REQUESTS: ChallengeRequest[] = [];
+
 export interface Challenge {
   id: string;
   group_id: string;

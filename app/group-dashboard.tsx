@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Platform,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,7 +20,7 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
-import { MOCK_RANKINGS } from '../constants/mock-data';
+import { MOCK_RANKINGS, CHALLENGE_REQUESTS } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 interface GroupMember {
@@ -33,7 +34,17 @@ interface GroupMember {
 export default function GroupDashboardScreen() {
   const router = useRouter();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+
+  const [requestTrigger, setRequestTrigger] = useState(0);
+
+  const showAlert = (title: string, message: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}\n\n${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
 
   const [group, setGroup] = useState<any>(null);
   const [userRole, setUserRole] = useState<'admin' | 'member'>('member');
@@ -87,28 +98,74 @@ export default function GroupDashboardScreen() {
 
   const isAdmin = userRole === 'admin';
   const now = new Date();
-  const activeChallenges = challenges.filter(c => {
-    const isChallengeActive = new Date(c.end_date) >= now;
-    if (!isChallengeActive) return false;
-    
-    // Se o ranking não existir para este desafio ativo (ex: após refresh), inicializa com o usuário
-    if (!MOCK_RANKINGS[c.id] && user) {
-      MOCK_RANKINGS[c.id] = [
-        {
-          user_id: user.id,
-          name: user.email?.split('@')[0] || 'Participante',
-          avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-          points: 0,
-          streak: 0,
-          rounds_won: 0
-        }
-      ];
-    }
 
+  // Filtrar os desafios ativos gerais do grupo (end_date >= agora)
+  const activeGroupChallenges = challenges.filter(c => new Date(c.end_date) >= now);
+
+  // Desafios ativos nos quais o usuário já participa do ranking
+  const activeChallenges = activeGroupChallenges.filter(c => {
     const ranking = MOCK_RANKINGS[c.id] || [];
     return ranking.some((m: any) => m.user_id === user?.id);
   });
+
+  // Desafios disponíveis nos quais o usuário ainda não participa do ranking
+  const availableChallenges = activeGroupChallenges.filter(c => {
+    const ranking = MOCK_RANKINGS[c.id] || [];
+    return !ranking.some((m: any) => m.user_id === user?.id);
+  });
+
   const pastChallenges = challenges.filter(c => new Date(c.end_date) < now);
+
+  const handleRequestJoinChallenge = async (challengeId: string, challengeName: string) => {
+    if (!user || !groupId) return;
+
+    // Se for administrador do grupo, entra no ranking na hora sem aprovação
+    if (isAdmin) {
+      if (!MOCK_RANKINGS[challengeId]) {
+        MOCK_RANKINGS[challengeId] = [];
+      }
+      const alreadyInRank = MOCK_RANKINGS[challengeId].some(m => m.user_id === user.id);
+      if (!alreadyInRank) {
+        MOCK_RANKINGS[challengeId].push({
+          user_id: user.id,
+          name: profile?.full_name || user.email?.split('@')[0] || 'Administrador',
+          avatar_url: profile?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+          points: 0,
+          streak: 0,
+          rounds_won: 0
+        });
+      }
+      showAlert('Sucesso!', `Você entrou no desafio "${challengeName}" como administrador!`);
+      setRequestTrigger(prev => prev + 1);
+      return;
+    }
+
+    // Verificar se já existe uma solicitação pendente
+    const hasPending = CHALLENGE_REQUESTS.some(
+      r => r.challenge_id === challengeId && r.user_id === user.id && r.status === 'pending'
+    );
+
+    if (hasPending) {
+      showAlert('Aviso', 'Você já enviou uma solicitação para este desafio. Aguarde a liberação do administrador.');
+      return;
+    }
+
+    // Criar solicitação
+    const newRequest = {
+      id: `req_${Date.now()}`,
+      challenge_id: challengeId,
+      challenge_name: challengeName,
+      group_id: groupId,
+      user_id: user.id,
+      user_name: profile?.full_name || user.email?.split('@')[0] || 'Novo Membro',
+      user_avatar: profile?.avatar_url || null,
+      status: 'pending' as const
+    };
+
+    CHALLENGE_REQUESTS.push(newRequest);
+    showAlert('Solicitação Enviada', `Sua solicitação para entrar no desafio "${challengeName}" foi enviada. Aguarde a liberação do administrador!`);
+    setRequestTrigger(prev => prev + 1);
+  };
 
   return (
     <WebContainer>
@@ -280,6 +337,53 @@ export default function GroupDashboardScreen() {
             )}
           </View>
 
+          {/* Desafios Disponíveis */}
+          {availableChallenges.length > 0 && (
+            <View style={[styles.section, { marginTop: SPACING.md }]}>
+              <Text style={styles.sectionTitle}>Desafios Disponíveis</Text>
+              <View style={{ gap: SPACING.md }}>
+                {availableChallenges.map(challenge => {
+                  const isPending = CHALLENGE_REQUESTS.some(
+                    r => r.challenge_id === challenge.id && r.user_id === user?.id && r.status === 'pending'
+                  );
+
+                  return (
+                    <Card key={challenge.id} variant="default" style={styles.availableChallengeCard}>
+                      <View style={styles.challengeHeader}>
+                        <MaterialCommunityIcons name="trophy-outline" size={20} color={COLORS.secondary} />
+                        <Text style={[styles.challengeName, { color: COLORS.text, marginLeft: SPACING.xs }]}>
+                          {challenge.title || challenge.name}
+                        </Text>
+                      </View>
+                      <View style={styles.challengeDates}>
+                        <MaterialCommunityIcons name="calendar-range" size={14} color={COLORS.textSecondary} />
+                        <Text style={[styles.challengeDateText, { color: COLORS.textSecondary }]}>
+                          {new Date(challenge.start_date).toLocaleDateString('pt-BR')} até {new Date(challenge.end_date).toLocaleDateString('pt-BR')}
+                        </Text>
+                      </View>
+                      
+                      {isPending ? (
+                        <View style={styles.pendingStatusContainer}>
+                          <MaterialCommunityIcons name="clock-outline" size={16} color={COLORS.goldDark} />
+                          <Text style={styles.pendingStatusText}>Aguardando Liberação do Administrador</Text>
+                        </View>
+                      ) : (
+                        <Button
+                          title={isAdmin ? "Participar do Desafio" : "Solicitar Entrada"}
+                          variant="secondary"
+                          size="sm"
+                          icon={<MaterialCommunityIcons name="plus" size={14} color="#fff" />}
+                          onPress={() => handleRequestJoinChallenge(challenge.id, challenge.title || challenge.name)}
+                          style={{ marginTop: SPACING.md, alignSelf: 'flex-start' }}
+                        />
+                      )}
+                    </Card>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
           {/* Desafios Anteriores */}
           {pastChallenges.length > 0 && (
             <View style={styles.section}>
@@ -428,5 +532,30 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.xs,
     fontFamily: FONTS.family.body,
     marginTop: 2,
+  },
+  availableChallengeCard: {
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.light,
+  },
+  pendingStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: '#fff9eb',
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderWidth: 1,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    marginTop: SPACING.md,
+  },
+  pendingStatusText: {
+    fontSize: 12,
+    fontFamily: FONTS.family.bodyMedium,
+    color: COLORS.goldDark,
   },
 });
