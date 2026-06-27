@@ -54,13 +54,16 @@ export default function CheckinScreen() {
   const [caption, setCaption] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Múltiplos desafios do usuário
+  // Múltiplos desafios/grupos do usuário
   const [activeChallengesList, setActiveChallengesList] = useState<any[]>([]);
   const [selectedChallenge, setSelectedChallenge] = useState<any>(null);
   const [activeRoundId, setActiveRoundId] = useState<string | null>(null);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [loadingRound, setLoadingRound] = useState(true);
   const [challengeChosen, setChallengeChosen] = useState(false);
+
+  // Multi-grupo: IDs dos grupos selecionados para o check-in padrão
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
 
   // Hábitos diários concluídos hoje pelo usuário
   const [completedHabitsToday, setCompletedHabitsToday] = useState<{ prayer: boolean; bible: boolean; exercise: boolean }>({
@@ -106,6 +109,8 @@ export default function CheckinScreen() {
         if (found) {
           setSelectedChallenge(found);
           setChallengeChosen(true);
+          // Pré-seleciona todos os grupos do mesmo desafio + o grupo encontrado
+          setSelectedGroupIds(new Set(list.map((i: any) => i.groupId)));
           
           if (queryHabit && (queryHabit === 'prayer' || queryHabit === 'bible' || queryHabit === 'exercise')) {
             setSelectedHabit(queryHabit as HabitType);
@@ -116,11 +121,9 @@ export default function CheckinScreen() {
           }
         } else {
           setSelectedChallenge(list[0]);
-          if (list.length === 1) {
-            setChallengeChosen(true);
-          } else {
-            setChallengeChosen(false);
-          }
+          // Pré-seleciona todos os grupos por padrão
+          setSelectedGroupIds(new Set(list.map((i: any) => i.groupId)));
+          setChallengeChosen(true);
         }
       } else {
         setSelectedChallenge(null);
@@ -387,7 +390,10 @@ export default function CheckinScreen() {
       Alert.alert('Erro', 'Usuário não autenticado.');
       return;
     }
-    if (!activeRoundId) {
+
+    // Para hábitos padrão multi-grupo, permitir mesmo sem activeRoundId se houver grupos selecionados
+    const isMultiGroup = !selectedTask && selectedGroupIds.size > 0;
+    if (!activeRoundId && !isMultiGroup) {
       Alert.alert('Sem Desafio Ativo', 'Você precisa participar de um grupo com desafio ativo para fazer check-in.');
       return;
     }
@@ -408,43 +414,34 @@ export default function CheckinScreen() {
       }
 
       if (selectedTask) {
+        // ── TAREFA EXTRA (afeta apenas o desafio selecionado) ──
         const challengeId = selectedChallenge.challengeId;
         const isMock = challengeId.startsWith('chal');
 
         if (isMock) {
-          // Fluxo de Tarefa Extra Mockada
-          // 1. Adicionar o ID do usuário à lista completed_by da tarefa em MOCK_EXTRA_TASKS
           MOCK_EXTRA_TASKS[challengeId] = (MOCK_EXTRA_TASKS[challengeId] || []).map(t => {
             if (t.id === selectedTask.id) {
-              return {
-                ...t,
-                completed_by: [...t.completed_by, user.id]
-              };
+              return { ...t, completed_by: [...t.completed_by, user.id] };
             }
             return t;
           });
 
-          // 2. Adicionar os pontos correspondentes da tarefa ao saldo do usuário em MOCK_RANKINGS
           if (MOCK_RANKINGS[challengeId]) {
             MOCK_RANKINGS[challengeId] = MOCK_RANKINGS[challengeId].map(member => {
               if (member.user_id === user.id) {
-                return {
-                  ...member,
-                  points: member.points + selectedTask.points
-                };
+                return { ...member, points: member.points + selectedTask.points };
               }
               return member;
             });
           }
 
-          // 3. Criar e inserir um post de check-in correspondente no topo do MOCK_FEED para que apareça na aba de Feed
           const newCheckin: Checkin = {
             id: `check_extra_${Date.now()}`,
             user_id: user.id,
             user_name: user.email?.split('@')[0] || 'Usuário',
             user_avatar: MOCK_CURRENT_USER.avatar_url,
             group_id: activeGroupId || 'group_1',
-            habit_type: 'prayer', // fallback obrigatório
+            habit_type: 'prayer',
             media_url: finalImageUrl || imageUri,
             is_late: false,
             caption: caption.trim() || `Tarefa Extra Concluída: ${selectedTask.title}`,
@@ -454,7 +451,6 @@ export default function CheckinScreen() {
           };
           MOCK_FEED.unshift(newCheckin);
         } else {
-          // Fluxo de Tarefa Extra Real do Banco
           const { error } = await supabase.from('checkins').insert({
             user_id: user.id,
             round_id: activeRoundId,
@@ -463,21 +459,63 @@ export default function CheckinScreen() {
             note: `[EXTRA_TASK_ID:${selectedTask.id}] ${caption.trim()}`.trim(),
             verified: false,
           });
-
           if (error) throw error;
         }
       } else {
-        // Inserir check-in de hábito diário no banco
-        const { error } = await supabase.from('checkins').insert({
-          user_id: user.id,
-          round_id: activeRoundId,
-          type: HABIT_DB_TYPE[selectedHabit!],
-          image_url: finalImageUrl,
-          note: caption.trim() || null,
-          verified: false,
-        });
+        // ── HÁBITO PADRÃO MULTI-GRUPO ──
+        // Determina os itens de desafio que correspondem aos grupos selecionados
+        const targetItems = activeChallengesList.filter(item => selectedGroupIds.has(item.groupId));
 
-        if (error) throw error;
+        for (const item of targetItems) {
+          const isMock = item.challengeId?.startsWith('chal') || item.groupId?.startsWith('group');
+
+          if (isMock) {
+            // Adiciona no feed mock para cada grupo selecionado
+            const newCheckin: Checkin = {
+              id: `check_${item.groupId}_${Date.now()}`,
+              user_id: user.id,
+              user_name: user.email?.split('@')[0] || 'Usuário',
+              user_avatar: MOCK_CURRENT_USER.avatar_url,
+              group_id: item.groupId,
+              habit_type: selectedHabit as 'prayer' | 'bible' | 'exercise',
+              media_url: finalImageUrl || imageUri,
+              is_late: false,
+              caption: caption.trim() || undefined,
+              points: 10,
+              created_at: new Date().toISOString(),
+              reactions: []
+            };
+            MOCK_FEED.unshift(newCheckin);
+          } else {
+            // Encontra o round ativo do item para o grupo real
+            const rounds = item.rounds || [];
+            const now = new Date();
+            let currentRound = rounds.find((r: any) => {
+              const start = new Date(r.start_date);
+              const end = new Date(r.end_date);
+              return now >= start && now <= end;
+            });
+            if (!currentRound && rounds.length > 0) {
+              currentRound = rounds.reduce((prev: any, curr: any) =>
+                curr.round_number > prev.round_number ? curr : prev
+              );
+            }
+            const roundId = currentRound?.id;
+            if (!roundId) continue; // pula grupo sem round ativo
+
+            const { error } = await supabase.from('checkins').insert({
+              user_id: user.id,
+              round_id: roundId,
+              type: HABIT_DB_TYPE[selectedHabit!],
+              image_url: finalImageUrl,
+              note: caption.trim() || null,
+              verified: false,
+            });
+            if (error) {
+              console.error(`Erro no check-in do grupo ${item.groupName}:`, error);
+            }
+          }
+        }
       }
 
       setStep('success');
@@ -544,65 +582,62 @@ export default function CheckinScreen() {
                   style={{ marginTop: SPACING.md, width: '100%' }}
                 />
               </Card>
-            ) : !challengeChosen ? (
-              <>
-                <Text style={styles.instructionText}>
-                  Selecione para qual grupo ou desafio você deseja registrar um check-in hoje:
-                </Text>
-
-                <View style={{ gap: SPACING.md }}>
-                  {activeChallengesList.map((item) => (
-                    <TouchableOpacity
-                      key={item.challengeId}
-                      style={styles.challengeChoiceCard}
-                      onPress={() => {
-                        setSelectedChallenge(item);
-                        setChallengeChosen(true);
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <View style={styles.challengeChoiceIconBg}>
-                        <MaterialCommunityIcons name="trophy" size={24} color={COLORS.gold} />
-                      </View>
-                      <View style={styles.challengeChoiceDetails}>
-                        <Text style={styles.challengeChoiceGroup}>{item.groupName}</Text>
-                        <Text style={styles.challengeChoiceTitle}>{item.challengeTitle}</Text>
-                      </View>
-                      <MaterialCommunityIcons name="chevron-right" size={24} color={COLORS.textLight} />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
             ) : (
               <>
-                {/* Seletor/Indicador de Desafio Selecionado */}
-                {activeChallengesList.length > 1 ? (
-                  <TouchableOpacity 
-                    style={styles.changeChallengeHeader}
-                    onPress={() => setChallengeChosen(false)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.changeChallengeHeaderContent}>
-                      <View style={styles.challengeChoiceIconBg}>
-                        <MaterialCommunityIcons name="trophy" size={20} color={COLORS.gold} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.changeChallengeGroup}>{selectedChallenge?.groupName}</Text>
-                        <Text style={styles.changeChallengeTitle}>{selectedChallenge?.challengeTitle}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.changeChallengeButton}>
-                      <Text style={styles.changeChallengeButtonText}>Alterar</Text>
-                      <MaterialCommunityIcons name="swap-horizontal" size={14} color={COLORS.secondaryDark} />
-                    </View>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.singleChallengeIndicator}>
-                    <MaterialCommunityIcons name="trophy" size={16} color={COLORS.gold} />
-                    <Text style={styles.singleChallengeText}>
-                      Grupo: <Text style={{ fontWeight: 'bold' }}>{selectedChallenge?.groupName}</Text> (Desafio: {selectedChallenge?.challengeTitle})
+                {/* Flags de Grupo — apenas para hábitos padrão */}
+                {activeChallengesList.length > 1 && (
+                  <Card variant="flat" style={{ marginBottom: SPACING.md, padding: SPACING.sm }}>
+                    <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: SPACING.xs }]}>
+                      Compartilhar em qual grupo?
                     </Text>
-                  </View>
+                    <Text style={{ fontSize: FONTS.size.xs, color: COLORS.textSecondary, fontFamily: FONTS.family.body, marginBottom: SPACING.sm }}>
+                      Selecione todos os grupos onde este hábito deve ser registrado:
+                    </Text>
+                    {activeChallengesList.map((item: any) => {
+                      const isSelected = selectedGroupIds.has(item.groupId);
+                      return (
+                        <TouchableOpacity
+                          key={item.groupId}
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            setSelectedGroupIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(item.groupId)) {
+                                next.delete(item.groupId);
+                              } else {
+                                next.add(item.groupId);
+                              }
+                              return next;
+                            });
+                          }}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingVertical: SPACING.xs,
+                            paddingHorizontal: SPACING.sm,
+                            borderRadius: BORDER_RADIUS.sm,
+                            marginBottom: 4,
+                            backgroundColor: isSelected ? COLORS.primaryMuted ?? 'rgba(3,25,46,0.06)' : 'transparent',
+                          }}
+                        >
+                          <MaterialCommunityIcons
+                            name={isSelected ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                            size={22}
+                            color={isSelected ? COLORS.primary : COLORS.border}
+                            style={{ marginRight: SPACING.sm }}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: FONTS.size.sm, fontFamily: FONTS.family.heading, color: COLORS.text, fontWeight: '600' }}>
+                              {item.groupName}
+                            </Text>
+                            <Text style={{ fontSize: FONTS.size.xs, color: COLORS.textLight, fontFamily: FONTS.family.body }} numberOfLines={1}>
+                              {item.challengeTitle}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </Card>
                 )}
 
                 <Text style={styles.instructionText}>
@@ -618,7 +653,13 @@ export default function CheckinScreen() {
                       { borderColor: 'rgba(174, 143, 100, 0.3)' },
                       completedHabitsToday.prayer && styles.habitButtonCompleted
                     ]}
-                    onPress={() => handleSelectHabit('prayer')}
+                    onPress={() => {
+                      if (selectedGroupIds.size === 0) {
+                        Alert.alert('Selecione um grupo', 'Selecione ao menos um grupo acima para registrar este hábito.');
+                        return;
+                      }
+                      handleSelectHabit('prayer');
+                    }}
                     disabled={completedHabitsToday.prayer}
                     activeOpacity={0.8}
                   >
@@ -651,7 +692,13 @@ export default function CheckinScreen() {
                       { borderColor: 'rgba(3, 25, 46, 0.1)' },
                       completedHabitsToday.bible && styles.habitButtonCompleted
                     ]}
-                    onPress={() => handleSelectHabit('bible')}
+                    onPress={() => {
+                      if (selectedGroupIds.size === 0) {
+                        Alert.alert('Selecione um grupo', 'Selecione ao menos um grupo acima para registrar este hábito.');
+                        return;
+                      }
+                      handleSelectHabit('bible');
+                    }}
                     disabled={completedHabitsToday.bible}
                     activeOpacity={0.8}
                   >
@@ -684,7 +731,13 @@ export default function CheckinScreen() {
                       { borderColor: 'rgba(74, 101, 74, 0.2)' },
                       completedHabitsToday.exercise && styles.habitButtonCompleted
                     ]}
-                    onPress={() => handleSelectHabit('exercise')}
+                    onPress={() => {
+                      if (selectedGroupIds.size === 0) {
+                        Alert.alert('Selecione um grupo', 'Selecione ao menos um grupo acima para registrar este hábito.');
+                        return;
+                      }
+                      handleSelectHabit('exercise');
+                    }}
                     disabled={completedHabitsToday.exercise}
                     activeOpacity={0.8}
                   >
@@ -806,6 +859,10 @@ export default function CheckinScreen() {
   // RENDER PASSO 2: UPLOAD E LEGENDA
   if (step === 'upload' && (selectedHabit || selectedTask)) {
     const habitInfo = selectedTask ? { title: selectedTask.title } : HABIT_LABELS[selectedHabit!];
+    // Labels dos grupos selecionados para o resumo no passo 2
+    const selectedGroupLabels = !selectedTask
+      ? activeChallengesList.filter(i => selectedGroupIds.has(i.groupId)).map(i => i.groupName)
+      : null;
     return (
       <WebContainer>
         <SafeAreaView style={styles.container}>
@@ -866,6 +923,16 @@ export default function CheckinScreen() {
                 </View>
               )}
 
+              {/* Indicador de grupos para o post */}
+              {selectedGroupLabels && selectedGroupLabels.length > 0 && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: SPACING.sm }}>
+                  <MaterialCommunityIcons name="account-group" size={14} color={COLORS.textLight} />
+                  <Text style={{ fontSize: FONTS.size.xs, color: COLORS.textLight, fontFamily: FONTS.family.body, flex: 1 }}>
+                    Post irá para: {selectedGroupLabels.join(', ')}
+                  </Text>
+                </View>
+              )}
+
               <View style={styles.inputContainer}>
                 <Text style={styles.captionLabel}>Legenda / Devocional (Opcional)</Text>
                 <TextInput
@@ -880,12 +947,12 @@ export default function CheckinScreen() {
               </View>
 
               <Button
-                title="Confirmar e Postar"
+                title={`Confirmar e Postar${selectedGroupLabels && selectedGroupLabels.length > 1 ? ` (${selectedGroupLabels.length} grupos)` : ''}`}
                 variant="secondary"
                 size="lg"
                 loading={loading}
                 onPress={handleConfirmCheckin}
-                style={styles.confirmBtn}
+                style={{ marginTop: SPACING.sm }}
               />
             </Card>
           </ScrollView>
