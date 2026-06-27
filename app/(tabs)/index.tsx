@@ -407,7 +407,10 @@ export default function DashboardScreen() {
         .maybeSingle();
 
       if (groupError || !group) {
-        Alert.alert('Erro', 'Grupo não encontrado ou código de convite inválido.');
+        Alert.alert(
+          'Grupo não encontrado',
+          'Não encontramos nenhum grupo para este código.\n\nSe estiver utilizando o Supabase de produção, certifique-se de que a política RLS (Row Level Security) de SELECT da tabela "groups" permite que usuários autenticados leiam os registros (ou utilize o código mockado MOCK123 para testes locais).'
+        );
         return;
       }
 
