@@ -699,35 +699,45 @@ export default function AdminScreen() {
   const handleRemoveMember = async (memberId: string, name: string) => {
     if (!selectedGroupId || !user) return;
     if (memberId === user.id) {
-      Alert.alert('Operação Negada', 'Você não pode se remover do grupo por este painel.');
+      Alert.alert('Operação Negada', 'Você não pode se banir do grupo por este painel.');
       return;
     }
 
     Alert.alert(
-      'Remover do Grupo',
-      `Você tem certeza de que deseja remover ${name} do grupo? O participante perderá o acesso às atividades e rankings do grupo.`,
+      'Banir do Grupo',
+      `Você tem certeza de que deseja banir ${name} do grupo? O participante perderá permanentemente o acesso às atividades e rankings deste grupo.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         { 
-          text: 'Remover', 
+          text: 'Banir', 
           style: 'destructive',
           onPress: async () => {
             setLoadingAction(true);
             try {
-              const { error } = await supabase
-                .from('group_members')
-                .delete()
-                .eq('group_id', selectedGroupId)
-                .eq('user_id', memberId);
+              const isMock = selectedGroupId.startsWith('group');
+              if (isMock) {
+                // Remover o participante do ranking mockado
+                const challengeId = selectedGroupId === 'group_1' ? 'chal_1' : 'chal_2';
+                if (MOCK_RANKINGS[challengeId]) {
+                  MOCK_RANKINGS[challengeId] = MOCK_RANKINGS[challengeId].filter(m => m.user_id !== memberId);
+                }
+              } else {
+                // Banco de dados real do Supabase
+                const { error } = await supabase
+                  .from('group_members')
+                  .delete()
+                  .eq('group_id', selectedGroupId)
+                  .eq('user_id', memberId);
 
-              if (error) throw error;
+                if (error) throw error;
+              }
               
-              Alert.alert('Sucesso', 'Participante removido do grupo!');
+              Alert.alert('Sucesso', 'Participante banido com sucesso!');
               // Recarregar lista de membros
               const membersData = await api.getGroupMembers(selectedGroupId);
               setMembers(membersData);
             } catch (err: any) {
-              Alert.alert('Erro', err.message || 'Falha ao remover participante.');
+              Alert.alert('Erro', err.message || 'Falha ao banir participante.');
             } finally {
               setLoadingAction(false);
             }

@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { MOCK_CHALLENGES, MOCK_ROUNDS } from '../constants/mock-data';
+import { MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS } from '../constants/mock-data';
 
 export const api = {
   async getUserGroups(userId: string) {
@@ -284,6 +284,19 @@ export const api = {
    * Admins aparecem primeiro, depois membros, ordenados por joined_at.
    */
   async getGroupMembers(groupId: string) {
+    if (groupId.startsWith('group')) {
+      const challengeId = groupId === 'group_1' ? 'chal_1' : 'chal_2';
+      const ranking = MOCK_RANKINGS[challengeId] || [];
+      return ranking.map((member: any, index: number) => ({
+        user_id: member.user_id,
+        role: member.user_id === 'user_1' ? 'admin' : 'member',
+        joined_at: new Date(Date.now() - index * 24 * 60 * 60 * 1000).toISOString(),
+        full_name: member.name,
+        avatar_url: member.avatar_url,
+        email: `${member.user_id}@exemplo.com`,
+      }));
+    }
+
     const { data, error } = await supabase
       .from('group_members')
       .select(`
