@@ -180,37 +180,55 @@ export const MOCK_GROUPS: Group[] = [
   }
 ];
 
+const now = new Date();
+const fmt = (d: Date) => d.toISOString().split('T')[0];
+const addDays = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+
+// Datas dinâmicas: início 60 dias atrás, fim 120 dias à frente
+const CHAL_START = fmt(addDays(now, -60));
+const CHAL_END   = fmt(addDays(now, 120));
+
 export const MOCK_CHALLENGES: Record<string, Challenge> = {
   'chal_1': {
     id: 'chal_1',
     group_id: 'group_1',
     name: 'Fé em Constância',
-    start_date: '2026-05-01',
-    end_date: '2026-06-30',
-    total_rounds: 8, // 8 rounds de 1 semana
+    start_date: CHAL_START,
+    end_date: CHAL_END,
+    total_rounds: 8,
     current_round: 4,
-    rules: 'Check-in diário obrigatório de: 1. Oração (mín. 15min), 2. Leitura Bíblica (mín. 3 caps), 3. Exercício Físico (mín. 30min). Os check-ins devem conter foto de validação. Check-ins atrasados em até 12 horas recebem 50% de penalidade de pontos.',
+    rules: 'Check-in diário obrigatório de: 1. Oração (mín. 15min), 2. Leitura Bíblica (mín. 3 caps), 3. Exercício Físico (mín. 30min). Os check-ins devem conter foto de validação.',
   },
   'chal_2': {
     id: 'chal_2',
     group_id: 'group_2',
     name: 'Mocidade Forte',
-    start_date: '2026-04-01',
-    end_date: '2026-07-01',
-    total_rounds: 3, // 3 rounds de 1 mês
+    start_date: CHAL_START,
+    end_date: CHAL_END,
+    total_rounds: 3,
     current_round: 2,
     rules: 'Manter a chama acesa! Atividades físicas e oração. Check-in com foto obrigatório.',
   }
 };
 
+// Rounds dinâmicos: round anterior, ativo e próximo baseados em today
+const ROUND_PREV_START  = fmt(addDays(now, -14));
+const ROUND_PREV_END    = fmt(addDays(now, -7));
+const ROUND_CURR_START  = fmt(addDays(now, -7));
+const ROUND_CURR_END    = fmt(addDays(now,  7));
+const ROUND_NEXT_START  = fmt(addDays(now,  7));
+const ROUND_NEXT_END    = fmt(addDays(now, 14));
+
 export const MOCK_ROUNDS: Record<string, Round[]> = {
   'chal_1': [
-    { id: 'round_1_1', challenge_id: 'chal_1', round_number: 1, start_date: '2026-05-01', end_date: '2026-05-07', status: 'completed' },
-    { id: 'round_1_2', challenge_id: 'chal_1', round_number: 2, start_date: '2026-05-08', end_date: '2026-05-14', status: 'completed' },
-    { id: 'round_1_3', challenge_id: 'chal_1', round_number: 3, start_date: '2026-05-15', end_date: '2026-05-21', status: 'completed' },
-    { id: 'round_1_4', challenge_id: 'chal_1', round_number: 4, start_date: '2026-05-22', end_date: '2026-05-28', status: 'active' },
-    { id: 'round_1_5', challenge_id: 'chal_1', round_number: 5, start_date: '2026-05-29', end_date: '2026-06-04', status: 'upcoming' },
-  ]
+    { id: 'round_1_1', challenge_id: 'chal_1', round_number: 1, start_date: ROUND_PREV_START, end_date: ROUND_PREV_END, status: 'completed' },
+    { id: 'round_1_2', challenge_id: 'chal_1', round_number: 2, start_date: ROUND_CURR_START, end_date: ROUND_CURR_END, status: 'active' },
+    { id: 'round_1_3', challenge_id: 'chal_1', round_number: 3, start_date: ROUND_NEXT_START, end_date: ROUND_NEXT_END, status: 'upcoming' },
+  ],
+  'chal_2': [
+    { id: 'round_2_1', challenge_id: 'chal_2', round_number: 1, start_date: ROUND_PREV_START, end_date: ROUND_PREV_END, status: 'completed' },
+    { id: 'round_2_2', challenge_id: 'chal_2', round_number: 2, start_date: ROUND_CURR_START, end_date: ROUND_CURR_END, status: 'active' },
+  ],
 };
 
 export const MOCK_RANKINGS: Record<string, RankingMember[]> = {
