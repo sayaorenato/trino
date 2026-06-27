@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS } from '../constants/mock-data';
+import { MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, USER_MOCK_GROUPS } from '../constants/mock-data';
 
 export const api = {
   async getUserGroups(userId: string) {
@@ -8,15 +8,27 @@ export const api = {
       .select('group_id, role, groups(*)')
       .eq('user_id', userId);
 
-    if (error) {
+    let userGroups: any[] = [];
+    if (!error && data) {
+      userGroups = data.map((item: any) => ({
+        ...item.groups,
+        role: item.role,
+      }));
+    } else if (error) {
       console.error('Error fetching user groups:', error);
-      return [];
     }
 
-    return data.map((item: any) => ({
-      ...item.groups,
-      role: item.role,
-    }));
+    const combinedGroups = [...userGroups];
+    USER_MOCK_GROUPS.forEach((mg: any) => {
+      if (!combinedGroups.some((cg: any) => cg.id === mg.id)) {
+        combinedGroups.push({
+          ...mg,
+          role: 'member'
+        });
+      }
+    });
+
+    return combinedGroups;
   },
 
   async getActiveChallenge(groupId: string) {

@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Animated,
   Alert,
+  TextInput,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -26,7 +27,7 @@ import { ProgressBar } from '../../components/ui/ProgressBar';
 import { Button } from '../../components/ui/Button';
 import { WebContainer } from '../../components/ui/WebContainer';
 import { SupportCard } from '../../components/SupportCard';
-import { HABIT_LABELS, HabitType, MOCK_RANKINGS, RankingMember, MOCK_CHALLENGE_INVITATIONS, MOCK_FEED, MOCK_EXTRA_TASKS } from '../../constants/mock-data';
+import { HABIT_LABELS, HabitType, MOCK_RANKINGS, RankingMember, MOCK_CHALLENGE_INVITATIONS, MOCK_FEED, MOCK_EXTRA_TASKS, USER_MOCK_GROUPS } from '../../constants/mock-data';
 import { COLORS, SPACING, FONTS, SHADOWS, BORDER_RADIUS, ANIMATION } from '../../constants/theme';
 
 const { width } = Dimensions.get('window');
@@ -47,6 +48,7 @@ export default function DashboardScreen() {
   const [todayCheckins, setTodayCheckins] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [inviteCode, setInviteCode] = useState('');
 
   // Entrance animations
   const headerFade = useRef(new Animated.Value(0)).current;
@@ -374,31 +376,130 @@ export default function DashboardScreen() {
     }
   }, [user, profile]);
 
+  const handleJoinWithCode = async (code: string) => {
+    if (!user) {
+      Alert.alert('Erro', 'Você precisa estar logado para entrar em um grupo.');
+      return;
+    }
+    if (!code || code.trim() === '') {
+      Alert.alert('Erro', 'Por favor, digite um código de convite válido.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const cleanCode = code.trim().toUpperCase();
+
+      // Se for um código mockado de testes locais, entra direto sem chamar o Supabase
+      if (cleanCode === 'MOCK123' || cleanCode === 'TRINO1' || cleanCode === 'GRUPO1') {
+        const groupId = 'group_1';
+        const groupName = 'Grupo de Testes Renato';
+        await handleJoinGroup(groupId, groupName, true);
+        setInviteCode('');
+        return;
+      }
+
+      // 1. Buscar o grupo pelo código de convite no Supabase
+      const { data: group, error: groupError } = await supabase
+        .from('groups')
+        .select('*')
+        .eq('invite_code', cleanCode)
+        .maybeSingle();
+
+      if (groupError || !group) {
+        Alert.alert('Erro', 'Grupo não encontrado ou código de convite inválido.');
+        return;
+      }
+
+      // 2. Buscar se existe desafio ativo para o grupo no Supabase
+      const { data: challenge } = await supabase
+        .from('challenges')
+        .select('*')
+        .eq('group_id', group.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      // 3. Associar ao grupo (handleJoinGroup cuidará do resto)
+      await handleJoinGroup(group.id, group.name, !!challenge);
+      setInviteCode('');
+    } catch (err: any) {
+      console.error('Erro ao entrar no grupo com código:', err);
+      Alert.alert('Erro', err.message || 'Falha ao entrar no grupo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleScanQRCode = () => {
+    setLoading(true);
+    if (Platform.OS === 'web') {
+      const code = window.prompt("Escaneie o QR Code digitando o código impresso nele (Ex: MOCK123):", "MOCK123");
+      if (code) {
+        handleJoinWithCode(code);
+      } else {
+        setLoading(false);
+      }
+    } else {
+      Alert.alert(
+        'Simulador de Leitor QR Code',
+        'Câmera do dispositivo aberta. Posicione o QR Code do convite no centro da tela...',
+        [
+          {
+            text: 'Cancelar',
+            style: 'cancel',
+            onPress: () => setLoading(false)
+          },
+          {
+            text: 'Simular Leitura de "MOCK123"',
+            onPress: () => {
+              handleJoinWithCode('MOCK123');
+            }
+          }
+        ]
+      );
+    }
+  };
+
   const handleJoinGroup = async (groupId: string, groupName: string, joinChallenge: boolean) => {
     if (!user) return;
     try {
       setLoading(true);
-      // 1. Inserir na tabela group_members
-      const { error: joinError } = await supabase
-        .from('group_members')
-        .insert({
-          user_id: user.id,
-          group_id: groupId,
-          role: 'member'
-        });
-
-      if (joinError) {
-        // Se já for membro, o insert falhará com primary key violation
-        if (joinError.code === '23505' || joinError.message.includes('duplicate key') || joinError.message.includes('already exists')) {
-          Alert.alert('Aviso', `Você já faz parte do grupo "${groupName}".`);
-          
-          // Recarregar os dados do dashboard mesmo se já for membro
-          const data = await api.getDashboardData(user.id);
-          setGroups(data.groups);
-          setHabits(data.habits);
-          return;
+      
+      const isMock = groupId.startsWith('group');
+      if (isMock) {
+        // Simulação de inserção no grupo mockado local
+        const alreadyInGroup = USER_MOCK_GROUPS.some((g: any) => g.id === groupId);
+        if (!alreadyInGroup) {
+          USER_MOCK_GROUPS.push({
+            id: groupId,
+            name: groupName,
+            description: groupId === 'group_1' ? 'Grupo de Testes Renato' : 'Outro Grupo de Testes'
+          });
         }
-        throw joinError;
+      } else {
+        // 1. Inserir na tabela group_members
+        const { error: joinError } = await supabase
+          .from('group_members')
+          .insert({
+            user_id: user.id,
+            group_id: groupId,
+            role: 'member'
+          });
+
+        if (joinError) {
+          // Se já for membro, o insert falhará com primary key violation
+          if (joinError.code === '23505' || joinError.message.includes('duplicate key') || joinError.message.includes('already exists')) {
+            Alert.alert('Aviso', `Você já faz parte do grupo "${groupName}".`);
+            
+            // Recarregar os dados do dashboard mesmo se já for membro
+            const data = await api.getDashboardData(user.id);
+            setGroups(data.groups);
+            setHabits(data.habits);
+            return;
+          }
+          throw joinError;
+        }
       }
 
       // 2. Se optou por entrar no desafio, podemos associar no mock rankings do Renato para testes locais
@@ -535,28 +636,94 @@ export default function DashboardScreen() {
             {/* My Groups */}
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Meus Grupos</Text>
-              <TouchableOpacity onPress={() => router.push('/create-group')}>
-                <MaterialCommunityIcons name="plus-circle-outline" size={22} color={COLORS.secondary} />
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <TouchableOpacity 
+                  onPress={handleScanQRCode}
+                  style={{ marginRight: SPACING.md }}
+                  accessibilityLabel="Escanear QR Code de Convite"
+                >
+                  <MaterialCommunityIcons name="qrcode-scan" size={20} color={COLORS.secondary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => router.push('/create-group')}>
+                  <MaterialCommunityIcons name="plus-circle-outline" size={22} color={COLORS.secondary} />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {groups.length === 0 ? (
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => router.push('/create-group')}
-                style={{ paddingHorizontal: SPACING.xl }}
-              >
-                <Card variant="default" style={styles.emptyGroupDashboardCard}>
-                  <View style={styles.emptyGroupIconContainer}>
-                    <MaterialCommunityIcons name="plus" size={24} color={COLORS.secondary} />
+              <View style={styles.bentoContainer}>
+                {/* Opção 1: Criar Novo Grupo (Premium) */}
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => router.push('/create-group')}
+                  style={styles.bentoCardPrimary}
+                >
+                  <LinearGradient
+                    colors={COLORS.gradients.primaryWarm}
+                    style={styles.bentoGradient}
+                  >
+                    <View style={styles.bentoIconContainer}>
+                      <MaterialCommunityIcons name="account-group" size={32} color={COLORS.goldLight} />
+                    </View>
+                    <View style={styles.bentoContent}>
+                      <Text style={styles.bentoTitlePrimary}>Criar Novo Grupo</Text>
+                      <Text style={styles.bentoSubtitlePrimary}>
+                        Monte sua comunidade para treinar e crescer espiritualmente em grupo.
+                      </Text>
+                    </View>
+                    <View style={styles.bentoArrow}>
+                      <MaterialCommunityIcons name="chevron-right" size={24} color={COLORS.goldLight} />
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                {/* Opção 2: Entrar com Código ou QR Code */}
+                <Card variant="default" style={styles.bentoCardSecondary}>
+                  <View style={styles.bentoHeaderSecondary}>
+                    <View style={[styles.bentoIconContainer, { backgroundColor: '#f0f4f0' }]}>
+                      <MaterialCommunityIcons name="qrcode-scan" size={24} color={COLORS.secondary} />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: SPACING.md }}>
+                      <Text style={styles.bentoTitleSecondary}>Entrar em um Grupo</Text>
+                      <Text style={styles.bentoSubtitleSecondary}>Insira o código de convite enviado por um amigo.</Text>
+                    </View>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.emptyGroupDashboardTitle}>Criar um Grupo</Text>
-                    <Text style={styles.emptyGroupDashboardSubtitle}>Comece criando um grupo para convidar seus amigos.</Text>
+
+                  <View style={styles.inviteInputRow}>
+                    <TextInput
+                      style={styles.inviteTextInput}
+                      placeholder="Código do Convite (ex: MOCK123)"
+                      placeholderTextColor={COLORS.textLight}
+                      value={inviteCode}
+                      onChangeText={setInviteCode}
+                      autoCapitalize="characters"
+                      maxLength={15}
+                    />
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => handleJoinWithCode(inviteCode)}
+                      style={styles.inviteButton}
+                    >
+                      <MaterialCommunityIcons name="arrow-right" size={20} color="#fff" />
+                    </TouchableOpacity>
                   </View>
-                  <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} />
+
+                  <View style={styles.dividerRow}>
+                    <View style={styles.dividerLine} />
+                    <Text style={styles.dividerText}>ou se preferir</Text>
+                    <View style={styles.dividerLine} />
+                  </View>
+
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={handleScanQRCode}
+                    style={styles.scanButton}
+                  >
+                    <MaterialCommunityIcons name="camera-outline" size={18} color={COLORS.secondary} />
+                    <Text style={styles.scanButtonText}>Escanear QR Code</Text>
+                  </TouchableOpacity>
                 </Card>
-              </TouchableOpacity>
+              </View>
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={true} contentContainerStyle={styles.groupsScroll}>
                 {groups.map((group: any) => {
@@ -1154,5 +1321,126 @@ const styles = StyleSheet.create({
   },
   miniTaskBadgeTextLocked: {
     color: '#8e8e93',
+  },
+  bentoContainer: {
+    paddingHorizontal: SPACING.xl,
+    gap: SPACING.md,
+    marginTop: SPACING.xs,
+  },
+  bentoCardPrimary: {
+    borderRadius: BORDER_RADIUS.lg,
+    overflow: 'hidden',
+    ...SHADOWS.light,
+  },
+  bentoGradient: {
+    padding: SPACING.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 110,
+  },
+  bentoIconContainer: {
+    width: 46,
+    height: 46,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bentoContent: {
+    flex: 1,
+    marginLeft: SPACING.md,
+  },
+  bentoTitlePrimary: {
+    fontSize: 16,
+    fontFamily: FONTS.family.heading,
+    color: '#fff',
+  },
+  bentoSubtitlePrimary: {
+    fontSize: 11,
+    fontFamily: FONTS.family.body,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 4,
+    lineHeight: 15,
+  },
+  bentoArrow: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bentoCardSecondary: {
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  bentoHeaderSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bentoTitleSecondary: {
+    fontSize: 16,
+    fontFamily: FONTS.family.heading,
+    color: COLORS.text,
+  },
+  bentoSubtitleSecondary: {
+    fontSize: 11,
+    fontFamily: FONTS.family.body,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  inviteInputRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  inviteTextInput: {
+    flex: 1,
+    height: 44,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    fontSize: 13,
+    fontFamily: FONTS.family.body,
+    color: COLORS.text,
+    backgroundColor: '#fbfbfb',
+  },
+  inviteButton: {
+    width: 44,
+    height: 44,
+    backgroundColor: COLORS.secondary,
+    borderRadius: BORDER_RADIUS.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.light,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: SPACING.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dividerText: {
+    fontSize: 10,
+    fontFamily: FONTS.family.body,
+    color: COLORS.textLight,
+    paddingHorizontal: SPACING.sm,
+    marginHorizontal: SPACING.sm,
+  },
+  scanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    paddingVertical: SPACING.xs,
+  },
+  scanButtonText: {
+    fontSize: 12,
+    fontFamily: FONTS.family.bodyMedium,
+    color: COLORS.secondary,
   },
 });

@@ -18,6 +18,8 @@ export interface Group {
   challenge?: any;
 }
 
+export let USER_MOCK_GROUPS: any[] = [];
+
 export interface Challenge {
   id: string;
   group_id: string;
@@ -207,6 +209,13 @@ export const MOCK_RANKINGS: Record<string, RankingMember[]> = {
   ]
 };
 
+const getRelativeDate = (offsetDays: number, hourStr = '23:59:59') => {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const dateStr = d.toISOString().split('T')[0];
+  return `${dateStr}T${hourStr}Z`;
+};
+
 export const MOCK_EXTRA_TASKS: Record<string, ExtraTask[]> = {
   'chal_1': [
     {
@@ -216,7 +225,7 @@ export const MOCK_EXTRA_TASKS: Record<string, ExtraTask[]> = {
       description: 'Participar da vigília da célula na sexta-feira e fazer um check-in de presença.',
       type: 'presence',
       points: 50,
-      expires_at: '2026-06-20T23:59:59Z',
+      expires_at: getRelativeDate(-2, '23:59:59'),
       completed_by: ['user_2', 'user_3'],
       start_time: '19:30',
     },
@@ -227,7 +236,7 @@ export const MOCK_EXTRA_TASKS: Record<string, ExtraTask[]> = {
       description: 'Fazer o devocional e oração antes das 06:00 da manhã.',
       type: 'punctuality',
       points: 30,
-      expires_at: '2026-06-21T23:59:59Z',
+      expires_at: getRelativeDate(-1, '23:59:59'),
       completed_by: ['user_2', 'user_3'],
       start_time: '06:00',
     },
@@ -238,7 +247,7 @@ export const MOCK_EXTRA_TASKS: Record<string, ExtraTask[]> = {
       description: 'Apoiar o projeto social da igreja no sábado, entregando donativos.',
       type: 'general',
       points: 80,
-      expires_at: '2026-06-25T18:00:00Z',
+      expires_at: getRelativeDate(0, '23:59:59'), // expira hoje
       completed_by: [],
     }
   ]
