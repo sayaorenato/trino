@@ -85,15 +85,21 @@ export default function CheckinScreen() {
           g.challenges.forEach((challenge: any) => {
             const isChallengeActive = new Date(challenge.end_date) >= new Date();
             if (isChallengeActive) {
+              const isMockGroup = g.id?.startsWith('group');
+              const isUserAdmin = g.role === 'admin';
+              const isRealGroup = !isMockGroup;
               const ranking = MOCK_RANKINGS[challenge.id] || [];
-              const userParticipates = ranking.some((m: any) => m.user_id === user?.id);
+              const userParticipates =
+                isUserAdmin || isRealGroup || ranking.some((m: any) => m.user_id === user?.id);
+
               if (userParticipates) {
                 list.push({
                   groupId: g.id,
                   groupName: g.name,
                   challengeId: challenge.id,
                   challengeTitle: challenge.title,
-                  rounds: challenge.rounds || []
+                  rounds: challenge.rounds || [],
+                  isMock: isMockGroup,
                 });
               }
             }
@@ -163,7 +169,7 @@ export default function CheckinScreen() {
     setActiveRoundId(roundId);
     setActiveGroupId(selectedChallenge.groupId);
     
-    const isMockChallenge = selectedChallenge.challengeId.startsWith('chal');
+    const isMockChallenge = selectedChallenge.isMock === true;
     const challengeId = selectedChallenge.challengeId;
 
     if (isMockChallenge) {
@@ -265,7 +271,7 @@ export default function CheckinScreen() {
       return;
     }
 
-    const isMock = selectedChallenge?.challengeId?.startsWith('chal');
+    const isMock = selectedChallenge?.isMock === true;
     if (isMock) {
       const completed = { prayer: false, bible: false, exercise: false };
       const todayStr = new Date().toISOString().split('T')[0];
@@ -416,7 +422,7 @@ export default function CheckinScreen() {
       if (selectedTask) {
         // ── TAREFA EXTRA (afeta apenas o desafio selecionado) ──
         const challengeId = selectedChallenge.challengeId;
-        const isMock = challengeId.startsWith('chal');
+        const isMock = selectedChallenge.isMock === true;
 
         if (isMock) {
           MOCK_EXTRA_TASKS[challengeId] = (MOCK_EXTRA_TASKS[challengeId] || []).map(t => {
@@ -467,7 +473,7 @@ export default function CheckinScreen() {
         const targetItems = activeChallengesList.filter(item => selectedGroupIds.has(item.groupId));
 
         for (const item of targetItems) {
-          const isMock = item.challengeId?.startsWith('chal') || item.groupId?.startsWith('group');
+          const isMock = item.isMock === true;
 
           if (isMock) {
             // Adiciona no feed mock para cada grupo selecionado
