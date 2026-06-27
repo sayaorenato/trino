@@ -118,20 +118,6 @@ export default function DashboardScreen() {
       g.challenges.forEach((challenge: any) => {
         const isChallengeActive = new Date(challenge.end_date) >= new Date();
         if (isChallengeActive) {
-          // Se o ranking não existir para este desafio ativo (ex: após refresh), inicializa com o usuário
-          if (!MOCK_RANKINGS[challenge.id] && user) {
-            MOCK_RANKINGS[challenge.id] = [
-              {
-                user_id: user.id,
-                name: profile?.full_name || 'Participante',
-                avatar_url: profile?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-                points: 0,
-                streak: 0,
-                rounds_won: 0
-              }
-            ];
-          }
-
           if (!acc.some((item: any) => item.challenge.id === challenge.id)) {
             acc.push({
               groupId: g.id,

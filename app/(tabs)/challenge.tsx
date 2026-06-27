@@ -178,20 +178,6 @@ export default function ChallengeScreen() {
             setExtraTasks((MOCK_EXTRA_TASKS[currentChallengeId] || []).filter(t => t.active !== false));
             setLoading(false);
           }
-
-          // Inicializar ranking caso ele não exista para este desafio (garante visibilidade offline/refresh)
-          if (user && !MOCK_RANKINGS[currentChallengeId]) {
-            MOCK_RANKINGS[currentChallengeId] = [
-              {
-                user_id: user.id,
-                name: 'Você',
-                avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-                points: 0,
-                streak: 0,
-                rounds_won: 0
-              }
-            ];
-          }
         });
     }, [currentChallengeId, user])
   );

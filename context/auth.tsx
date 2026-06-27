@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
+import { clearMockSession } from '../constants/mock-data';
 
 export interface Profile {
   id: string;
@@ -112,6 +113,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       retryCountRef.current = 0;
+      
+      // Limpar memória de mocks locais se trocar de conta
+      if (session?.user?.id !== user?.id) {
+        clearMockSession();
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
       if (event === 'PASSWORD_RECOVERY') {
@@ -135,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     retryCountRef.current = 0;
     try {
       await supabase.auth.signOut();
+      clearMockSession();
     } catch (e) {
       console.error(e);
     } finally {
