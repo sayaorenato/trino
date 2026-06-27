@@ -246,54 +246,23 @@ export default function DashboardScreen() {
         return;
       }
 
-      // 2. Buscar se existe desafio ativo para o grupo
-      const { data: challenge } = await supabase
-        .from('challenges')
-        .select('*')
-        .eq('group_id', group.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      // 3. Perguntar ao usuário se ele deseja participar do desafio ativo (se houver)
-      if (challenge) {
-        Alert.alert(
-          'Convite Recebido!',
-          `Deseja entrar no grupo "${group.name}" e participar do desafio ativo "${challenge.title}"?`,
-          [
-            {
-              text: 'Cancelar',
-              style: 'cancel',
-              onPress: () => setLoading(false)
-            },
-            {
-              text: 'Entrar Apenas no Grupo',
-              onPress: () => handleJoinGroup(group.id, group.name, false)
-            },
-            {
-              text: 'Participar do Desafio',
-              onPress: () => handleJoinGroup(group.id, group.name, true)
-            }
-          ]
-        );
-      } else {
-        // Sem desafio ativo, entra direto no grupo
-        Alert.alert(
-          'Convite Recebido!',
-          `Deseja entrar no grupo "${group.name}"?`,
-          [
-            {
-              text: 'Cancelar',
-              style: 'cancel',
-              onPress: () => setLoading(false)
-            },
-            {
-              text: 'Entrar no Grupo',
-              onPress: () => handleJoinGroup(group.id, group.name, false)
-            }
-          ]
-        );
-      }
+      setLoading(false);
+      // 2. Perguntar ao usuário se ele deseja entrar no grupo
+      Alert.alert(
+        'Convite Recebido!',
+        `Deseja entrar no grupo "${group.name}"?`,
+        [
+          {
+            text: 'Cancelar',
+            style: 'cancel',
+            onPress: () => setLoading(false)
+          },
+          {
+            text: 'Entrar no Grupo',
+            onPress: () => handleJoinGroup(group.id, group.name)
+          }
+        ]
+      );
     } catch (err) {
       console.error('Erro ao processar convite:', err);
       Alert.alert('Erro', 'Ocorreu um erro ao processar o convite.');
@@ -395,7 +364,7 @@ export default function DashboardScreen() {
       if (cleanCode === 'MOCK123' || cleanCode === 'TRINO1' || cleanCode === 'GRUPO1') {
         const groupId = 'group_1';
         const groupName = 'Grupo de Testes Renato';
-        await handleJoinGroup(groupId, groupName, true);
+        await handleJoinGroup(groupId, groupName);
         setInviteCode('');
         return;
       }
@@ -415,17 +384,8 @@ export default function DashboardScreen() {
         return;
       }
 
-      // 2. Buscar se existe desafio ativo para o grupo no Supabase
-      const { data: challenge } = await supabase
-        .from('challenges')
-        .select('*')
-        .eq('group_id', group.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      // 3. Associar ao grupo (handleJoinGroup cuidará do resto)
-      await handleJoinGroup(group.id, group.name, !!challenge);
+      // 2. Associar ao grupo (handleJoinGroup cuidará do resto)
+      await handleJoinGroup(group.id, group.name);
       setInviteCode('');
     } catch (err: any) {
       console.error('Erro ao entrar no grupo com código:', err);
@@ -465,7 +425,7 @@ export default function DashboardScreen() {
     }
   };
 
-  const handleJoinGroup = async (groupId: string, groupName: string, joinChallenge: boolean) => {
+  const handleJoinGroup = async (groupId: string, groupName: string) => {
     if (!user) return;
     try {
       setLoading(true);
@@ -506,28 +466,9 @@ export default function DashboardScreen() {
         }
       }
 
-      // 2. Se optou por entrar no desafio, podemos associar no mock rankings do Renato para testes locais
-      if (joinChallenge) {
-        if (MOCK_RANKINGS['chal_1'] && groupId === 'group_1') {
-          const alreadyInRank = MOCK_RANKINGS['chal_1'].some(m => m.user_id === user.id);
-          if (!alreadyInRank) {
-            MOCK_RANKINGS['chal_1'].push({
-              user_id: user.id,
-              name: profile?.full_name || 'Novo Membro',
-              avatar_url: profile?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-              points: 0,
-              streak: 0,
-              rounds_won: 0
-            });
-          }
-        }
-      }
-
       showAlert(
         'Sucesso!', 
-        joinChallenge 
-          ? `Você entrou no grupo "${groupName}" e está participando do desafio ativo!` 
-          : `Você entrou no grupo "${groupName}"!`
+        `Você entrou no grupo "${groupName}"!\n\nSe houver um desafio ativo, acesse a página deste grupo para solicitar a sua entrada.`
       );
 
       // Recarregar os dados do dashboard
