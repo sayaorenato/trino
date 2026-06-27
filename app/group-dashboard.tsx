@@ -187,7 +187,7 @@ export default function GroupDashboardScreen() {
           </View>
           {isAdmin ? (
             <TouchableOpacity 
-              onPress={() => router.push({ pathname: '/edit-group', params: { groupId: group.id } })}
+              onPress={() => router.push({ pathname: '/admin', params: { groupId: group.id } })}
               style={styles.backButton}
             >
               <MaterialCommunityIcons name="cog" size={24} color={COLORS.primary} />
@@ -198,6 +198,45 @@ export default function GroupDashboardScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Alerta de solicitações pendentes para o Admin */}
+          {(() => {
+            const pendingRequestsCount = CHALLENGE_REQUESTS.filter(
+              (r: any) => r.group_id === group.id && r.status === 'pending'
+            ).length;
+            if (isAdmin && pendingRequestsCount > 0) {
+              return (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => router.push({ pathname: '/admin', params: { groupId: group.id, tab: 'members' } })}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: 'rgba(174, 143, 100, 0.1)',
+                    borderWidth: 1,
+                    borderColor: COLORS.secondary,
+                    borderRadius: BORDER_RADIUS.md,
+                    padding: SPACING.md,
+                    marginHorizontal: SPACING.lg,
+                    marginBottom: SPACING.md,
+                    marginTop: SPACING.sm,
+                  }}
+                >
+                  <MaterialCommunityIcons name="alert-circle-outline" size={24} color={COLORS.secondary} style={{ marginRight: SPACING.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: FONTS.family.heading, fontSize: FONTS.size.sm, color: COLORS.text, fontWeight: 'bold' }}>
+                      Solicitações Pendentes!
+                    </Text>
+                    <Text style={{ fontFamily: FONTS.family.body, fontSize: FONTS.size.xs, color: COLORS.textSecondary }}>
+                      Existem {pendingRequestsCount} participantes aguardando liberação no desafio deste grupo.
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} />
+                </TouchableOpacity>
+              );
+            }
+            return null;
+          })()}
+
           {/* Descrição */}
           {group.description ? (
             <Text style={styles.description}>{group.description}</Text>

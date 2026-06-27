@@ -41,7 +41,7 @@ function parseDate(dateStr: string): Date | null {
 
 export default function AdminScreen() {
   const router = useRouter();
-  const { challengeId, groupId } = useLocalSearchParams<{ challengeId?: string; groupId?: string }>();
+  const { challengeId, groupId, tab } = useLocalSearchParams<{ challengeId?: string; groupId?: string; tab?: string }>();
   const { user } = useAuth();
 
   // Estados de carregamento
@@ -61,6 +61,13 @@ export default function AdminScreen() {
 
   // Abas do painel: 'group' | 'tasks' | 'members' | 'challenges'
   const [activeTab, setActiveTab] = useState<'group' | 'tasks' | 'members' | 'challenges'>('group');
+
+  // Ajusta a aba padrão ao iniciar se for informada na URL
+  useEffect(() => {
+    if (tab && ['group', 'tasks', 'members', 'challenges'].includes(tab)) {
+      setActiveTab(tab as any);
+    }
+  }, [tab]);
 
   // Estados de Criar Grupo Inline
   const [showCreateGroupForm, setShowCreateGroupForm] = useState(false);
