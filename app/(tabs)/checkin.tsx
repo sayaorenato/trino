@@ -72,69 +72,56 @@ export default function CheckinScreen() {
     exercise: false
   });
 
-  // Busca todos os desafios ativos e grupos do usuário
+  // Busca todos os grupos do usuário com desafios ativos
   useEffect(() => {
     if (!user) return;
     setLoadingRound(true);
-    
+
     api.getDashboardData(user.id).then(({ groups }) => {
       const list: any[] = [];
-      
-      groups.forEach((g: any) => {
-        if (g.challenges && Array.isArray(g.challenges)) {
-          g.challenges.forEach((challenge: any) => {
-            const isChallengeActive = new Date(challenge.end_date) >= new Date();
-            if (isChallengeActive) {
-              const isMockGroup = g.id?.startsWith('group');
-              const isUserAdmin = g.role === 'admin';
-              const isRealGroup = !isMockGroup;
-              const ranking = MOCK_RANKINGS[challenge.id] || [];
-              const userParticipates =
-                isUserAdmin || isRealGroup || ranking.some((m: any) => m.user_id === user?.id);
 
-              if (userParticipates) {
-                list.push({
-                  groupId: g.id,
-                  groupName: g.name,
-                  challengeId: challenge.id,
-                  challengeTitle: challenge.title,
-                  rounds: challenge.rounds || [],
-                  isMock: isMockGroup,
-                });
-              }
-            }
-          });
-        }
+      groups.forEach((g: any) => {
+        if (!g.challenges || !Array.isArray(g.challenges)) return;
+
+        // Para cada grupo, pega o primeiro desafio ativo (mais recente)
+        const activeChallenge = g.challenges.find(
+          (c: any) => new Date(c.end_date) >= new Date()
+        );
+        if (!activeChallenge) return;
+
+        const isMockGroup = Boolean(g.id?.startsWith('group'));
+
+        list.push({
+          groupId: g.id,
+          groupName: g.name,
+          challengeId: activeChallenge.id,
+          // mocks usam 'name', o banco usa 'title'
+          challengeTitle: activeChallenge.title || activeChallenge.name || 'Desafio',
+          rounds: activeChallenge.rounds || [],
+          isMock: isMockGroup,
+        });
       });
 
       setActiveChallengesList(list);
-      if (list.length > 0) {
-        const targetChalId = queryChallengeId;
-        const found = targetChalId ? list.find(item => item.challengeId === targetChalId) : null;
-        
+      // Pré-seleciona TODOS os grupos por padrão
+      setSelectedGroupIds(new Set(list.map((i: any) => i.groupId)));
+      // Usa o primeiro item como contexto para tarefas extras
+      setSelectedChallenge(list[0] ?? null);
+
+      // Se veio por deep-link com challengeId + habit, vai direto ao upload
+      if (queryChallengeId && queryHabit && ['prayer', 'bible', 'exercise'].includes(queryHabit)) {
+        const found = list.find(i => i.challengeId === queryChallengeId);
         if (found) {
           setSelectedChallenge(found);
-          setChallengeChosen(true);
-          // Pré-seleciona todos os grupos do mesmo desafio + o grupo encontrado
-          setSelectedGroupIds(new Set(list.map((i: any) => i.groupId)));
-          
-          if (queryHabit && (queryHabit === 'prayer' || queryHabit === 'bible' || queryHabit === 'exercise')) {
-            setSelectedHabit(queryHabit as HabitType);
-            setSelectedTask(null);
-            setStep('upload');
-          } else {
-            setStep('select');
-          }
-        } else {
-          setSelectedChallenge(list[0]);
-          // Pré-seleciona todos os grupos por padrão
-          setSelectedGroupIds(new Set(list.map((i: any) => i.groupId)));
-          setChallengeChosen(true);
+          setSelectedHabit(queryHabit as HabitType);
+          setSelectedTask(null);
+          setStep('upload');
         }
-      } else {
-        setSelectedChallenge(null);
-        setChallengeChosen(false);
       }
+
+      setLoadingRound(false);
+    }).catch(err => {
+      console.error('Erro ao carregar grupos:', err);
       setLoadingRound(false);
     });
   }, [user, queryChallengeId, queryHabit]);
@@ -539,9 +526,6 @@ export default function CheckinScreen() {
     setSelectedTask(null);
     setImageUri(null);
     setCaption('');
-    if (activeChallengesList.length > 1) {
-      setChallengeChosen(false);
-    }
   };
 
   // Tela de loading enquanto busca round ativo
@@ -564,11 +548,6 @@ export default function CheckinScreen() {
       <WebContainer>
         <SafeAreaView style={styles.container}>
           <View style={styles.header}>
-            {challengeChosen && activeChallengesList.length > 1 && (
-              <TouchableOpacity onPress={() => setChallengeChosen(false)} style={styles.backButton}>
-                <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.primary} />
-              </TouchableOpacity>
-            )}
             <Text style={styles.headerTitle}>Novo Check-in</Text>
           </View>
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
