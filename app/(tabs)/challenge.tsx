@@ -25,6 +25,7 @@ import {
   MOCK_ROUNDS, 
   MOCK_EXTRA_TASKS, 
   MOCK_RANKINGS,
+  CHALLENGE_REQUESTS,
   ExtraTask,
   RankingMember
 } from '../../constants/mock-data';
@@ -51,6 +52,9 @@ export default function ChallengeScreen() {
   
   // Estado para armazenar o ranking dinâmico
   const [rankingData, setRankingData] = useState<RankingMember[]>([]);
+
+  // Trigger para recarregar solicitações e ranking na aprovação
+  const [reqTrigger, setReqTrigger] = useState(0);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -287,8 +291,49 @@ export default function ChallengeScreen() {
         console.error('Erro ao buscar grupos e desafios:', err);
         setLoading(false);
       });
-    }, [challengeId, user])
+    }, [challengeId, user, reqTrigger])
   );
+
+  const handleApproveChallengeRequest = (requestId: string, approve: boolean) => {
+    const request = CHALLENGE_REQUESTS.find((r: any) => r.id === requestId);
+    if (!request) return;
+
+    if (approve) {
+      request.status = 'approved';
+      
+      if (!MOCK_RANKINGS[request.challenge_id]) {
+        MOCK_RANKINGS[request.challenge_id] = [];
+      }
+      
+      const alreadyInRank = MOCK_RANKINGS[request.challenge_id].some(m => m.user_id === request.user_id);
+      if (!alreadyInRank) {
+        MOCK_RANKINGS[request.challenge_id].push({
+          user_id: request.user_id,
+          name: request.user_name,
+          avatar_url: request.user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+          points: 0,
+          streak: 0,
+          rounds_won: 0
+        });
+      }
+      
+      if (Platform.OS === 'web') {
+        window.alert(`${request.user_name} foi adicionado ao desafio.`);
+      } else {
+        Alert.alert('Sucesso', `${request.user_name} agora faz parte do desafio!`);
+      }
+    } else {
+      request.status = 'declined';
+      if (Platform.OS === 'web') {
+        window.alert('Solicitação recusada.');
+      } else {
+        Alert.alert('Sucesso', 'Solicitação recusada.');
+      }
+    }
+    
+    // Dispara recálculo do ranking e re-render
+    setReqTrigger(prev => prev + 1);
+  };
 
   if (loading) {
     return (
@@ -575,6 +620,77 @@ export default function ChallengeScreen() {
               </Text>
             </View>
           </Card>
+
+          {/* SOLICITAÇÕES PENDENTES DO DESAFIO (VISÍVEL APENAS PARA ADMIN) */}
+          {(() => {
+            const pendingRequests = CHALLENGE_REQUESTS.filter(
+              (r: any) => r.challenge_id === challenge.id && r.status === 'pending'
+            );
+            if (userRole === 'admin' && pendingRequests.length > 0) {
+              return (
+                <View style={[styles.section, { marginBottom: SPACING.sm }]}>
+                  <Text style={[styles.sectionTitle, { color: COLORS.secondary }]}>
+                    Pedidos de Aprovação ({pendingRequests.length})
+                  </Text>
+                  {pendingRequests.map((req: any) => (
+                    <Card key={req.id} variant="default" style={{ padding: SPACING.md, marginBottom: SPACING.sm }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                          <Avatar source={req.user_avatar || undefined} name={req.user_name} size={40} />
+                          <View style={{ marginLeft: SPACING.sm, flex: 1 }}>
+                            <Text style={{ fontFamily: FONTS.family.heading, fontSize: FONTS.size.sm, color: COLORS.text, fontWeight: 'bold' }}>
+                              {req.user_name}
+                            </Text>
+                            <Text style={{ fontFamily: FONTS.family.body, fontSize: FONTS.size.xs, color: COLORS.textSecondary }}>
+                              Deseja entrar no desafio
+                            </Text>
+                          </View>
+                        </View>
+                        
+                        <View style={{ flexDirection: 'row', gap: SPACING.xs }}>
+                          <TouchableOpacity
+                            onPress={() => handleApproveChallengeRequest(req.id, true)}
+                            style={{
+                              backgroundColor: COLORS.secondary,
+                              paddingVertical: 6,
+                              paddingHorizontal: SPACING.sm,
+                              borderRadius: BORDER_RADIUS.sm,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <MaterialCommunityIcons name="check" size={14} color="#fff" style={{ marginRight: 2 }} />
+                            <Text style={{ color: '#fff', fontSize: FONTS.size.xs, fontFamily: FONTS.family.heading, fontWeight: 'bold' }}>
+                              Aprovar
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handleApproveChallengeRequest(req.id, false)}
+                            style={{
+                              backgroundColor: 'rgba(255, 78, 80, 0.1)',
+                              borderWidth: 1,
+                              borderColor: '#ff4e50',
+                              paddingVertical: 6,
+                              paddingHorizontal: SPACING.sm,
+                              borderRadius: BORDER_RADIUS.sm,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <MaterialCommunityIcons name="close" size={14} color="#ff4e50" style={{ marginRight: 2 }} />
+                            <Text style={{ color: '#ff4e50', fontSize: FONTS.size.xs, fontFamily: FONTS.family.heading, fontWeight: 'bold' }}>
+                              Recusar
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </Card>
+                  ))}
+                </View>
+              );
+            }
+            return null;
+          })()}
 
           {/* PROGRESSO DO ROUND ATUAL */}
           <View style={styles.section}>
