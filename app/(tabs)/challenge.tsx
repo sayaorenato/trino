@@ -48,6 +48,9 @@ export default function ChallengeScreen() {
   // Estados de controle de acesso a desafios
   const [hasNoAccess, setHasNoAccess] = useState(false);
   const [hasNoChallenges, setHasNoChallenges] = useState(false);
+  
+  // Estado para armazenar o ranking dinâmico
+  const [rankingData, setRankingData] = useState<RankingMember[]>([]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -118,6 +121,19 @@ export default function ChallengeScreen() {
           setUserRole(mockGroup.role || 'member');
           setRounds(MOCK_ROUNDS[targetChallengeId!] || []);
           setExtraTasks((MOCK_EXTRA_TASKS[targetChallengeId!] || []).filter((t: ExtraTask) => t.active !== false));
+          
+          // Carrega o ranking do Mock
+          const mRank = MOCK_RANKINGS[targetChallengeId!] || [
+            {
+              user_id: user.id,
+              name: user.email?.split('@')[0] || 'Renato Mello',
+              avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+              points: 0,
+              streak: 12,
+              rounds_won: 0
+            }
+          ];
+          setRankingData(mRank);
           setLoading(false);
         } else {
           supabase
@@ -161,6 +177,50 @@ export default function ChallengeScreen() {
 
                 const activeRound = roundsWithStatus.find((r: any) => r.status === 'active') || roundsWithStatus[0];
                 const roundId = activeRound?.id || null;
+
+                // --- CALCULO DINÂMICO DO RANKING REAL DO BANCO ---
+                try {
+                  const members = await api.getGroupMembers(data.group_id);
+                  const roundIds = sortedRounds.map((r: any) => r.id);
+                  
+                  let dbCheckins: any[] = [];
+                  if (roundIds.length > 0) {
+                    const { data: cData } = await supabase
+                      .from('checkins')
+                      .select('user_id, note, type')
+                      .in('round_id', roundIds);
+                    dbCheckins = cData || [];
+                  }
+
+                  // Mapeia pontuação de cada membro
+                  const calculatedRanking: RankingMember[] = members.map((m: any) => {
+                    const userCheckins = dbCheckins.filter((c: any) => c.user_id === m.user_id);
+                    
+                    let points = 0;
+                    userCheckins.forEach((c: any) => {
+                      if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
+                        // Pontos de tarefas extras (calculamos 30 pts padrão)
+                        points += 30;
+                      } else {
+                        // 10 pts por hábito diário concluído
+                        points += 10;
+                      }
+                    });
+
+                    return {
+                      user_id: m.user_id,
+                      name: m.full_name || 'Participante',
+                      avatar_url: m.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+                      points: points,
+                      streak: m.user_id === user.id ? 12 : 5, // streak simulada
+                      rounds_won: 0
+                    };
+                  });
+
+                  setRankingData(calculatedRanking);
+                } catch (rankErr) {
+                  console.error('Erro ao calcular ranking real:', rankErr);
+                }
 
                 // Carregar tarefas extras do Supabase
                 supabase
@@ -271,7 +331,6 @@ export default function ChallengeScreen() {
     );
   }
 
-  const rankingData = MOCK_RANKINGS[challenge.id] || [];
   const sortedRanking = [...rankingData]
     .sort((a, b) => b.points - a.points)
     .map((member, index) => ({ ...member, position: index + 1 }));
@@ -477,7 +536,7 @@ export default function ChallengeScreen() {
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.headerActionButton}
-              onPress={() => router.push('/ranking')}
+              onPress={() => router.push({ pathname: '/ranking', params: { challengeId: challenge.id } })}
             >
               <MaterialCommunityIcons name="podium" size={20} color={COLORS.secondary} />
             </TouchableOpacity>

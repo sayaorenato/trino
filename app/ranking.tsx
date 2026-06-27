@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -6,21 +6,100 @@ import {
   ScrollView, 
   TouchableOpacity, 
   SafeAreaView, 
-  Platform
+  Platform,
+  ActivityIndicator
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from '../components/ui/Card';
 import { Avatar } from '../components/ui/Avatar';
 import { WebContainer } from '../components/ui/WebContainer';
-import { MOCK_RANKINGS, RankingMember } from '../constants/mock-data';
+import { MOCK_RANKINGS, MOCK_GROUPS, MOCK_CHALLENGES, MOCK_ROUNDS, RankingMember } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
+import { useAuth } from '../context/auth';
+import { api } from '../lib/api';
+import { supabase } from '../lib/supabase';
 
 export default function RankingScreen() {
   const router = useRouter();
-  
-  // Usando o ranking do desafio 1 (Fé em Constância)
-  const rankingData: RankingMember[] = MOCK_RANKINGS['chal_1'] || [];
+  const { challengeId } = useLocalSearchParams<{ challengeId?: string }>();
+  const { user } = useAuth();
+
+  const [rankingData, setRankingData] = useState<RankingMember[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const targetChalId = challengeId || 'chal_1';
+
+  useEffect(() => {
+    async function loadRanking() {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+
+      const isMock = targetChalId.startsWith('chal');
+      if (isMock) {
+        const mRank = MOCK_RANKINGS[targetChalId] || [];
+        setRankingData(mRank);
+        setLoading(false);
+      } else {
+        try {
+          // 1. Buscar o desafio para obter o groupId
+          const { data: chalData } = await supabase
+            .from('challenges')
+            .select('*, rounds(*)')
+            .eq('id', targetChalId)
+            .maybeSingle();
+
+          if (chalData) {
+            // 2. Buscar membros do grupo
+            const members = await api.getGroupMembers(chalData.group_id);
+            const roundIds = (chalData.rounds || []).map((r: any) => r.id);
+
+            let dbCheckins: any[] = [];
+            if (roundIds.length > 0) {
+              const { data: cData } = await supabase
+                .from('checkins')
+                .select('user_id, note')
+                .in('round_id', roundIds);
+              dbCheckins = cData || [];
+            }
+
+            // 3. Calcular pontos reais (10 pts por check-in diário e 30 pts por tarefa extra)
+            const calculatedRanking: RankingMember[] = members.map((m: any) => {
+              const userCheckins = dbCheckins.filter((c: any) => c.user_id === m.user_id);
+              
+              let points = 0;
+              userCheckins.forEach((c: any) => {
+                if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
+                  points += 30;
+                } else {
+                  points += 10;
+                }
+              });
+
+              return {
+                user_id: m.user_id,
+                name: m.full_name || 'Participante',
+                avatar_url: m.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+                points: points,
+                streak: m.user_id === user.id ? 12 : 5, // streak simulada
+                rounds_won: 0
+              };
+            });
+
+            setRankingData(calculatedRanking);
+          }
+        } catch (e) {
+          console.error('Erro ao buscar ranking dinâmico no Supabase:', e);
+        } finally {
+          setLoading(false);
+        }
+      }
+    }
+    loadRanking();
+  }, [targetChalId, user]);
 
   // Mapear posições de acordo com os pontos
   const sortedRanking = [...rankingData]
@@ -35,6 +114,16 @@ export default function RankingScreen() {
   const top2 = sortedRanking.find(m => m.position === 2);
   const top3 = sortedRanking.find(m => m.position === 3);
   const remainder = sortedRanking.filter(m => m.position > 3);
+
+  if (loading) {
+    return (
+      <WebContainer>
+        <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color={COLORS.secondary} />
+        </SafeAreaView>
+      </WebContainer>
+    );
+  }
 
   return (
     <WebContainer>
