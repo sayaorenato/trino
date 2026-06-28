@@ -26,6 +26,7 @@ import {
   MOCK_EXTRA_TASKS, 
   MOCK_RANKINGS,
   CHALLENGE_REQUESTS,
+  MOCK_CHALLENGE_INVITATIONS,
   ExtraTask,
   RankingMember
 } from '../../constants/mock-data';
@@ -333,6 +334,20 @@ export default function ChallengeScreen() {
     
     // Dispara recálculo do ranking e re-render
     setReqTrigger(prev => prev + 1);
+  };
+
+  const handleCancelInvitation = (inviteId: string) => {
+    const idx = MOCK_CHALLENGE_INVITATIONS.findIndex((inv: any) => inv.id === inviteId);
+    if (idx !== -1) {
+      const invite = MOCK_CHALLENGE_INVITATIONS[idx];
+      MOCK_CHALLENGE_INVITATIONS.splice(idx, 1);
+      if (Platform.OS === 'web') {
+        window.alert(`Convite para o participante cancelado.`);
+      } else {
+        Alert.alert('Sucesso', 'Convite de desafio cancelado com sucesso.');
+      }
+      setReqTrigger(prev => prev + 1);
+    }
   };
 
   if (loading) {
@@ -683,6 +698,65 @@ export default function ChallengeScreen() {
                             </Text>
                           </TouchableOpacity>
                         </View>
+                      </View>
+                    </Card>
+                  ))}
+                </View>
+              );
+            }
+            return null;
+          })()}
+
+          {/* CONVITES ENVIADOS PENDENTES (VISÍVEL APENAS PARA ADMIN) */}
+          {(() => {
+            const pendingInvitations = MOCK_CHALLENGE_INVITATIONS.filter(
+              (inv: any) => inv.challenge_id === challenge.id && inv.status === 'pending'
+            );
+            if (userRole === 'admin' && pendingInvitations.length > 0) {
+              return (
+                <View style={[styles.section, { marginBottom: SPACING.sm }]}>
+                  <Text style={[styles.sectionTitle, { color: COLORS.goldDark }]}>
+                    Convites Pendentes de Aceite ({pendingInvitations.length})
+                  </Text>
+                  {pendingInvitations.map((inv: any) => (
+                    <Card key={inv.id} variant="default" style={{ padding: SPACING.md, marginBottom: SPACING.sm }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                          <View style={{
+                            width: 40, height: 40, borderRadius: 20, 
+                            backgroundColor: COLORS.goldMuted, 
+                            justifyContent: 'center', alignItems: 'center'
+                          }}>
+                            <MaterialCommunityIcons name="email-outline" size={20} color={COLORS.gold} />
+                          </View>
+                          <View style={{ marginLeft: SPACING.sm, flex: 1 }}>
+                            <Text style={{ fontFamily: FONTS.family.heading, fontSize: FONTS.size.sm, color: COLORS.text, fontWeight: 'bold' }}>
+                              {inv.invited_email || 'Convidado'}
+                            </Text>
+                            <Text style={{ fontFamily: FONTS.family.body, fontSize: FONTS.size.xs, color: COLORS.textSecondary }}>
+                              Aguardando confirmação do participante...
+                            </Text>
+                          </View>
+                        </View>
+
+                        <TouchableOpacity
+                          onPress={() => handleCancelInvitation(inv.id)}
+                          style={{
+                            backgroundColor: 'rgba(255, 78, 80, 0.1)',
+                            borderWidth: 1,
+                            borderColor: '#ff4e50',
+                            paddingVertical: 6,
+                            paddingHorizontal: SPACING.sm,
+                            borderRadius: BORDER_RADIUS.sm,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <MaterialCommunityIcons name="trash-can-outline" size={14} color="#ff4e50" style={{ marginRight: 2 }} />
+                          <Text style={{ color: '#ff4e50', fontSize: FONTS.size.xs, fontFamily: FONTS.family.heading, fontWeight: 'bold' }}>
+                            Cancelar
+                          </Text>
+                        </TouchableOpacity>
                       </View>
                     </Card>
                   ))}
