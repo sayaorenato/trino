@@ -800,14 +800,14 @@ export default function DashboardScreen() {
                   <MaterialCommunityIcons name="check-decagram-outline" size={24} color={COLORS.textLight} />
                   <Text style={styles.noChallengesText}>Nenhum check-in disponível no momento</Text>
                 </Card>
-              ) : allActiveChallenges.length === 0 ? (
+              ) : myActiveChallenges.length === 0 ? (
                 <Card variant="flat" style={styles.noChallengesCard}>
                   <MaterialCommunityIcons name="trophy-outline" size={24} color={COLORS.textLight} />
                   <Text style={styles.noChallengesText}>Nenhum desafio ativo para check-in</Text>
                 </Card>
               ) : (
                 <View style={styles.compactChallengesContainer}>
-                  {allActiveChallenges.map((item: any, index: number) => {
+                  {myActiveChallenges.map((item: any, index: number) => {
                     const challenge = item.challenge;
                     
                     const prayerDone = isHabitDone(item, 'prayer');
@@ -819,7 +819,7 @@ export default function DashboardScreen() {
                         key={challenge.id}
                         style={[
                           styles.compactChallengeItem,
-                          index === allActiveChallenges.length - 1 && { borderBottomWidth: 0 },
+                          index === myActiveChallenges.length - 1 && { borderBottomWidth: 0 },
                           { flexDirection: 'column', alignItems: 'stretch' }
                         ]}
                       >
