@@ -731,7 +731,7 @@ export default function ChallengeScreen() {
                           </View>
                           <View style={{ marginLeft: SPACING.sm, flex: 1 }}>
                             <Text style={{ fontFamily: FONTS.family.heading, fontSize: FONTS.size.sm, color: COLORS.text, fontWeight: 'bold' }}>
-                              {inv.invited_email || 'Convidado'}
+                              {inv.invited_user_name || 'Convidado'}
                             </Text>
                             <Text style={{ fontFamily: FONTS.family.body, fontSize: FONTS.size.xs, color: COLORS.textSecondary }}>
                               Aguardando confirmação do participante...
