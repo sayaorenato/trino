@@ -20,6 +20,8 @@ export interface Group {
 
 export let USER_MOCK_GROUPS: any[] = [];
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export interface ChallengeRequest {
   id: string;
   challenge_id: string;
@@ -32,6 +34,26 @@ export interface ChallengeRequest {
 }
 
 export let CHALLENGE_REQUESTS: ChallengeRequest[] = [];
+
+export async function loadPersistedMockData() {
+  try {
+    const reqs = await AsyncStorage.getItem('TRINO_CHALLENGE_REQUESTS');
+    if (reqs) {
+      CHALLENGE_REQUESTS.length = 0;
+      CHALLENGE_REQUESTS.push(...JSON.parse(reqs));
+    }
+  } catch (e) {
+    console.error('Erro ao ler mock data do AsyncStorage:', e);
+  }
+}
+
+export async function savePersistedMockData() {
+  try {
+    await AsyncStorage.setItem('TRINO_CHALLENGE_REQUESTS', JSON.stringify(CHALLENGE_REQUESTS));
+  } catch (e) {
+    console.error('Erro ao salvar mock data no AsyncStorage:', e);
+  }
+}
 
 export function clearMockSession() {
   USER_MOCK_GROUPS.length = 0;

@@ -20,7 +20,7 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
-import { MOCK_RANKINGS, CHALLENGE_REQUESTS } from '../constants/mock-data';
+import { MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 interface GroupMember {
@@ -57,23 +57,28 @@ export default function GroupDashboardScreen() {
       if (!user || !groupId) return;
       setLoading(true);
 
-      Promise.all([
-        // Buscar grupo
-        supabase.from('groups').select('*').eq('id', groupId).single(),
-        // Buscar role do usuário
-        supabase.from('group_members').select('role').eq('group_id', groupId).eq('user_id', user.id).single(),
-        // Buscar desafios
-        api.getGroupChallenges(groupId),
-        // Buscar membros (só para contagem)
-        api.getGroupMembers(groupId),
-      ]).then(([groupRes, roleRes, challengesData, membersData]) => {
-        if (groupRes.data) setGroup(groupRes.data);
-        if (roleRes.data) setUserRole(roleRes.data.role as 'admin' | 'member');
-        setChallenges(challengesData);
-        setMemberCount(membersData.length);
-        setLoading(false);
-      });
-    }, [user, groupId])
+      const loadData = async () => {
+        await loadPersistedMockData();
+
+        Promise.all([
+          // Buscar grupo
+          supabase.from('groups').select('*').eq('id', groupId).single(),
+          // Buscar role do usuário
+          supabase.from('group_members').select('role').eq('group_id', groupId).eq('user_id', user.id).single(),
+          // Buscar desafios
+          api.getGroupChallenges(groupId),
+          // Buscar membros (só para contagem)
+          api.getGroupMembers(groupId),
+        ]).then(([groupRes, roleRes, challengesData, membersData]) => {
+          if (groupRes.data) setGroup(groupRes.data);
+          if (roleRes.data) setUserRole(roleRes.data.role as 'admin' | 'member');
+          setChallenges(challengesData);
+          setMemberCount(membersData.length);
+          setLoading(false);
+        });
+      };
+      loadData();
+    }, [user, groupId, requestTrigger])
   );
 
   if (loading) {
@@ -165,6 +170,7 @@ export default function GroupDashboardScreen() {
     };
 
     CHALLENGE_REQUESTS.push(newRequest);
+    await savePersistedMockData();
     showAlert('Solicitação Enviada', `Sua solicitação para entrar no desafio "${challengeName}" foi enviada. Aguarde a liberação do administrador!`);
     setRequestTrigger(prev => prev + 1);
   };

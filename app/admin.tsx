@@ -20,7 +20,7 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
-import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS } from '../constants/mock-data';
+import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 function formatDateForInput(isoDateStr: string): string {
@@ -59,12 +59,12 @@ export default function AdminScreen() {
   const [members, setMembers] = useState<any[]>([]);
   const [tasks, setTasks] = useState<ExtraTask[]>([]);
 
-  // Abas do painel: 'group' | 'tasks' | 'members' | 'challenges'
-  const [activeTab, setActiveTab] = useState<'group' | 'tasks' | 'members' | 'challenges'>('group');
+  // Abas do painel: 'group' | 'tasks' | 'members' | 'challenges' | 'approvals'
+  const [activeTab, setActiveTab] = useState<'group' | 'tasks' | 'members' | 'challenges' | 'approvals'>('group');
 
   // Ajusta a aba padrão ao iniciar se for informada na URL
   useEffect(() => {
-    if (tab && ['group', 'tasks', 'members', 'challenges'].includes(tab)) {
+    if (tab && ['group', 'tasks', 'members', 'challenges', 'approvals'].includes(tab)) {
       setActiveTab(tab as any);
     }
   }, [tab]);
@@ -106,6 +106,7 @@ export default function AdminScreen() {
     const loadAdminGroups = async () => {
       try {
         setLoading(true);
+        await loadPersistedMockData();
         const { data: memberData, error: memberError } = await supabase
           .from('group_members')
           .select('group_id, role, groups(*)')
@@ -773,7 +774,7 @@ export default function AdminScreen() {
   };
 
   const handleApproveRequest = (requestId: string, approve: boolean) => {
-    const request = CHALLENGE_REQUESTS.find(r => r.id === requestId);
+    const request = CHALLENGE_REQUESTS.find((r: any) => r.id === requestId);
     if (!request) return;
 
     if (approve) {
@@ -810,6 +811,9 @@ export default function AdminScreen() {
       }
     }
     
+    // Salvar no AsyncStorage
+    savePersistedMockData();
+
     // Forçar re-render da tela
     setMembers([...members]);
   };
@@ -1310,6 +1314,18 @@ export default function AdminScreen() {
               />
               <Text style={[styles.tabText, activeTab === 'challenges' && styles.tabTextActive]}>Desafios</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.tabItem, activeTab === 'approvals' && styles.tabItemActive]}
+              onPress={() => setActiveTab('approvals')}
+            >
+              <MaterialCommunityIcons 
+                name="clipboard-check-outline" 
+                size={18} 
+                color={activeTab === 'approvals' ? COLORS.secondary : COLORS.textLight} 
+              />
+              <Text style={[styles.tabText, activeTab === 'approvals' && styles.tabTextActive]}>Aprovações</Text>
+            </TouchableOpacity>
           </View>
 
           {loadingGroupDetails ? (
@@ -1589,6 +1605,62 @@ export default function AdminScreen() {
                   )}
                 </View>
               )}
+
+              {/* ABA: GERENCIAR SOLICITAÇÕES DE LIBERAÇÃO (APROVAÇÕES) */}
+              {activeTab === 'approvals' && (() => {
+                const pendingRequests = CHALLENGE_REQUESTS.filter(
+                  r => r.group_id === selectedGroupId && r.status === 'pending'
+                );
+                return (
+                  <View style={styles.listSection}>
+                    <Text style={styles.sectionTitle}>Pedidos de Liberação de Desafios</Text>
+                    <Text style={styles.emptyTabSubtitle}>
+                      Gerencie as solicitações enviadas pelos participantes para ingressar nos desafios deste grupo.
+                    </Text>
+
+                    {pendingRequests.length === 0 ? (
+                      <Card variant="flat" style={styles.emptyTabCard}>
+                        <MaterialCommunityIcons name="clipboard-check-outline" size={32} color={COLORS.textLight} style={{ marginBottom: SPACING.xs }} />
+                        <Text style={styles.emptyTabTitle}>Nenhum Pedido Pendente</Text>
+                        <Text style={styles.emptyTabSubtitle}>
+                          Não há novas solicitações de liberação para participação dos desafios deste grupo no momento.
+                        </Text>
+                      </Card>
+                    ) : (
+                      <View style={{ gap: SPACING.md }}>
+                        {pendingRequests.map(request => (
+                          <Card key={request.id} variant="default" style={styles.requestCard}>
+                            <View style={styles.requestCardHeader}>
+                              <Avatar source={request.user_avatar || undefined} name={request.user_name} size={36} />
+                              <View style={{ marginLeft: SPACING.sm, flex: 1 }}>
+                                <Text style={styles.requestName} numberOfLines={1}>{request.user_name}</Text>
+                                <Text style={styles.requestHint}>Solicitou entrar no desafio:</Text>
+                                <Text style={styles.requestChallengeName} numberOfLines={1}>{request.challenge_name}</Text>
+                              </View>
+                            </View>
+                            <View style={styles.requestCardActions}>
+                              <TouchableOpacity
+                                style={[styles.btnActionApprove, { marginRight: SPACING.sm }]}
+                                onPress={() => handleApproveRequest(request.id, true)}
+                              >
+                                <MaterialCommunityIcons name="check" size={16} color="#fff" />
+                                <Text style={styles.btnActionApproveText}>Aprovar</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.btnActionDecline}
+                                onPress={() => handleApproveRequest(request.id, false)}
+                              >
+                                <MaterialCommunityIcons name="close" size={16} color={COLORS.textSecondary} />
+                                <Text style={styles.btnActionDeclineText}>Recusar</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </Card>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })()}
 
               {/* ABA: GERENCIAR PARTICIPANTES */}
               {activeTab === 'members' && (() => {

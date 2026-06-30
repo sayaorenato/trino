@@ -28,7 +28,9 @@ import {
   CHALLENGE_REQUESTS,
   MOCK_CHALLENGE_INVITATIONS,
   ExtraTask,
-  RankingMember
+  RankingMember,
+  loadPersistedMockData,
+  savePersistedMockData
 } from '../../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
 
@@ -56,6 +58,14 @@ export default function ChallengeScreen() {
 
   // Trigger para recarregar solicitações e ranking na aprovação
   const [reqTrigger, setReqTrigger] = useState(0);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadPersistedMockData().then(() => {
+        setReqTrigger(prev => prev + 1);
+      });
+    }, [])
+  );
 
   useFocusEffect(
     React.useCallback(() => {
@@ -332,6 +342,9 @@ export default function ChallengeScreen() {
       }
     }
     
+    // Salva no AsyncStorage
+    savePersistedMockData();
+
     // Dispara recálculo do ranking e re-render
     setReqTrigger(prev => prev + 1);
   };
