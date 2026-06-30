@@ -1672,50 +1672,8 @@ export default function AdminScreen() {
 
               {/* ABA: GERENCIAR PARTICIPANTES */}
               {activeTab === 'members' && (() => {
-                const pendingRequests = challengeRequests.filter(
-                  r => r.group_id === selectedGroupId && r.status === 'pending'
-                );
                 return (
                   <View style={styles.listSection}>
-                    {/* Solicitações de Entrada em Desafios */}
-                    {pendingRequests.length > 0 && (
-                      <View style={{ marginBottom: SPACING.lg }}>
-                        <Text style={[styles.sectionTitle, { color: COLORS.secondary }]}>
-                          Solicitações de Entrada em Desafios ({pendingRequests.length})
-                        </Text>
-                        <View style={{ gap: SPACING.md }}>
-                          {pendingRequests.map(request => (
-                            <Card key={request.id} variant="default" style={styles.requestCard}>
-                              <View style={styles.requestCardHeader}>
-                                <Avatar source={request.user_avatar || undefined} name={request.user_name} size={36} />
-                                <View style={{ marginLeft: SPACING.sm, flex: 1 }}>
-                                  <Text style={styles.requestName} numberOfLines={1}>{request.user_name}</Text>
-                                  <Text style={styles.requestHint}>Solicitou entrar no desafio:</Text>
-                                  <Text style={styles.requestChallengeName} numberOfLines={1}>{request.challenge_name}</Text>
-                                </View>
-                              </View>
-                              <View style={styles.requestCardActions}>
-                                <TouchableOpacity
-                                  style={[styles.btnActionApprove, { marginRight: SPACING.sm }]}
-                                  onPress={() => handleApproveRequest(request.id, true)}
-                                >
-                                  <MaterialCommunityIcons name="check" size={16} color="#fff" />
-                                  <Text style={styles.btnActionApproveText}>Aprovar</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  style={styles.btnActionDecline}
-                                  onPress={() => handleApproveRequest(request.id, false)}
-                                >
-                                  <MaterialCommunityIcons name="close" size={16} color={COLORS.textSecondary} />
-                                  <Text style={styles.btnActionDeclineText}>Recusar</Text>
-                                </TouchableOpacity>
-                              </View>
-                            </Card>
-                          ))}
-                        </View>
-                      </View>
-                    )}
-
                     <Text style={styles.sectionTitle}>Participantes do Grupo ({members.length})</Text>
                   
                   {members.length === 0 ? (
