@@ -20,7 +20,7 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
-import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData } from '../constants/mock-data';
+import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 function formatDateForInput(isoDateStr: string): string {
@@ -58,6 +58,7 @@ export default function AdminScreen() {
   
   const [members, setMembers] = useState<any[]>([]);
   const [tasks, setTasks] = useState<ExtraTask[]>([]);
+  const [challengeRequests, setChallengeRequests] = useState<ChallengeRequest[]>([]);
 
   // Abas do painel: 'group' | 'tasks' | 'members' | 'challenges' | 'approvals'
   const [activeTab, setActiveTab] = useState<'group' | 'tasks' | 'members' | 'challenges' | 'approvals'>('group');
@@ -106,7 +107,8 @@ export default function AdminScreen() {
     const loadAdminGroups = async () => {
       try {
         setLoading(true);
-        await loadPersistedMockData();
+        const reqs = await getChallengeRequests();
+        setChallengeRequests(reqs);
         const { data: memberData, error: memberError } = await supabase
           .from('group_members')
           .select('group_id, role, groups(*)')
@@ -773,24 +775,29 @@ export default function AdminScreen() {
     );
   };
 
-  const handleApproveRequest = (requestId: string, approve: boolean) => {
-    const request = CHALLENGE_REQUESTS.find((r: any) => r.id === requestId);
-    if (!request) return;
+  const handleApproveRequest = async (requestId: string, approve: boolean) => {
+    const updatedRequests = challengeRequests.map((r: any) => {
+      if (r.id === requestId) {
+        return { ...r, status: approve ? 'approved' : 'declined' };
+      }
+      return r;
+    });
+
+    const targetRequest = challengeRequests.find((r: any) => r.id === requestId);
+    if (!targetRequest) return;
 
     if (approve) {
-      request.status = 'approved';
-      
       // Adicionar o participante no MOCK_RANKINGS do desafio
-      if (!MOCK_RANKINGS[request.challenge_id]) {
-        MOCK_RANKINGS[request.challenge_id] = [];
+      if (!MOCK_RANKINGS[targetRequest.challenge_id]) {
+        MOCK_RANKINGS[targetRequest.challenge_id] = [];
       }
       
-      const alreadyInRank = MOCK_RANKINGS[request.challenge_id].some(m => m.user_id === request.user_id);
+      const alreadyInRank = MOCK_RANKINGS[targetRequest.challenge_id].some(m => m.user_id === targetRequest.user_id);
       if (!alreadyInRank) {
-        MOCK_RANKINGS[request.challenge_id].push({
-          user_id: request.user_id,
-          name: request.user_name,
-          avatar_url: request.user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+        MOCK_RANKINGS[targetRequest.challenge_id].push({
+          user_id: targetRequest.user_id,
+          name: targetRequest.user_name,
+          avatar_url: targetRequest.user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
           points: 0,
           streak: 0,
           rounds_won: 0
@@ -798,21 +805,20 @@ export default function AdminScreen() {
       }
       
       if (Platform.OS === 'web') {
-        window.alert(`Solicitação de ${request.user_name} aprovada! Ele agora participa do desafio.`);
+        window.alert(`Solicitação de ${targetRequest.user_name} aprovada! Ele agora participa do desafio.`);
       } else {
-        Alert.alert('Sucesso', `Solicitação de ${request.user_name} aprovada! Ele agora participa do desafio.`);
+        Alert.alert('Sucesso', `Solicitação de ${targetRequest.user_name} aprovada! Ele agora participa do desafio.`);
       }
     } else {
-      request.status = 'declined';
       if (Platform.OS === 'web') {
-        window.alert(`Solicitação de ${request.user_name} recusada.`);
+        window.alert(`Solicitação de ${targetRequest.user_name} recusada.`);
       } else {
-        Alert.alert('Sucesso', `Solicitação de ${request.user_name} recusada.`);
+        Alert.alert('Sucesso', `Solicitação de ${targetRequest.user_name} recusada.`);
       }
     }
     
-    // Salvar no AsyncStorage
-    savePersistedMockData();
+    setChallengeRequests(updatedRequests);
+    await saveChallengeRequests(updatedRequests);
 
     // Forçar re-render da tela
     setMembers([...members]);
@@ -1608,7 +1614,7 @@ export default function AdminScreen() {
 
               {/* ABA: GERENCIAR SOLICITAÇÕES DE LIBERAÇÃO (APROVAÇÕES) */}
               {activeTab === 'approvals' && (() => {
-                const pendingRequests = CHALLENGE_REQUESTS.filter(
+                const pendingRequests = challengeRequests.filter(
                   r => r.group_id === selectedGroupId && r.status === 'pending'
                 );
                 return (
@@ -1664,7 +1670,7 @@ export default function AdminScreen() {
 
               {/* ABA: GERENCIAR PARTICIPANTES */}
               {activeTab === 'members' && (() => {
-                const pendingRequests = CHALLENGE_REQUESTS.filter(
+                const pendingRequests = challengeRequests.filter(
                   r => r.group_id === selectedGroupId && r.status === 'pending'
                 );
                 return (

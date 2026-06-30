@@ -30,7 +30,10 @@ import {
   ExtraTask,
   RankingMember,
   loadPersistedMockData,
-  savePersistedMockData
+  savePersistedMockData,
+  getChallengeRequests,
+  saveChallengeRequests,
+  ChallengeRequest
 } from '../../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
 
@@ -58,10 +61,12 @@ export default function ChallengeScreen() {
 
   // Trigger para recarregar solicitações e ranking na aprovação
   const [reqTrigger, setReqTrigger] = useState(0);
+  const [challengeRequests, setChallengeRequests] = useState<ChallengeRequest[]>([]);
 
   useFocusEffect(
     React.useCallback(() => {
-      loadPersistedMockData().then(() => {
+      getChallengeRequests().then((reqs) => {
+        setChallengeRequests(reqs);
         setReqTrigger(prev => prev + 1);
       });
     }, [])
@@ -305,23 +310,28 @@ export default function ChallengeScreen() {
     }, [challengeId, user, reqTrigger])
   );
 
-  const handleApproveChallengeRequest = (requestId: string, approve: boolean) => {
-    const request = CHALLENGE_REQUESTS.find((r: any) => r.id === requestId);
-    if (!request) return;
+  const handleApproveChallengeRequest = async (requestId: string, approve: boolean) => {
+    const updatedRequests = challengeRequests.map((r: any) => {
+      if (r.id === requestId) {
+        return { ...r, status: approve ? 'approved' : 'declined' };
+      }
+      return r;
+    });
+
+    const targetRequest = challengeRequests.find((r: any) => r.id === requestId);
+    if (!targetRequest) return;
 
     if (approve) {
-      request.status = 'approved';
-      
-      if (!MOCK_RANKINGS[request.challenge_id]) {
-        MOCK_RANKINGS[request.challenge_id] = [];
+      if (!MOCK_RANKINGS[targetRequest.challenge_id]) {
+        MOCK_RANKINGS[targetRequest.challenge_id] = [];
       }
       
-      const alreadyInRank = MOCK_RANKINGS[request.challenge_id].some(m => m.user_id === request.user_id);
+      const alreadyInRank = MOCK_RANKINGS[targetRequest.challenge_id].some(m => m.user_id === targetRequest.user_id);
       if (!alreadyInRank) {
-        MOCK_RANKINGS[request.challenge_id].push({
-          user_id: request.user_id,
-          name: request.user_name,
-          avatar_url: request.user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+        MOCK_RANKINGS[targetRequest.challenge_id].push({
+          user_id: targetRequest.user_id,
+          name: targetRequest.user_name,
+          avatar_url: targetRequest.user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
           points: 0,
           streak: 0,
           rounds_won: 0
@@ -329,12 +339,11 @@ export default function ChallengeScreen() {
       }
       
       if (Platform.OS === 'web') {
-        window.alert(`${request.user_name} foi adicionado ao desafio.`);
+        window.alert(`${targetRequest.user_name} foi adicionado ao desafio.`);
       } else {
-        Alert.alert('Sucesso', `${request.user_name} agora faz parte do desafio!`);
+        Alert.alert('Sucesso', `${targetRequest.user_name} agora faz parte do desafio!`);
       }
     } else {
-      request.status = 'declined';
       if (Platform.OS === 'web') {
         window.alert('Solicitação recusada.');
       } else {
@@ -342,8 +351,8 @@ export default function ChallengeScreen() {
       }
     }
     
-    // Salva no AsyncStorage
-    savePersistedMockData();
+    setChallengeRequests(updatedRequests);
+    await saveChallengeRequests(updatedRequests);
 
     // Dispara recálculo do ranking e re-render
     setReqTrigger(prev => prev + 1);
@@ -651,7 +660,7 @@ export default function ChallengeScreen() {
 
           {/* SOLICITAÇÕES PENDENTES DO DESAFIO (VISÍVEL APENAS PARA ADMIN) */}
           {(() => {
-            const pendingRequests = CHALLENGE_REQUESTS.filter(
+            const pendingRequests = challengeRequests.filter(
               (r: any) => r.challenge_id === challenge.id && r.status === 'pending'
             );
             if (userRole === 'admin' && pendingRequests.length > 0) {

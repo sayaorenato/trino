@@ -20,7 +20,7 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
-import { MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData } from '../constants/mock-data';
+import { MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 interface GroupMember {
@@ -51,6 +51,7 @@ export default function GroupDashboardScreen() {
   const [challenges, setChallenges] = useState<any[]>([]);
   const [memberCount, setMemberCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [challengeRequests, setChallengeRequests] = useState<ChallengeRequest[]>([]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -58,7 +59,8 @@ export default function GroupDashboardScreen() {
       setLoading(true);
 
       const loadData = async () => {
-        await loadPersistedMockData();
+        const reqs = await getChallengeRequests();
+        setChallengeRequests(reqs);
 
         Promise.all([
           // Buscar grupo
@@ -148,7 +150,7 @@ export default function GroupDashboardScreen() {
     }
 
     // Verificar se já existe uma solicitação pendente
-    const hasPending = CHALLENGE_REQUESTS.some(
+    const hasPending = challengeRequests.some(
       r => r.challenge_id === challengeId && r.user_id === user.id && r.status === 'pending'
     );
 
@@ -169,8 +171,9 @@ export default function GroupDashboardScreen() {
       status: 'pending' as const
     };
 
-    CHALLENGE_REQUESTS.push(newRequest);
-    await savePersistedMockData();
+    const updated = [...challengeRequests, newRequest];
+    setChallengeRequests(updated);
+    await saveChallengeRequests(updated);
     showAlert('Solicitação Enviada', `Sua solicitação para entrar no desafio "${challengeName}" foi enviada. Aguarde a liberação do administrador!`);
     setRequestTrigger(prev => prev + 1);
   };
@@ -206,7 +209,7 @@ export default function GroupDashboardScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Alerta de solicitações pendentes para o Admin */}
           {(() => {
-            const pendingRequestsCount = CHALLENGE_REQUESTS.filter(
+            const pendingRequestsCount = challengeRequests.filter(
               (r: any) => r.group_id === group.id && r.status === 'pending'
             ).length;
             if (isAdmin && pendingRequestsCount > 0) {
@@ -390,7 +393,7 @@ export default function GroupDashboardScreen() {
               <Text style={styles.sectionTitle}>Desafios Disponíveis</Text>
               <View style={{ gap: SPACING.md }}>
                 {availableChallenges.map(challenge => {
-                  const isPending = CHALLENGE_REQUESTS.some(
+                  const isPending = challengeRequests.some(
                     r => r.challenge_id === challenge.id && r.user_id === user?.id && r.status === 'pending'
                   );
 

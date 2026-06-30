@@ -35,24 +35,33 @@ export interface ChallengeRequest {
 
 export let CHALLENGE_REQUESTS: ChallengeRequest[] = [];
 
-export async function loadPersistedMockData() {
+export async function getChallengeRequests(): Promise<ChallengeRequest[]> {
   try {
-    const reqs = await AsyncStorage.getItem('TRINO_CHALLENGE_REQUESTS');
-    if (reqs) {
-      CHALLENGE_REQUESTS.length = 0;
-      CHALLENGE_REQUESTS.push(...JSON.parse(reqs));
-    }
+    const data = await AsyncStorage.getItem('TRINO_CHALLENGE_REQUESTS');
+    const reqs = data ? JSON.parse(data) : [];
+    CHALLENGE_REQUESTS = reqs;
+    return reqs;
   } catch (e) {
     console.error('Erro ao ler mock data do AsyncStorage:', e);
+    return [];
   }
 }
 
-export async function savePersistedMockData() {
+export async function saveChallengeRequests(requests: ChallengeRequest[]): Promise<void> {
   try {
-    await AsyncStorage.setItem('TRINO_CHALLENGE_REQUESTS', JSON.stringify(CHALLENGE_REQUESTS));
+    CHALLENGE_REQUESTS = requests;
+    await AsyncStorage.setItem('TRINO_CHALLENGE_REQUESTS', JSON.stringify(requests));
   } catch (e) {
     console.error('Erro ao salvar mock data no AsyncStorage:', e);
   }
+}
+
+export async function loadPersistedMockData() {
+  await getChallengeRequests();
+}
+
+export async function savePersistedMockData() {
+  await saveChallengeRequests(CHALLENGE_REQUESTS);
 }
 
 export function clearMockSession() {
