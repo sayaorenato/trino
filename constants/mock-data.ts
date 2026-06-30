@@ -35,7 +35,6 @@ export let CHALLENGE_REQUESTS: ChallengeRequest[] = [];
 
 export function clearMockSession() {
   USER_MOCK_GROUPS.length = 0;
-  CHALLENGE_REQUESTS.length = 0;
 }
 
 export interface Challenge {
