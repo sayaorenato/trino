@@ -14,7 +14,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from '../components/ui/Card';
 import { Avatar } from '../components/ui/Avatar';
 import { WebContainer } from '../components/ui/WebContainer';
-import { MOCK_RANKINGS, MOCK_GROUPS, MOCK_CHALLENGES, MOCK_ROUNDS, RankingMember } from '../constants/mock-data';
+import { MOCK_RANKINGS, MOCK_GROUPS, MOCK_CHALLENGES, MOCK_ROUNDS, RankingMember, getMockRankings } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
@@ -37,6 +37,7 @@ export default function RankingScreen() {
         return;
       }
       setLoading(true);
+      await getMockRankings();
 
       const isMock = targetChalId.startsWith('chal');
       if (isMock) {

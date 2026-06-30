@@ -33,7 +33,9 @@ import {
   savePersistedMockData,
   getChallengeRequests,
   saveChallengeRequests,
-  ChallengeRequest
+  ChallengeRequest,
+  getMockRankings,
+  saveMockRankings
 } from '../../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
 
@@ -65,8 +67,9 @@ export default function ChallengeScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      getChallengeRequests().then((reqs) => {
+      getChallengeRequests().then(async (reqs) => {
         setChallengeRequests(reqs);
+        await getMockRankings();
         setReqTrigger(prev => prev + 1);
       });
     }, [])
@@ -353,6 +356,7 @@ export default function ChallengeScreen() {
     
     setChallengeRequests(updatedRequests);
     await saveChallengeRequests(updatedRequests);
+    await saveMockRankings();
 
     // Dispara recálculo do ranking e re-render
     setReqTrigger(prev => prev + 1);

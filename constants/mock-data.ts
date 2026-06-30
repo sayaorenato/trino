@@ -35,11 +35,36 @@ export interface ChallengeRequest {
 
 export let CHALLENGE_REQUESTS: ChallengeRequest[] = [];
 
+export async function getMockRankings(): Promise<Record<string, RankingMember[]>> {
+  try {
+    const data = await AsyncStorage.getItem('TRINO_MOCK_RANKINGS');
+    if (data) {
+      const parsed = JSON.parse(data);
+      console.log('[MOCK_DATA] Rankings carregados do AsyncStorage para emulação:', Object.keys(parsed));
+      Object.assign(MOCK_RANKINGS, parsed);
+    }
+    return MOCK_RANKINGS;
+  } catch (e) {
+    console.error('Erro ao ler mock rankings:', e);
+    return MOCK_RANKINGS;
+  }
+}
+
+export async function saveMockRankings(): Promise<void> {
+  try {
+    console.log('[MOCK_DATA] Salvando rankings no AsyncStorage...');
+    await AsyncStorage.setItem('TRINO_MOCK_RANKINGS', JSON.stringify(MOCK_RANKINGS));
+  } catch (e) {
+    console.error('Erro ao salvar mock rankings:', e);
+  }
+}
+
 export async function getChallengeRequests(): Promise<ChallengeRequest[]> {
   try {
     const data = await AsyncStorage.getItem('TRINO_CHALLENGE_REQUESTS');
     const reqs = data ? JSON.parse(data) : [];
     CHALLENGE_REQUESTS = reqs;
+    console.log('[MOCK_DATA] getChallengeRequests carregado:', reqs.length, 'solicitações.');
     return reqs;
   } catch (e) {
     console.error('Erro ao ler mock data do AsyncStorage:', e);
@@ -50,6 +75,7 @@ export async function getChallengeRequests(): Promise<ChallengeRequest[]> {
 export async function saveChallengeRequests(requests: ChallengeRequest[]): Promise<void> {
   try {
     CHALLENGE_REQUESTS = requests;
+    console.log('[MOCK_DATA] saveChallengeRequests salvando:', requests.length, 'solicitações.');
     await AsyncStorage.setItem('TRINO_CHALLENGE_REQUESTS', JSON.stringify(requests));
   } catch (e) {
     console.error('Erro ao salvar mock data no AsyncStorage:', e);
@@ -58,10 +84,12 @@ export async function saveChallengeRequests(requests: ChallengeRequest[]): Promi
 
 export async function loadPersistedMockData() {
   await getChallengeRequests();
+  await getMockRankings();
 }
 
 export async function savePersistedMockData() {
   await saveChallengeRequests(CHALLENGE_REQUESTS);
+  await saveMockRankings();
 }
 
 export function clearMockSession() {

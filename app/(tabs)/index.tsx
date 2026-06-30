@@ -27,7 +27,7 @@ import { ProgressBar } from '../../components/ui/ProgressBar';
 import { Button } from '../../components/ui/Button';
 import { WebContainer } from '../../components/ui/WebContainer';
 import { SupportCard } from '../../components/SupportCard';
-import { HABIT_LABELS, HabitType, MOCK_RANKINGS, RankingMember, MOCK_CHALLENGE_INVITATIONS, MOCK_FEED, MOCK_EXTRA_TASKS, USER_MOCK_GROUPS } from '../../constants/mock-data';
+import { HABIT_LABELS, HabitType, MOCK_RANKINGS, RankingMember, MOCK_CHALLENGE_INVITATIONS, MOCK_FEED, MOCK_EXTRA_TASKS, USER_MOCK_GROUPS, getMockRankings, getChallengeRequests } from '../../constants/mock-data';
 import { COLORS, SPACING, FONTS, SHADOWS, BORDER_RADIUS, ANIMATION } from '../../constants/theme';
 
 const { width } = Dimensions.get('window');
@@ -488,18 +488,25 @@ export default function DashboardScreen() {
     React.useCallback(() => {
       if (!user) return;
       setLoading(true);
-      api.getDashboardData(user.id).then((data) => {
-        setGroups(data.groups);
-        setHabits(data.habits);
-        setTodayCheckins(data.todayCheckins || []);
-        setTasks(data.tasks || []);
-        setLoading(false);
-        
-        // Verificar se há convites pendentes na memória global
-        checkPendingInvite();
-        // Verificar se há convites para desafios
-        checkChallengeInvitations();
-      });
+
+      const loadAllData = async () => {
+        await getMockRankings();
+        await getChallengeRequests();
+
+        api.getDashboardData(user.id).then((data) => {
+          setGroups(data.groups);
+          setHabits(data.habits);
+          setTodayCheckins(data.todayCheckins || []);
+          setTasks(data.tasks || []);
+          setLoading(false);
+          
+          // Verificar se há convites pendentes na memória global
+          checkPendingInvite();
+          // Verificar se há convites para desafios
+          checkChallengeInvitations();
+        });
+      };
+      loadAllData();
     }, [user, checkPendingInvite, checkChallengeInvitations])
   );
 

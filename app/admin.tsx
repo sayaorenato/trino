@@ -20,7 +20,7 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
-import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest } from '../constants/mock-data';
+import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest, getMockRankings, saveMockRankings } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 function formatDateForInput(isoDateStr: string): string {
@@ -109,6 +109,7 @@ export default function AdminScreen() {
         setLoading(true);
         const reqs = await getChallengeRequests();
         setChallengeRequests(reqs);
+        await getMockRankings();
         const { data: memberData, error: memberError } = await supabase
           .from('group_members')
           .select('group_id, role, groups(*)')
@@ -819,6 +820,7 @@ export default function AdminScreen() {
     
     setChallengeRequests(updatedRequests);
     await saveChallengeRequests(updatedRequests);
+    await saveMockRankings();
 
     // Forçar re-render da tela
     setMembers([...members]);

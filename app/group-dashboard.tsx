@@ -20,7 +20,7 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
-import { MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest } from '../constants/mock-data';
+import { MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest, getMockRankings } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 interface GroupMember {
@@ -61,6 +61,7 @@ export default function GroupDashboardScreen() {
       const loadData = async () => {
         const reqs = await getChallengeRequests();
         setChallengeRequests(reqs);
+        await getMockRankings();
 
         Promise.all([
           // Buscar grupo
