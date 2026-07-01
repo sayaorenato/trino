@@ -62,8 +62,8 @@ export default function CheckinScreen() {
   const [loadingRound, setLoadingRound] = useState(true);
   const [challengeChosen, setChallengeChosen] = useState(false);
 
-  // Multi-grupo: IDs dos grupos selecionados para o check-in padrão
-  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
+  // Multi-grupo: IDs dos desafios selecionados para o check-in padrão
+  const [selectedChallengeIds, setSelectedChallengeIds] = useState<Set<string>>(new Set());
 
   // Hábitos diários concluídos hoje pelo usuário
   const [completedHabitsToday, setCompletedHabitsToday] = useState<{ prayer: boolean; bible: boolean; exercise: boolean }>({
@@ -86,26 +86,24 @@ export default function CheckinScreen() {
       groups.forEach((g: any) => {
         if (!g.challenges || !Array.isArray(g.challenges)) return;
 
-        // Para cada grupo, pega o desafio mais recente
-        const activeChallenge = g.challenges[0];
-        if (!activeChallenge) return;
-
         const isMockGroup = Boolean(g.id?.startsWith('group'));
 
-        list.push({
-          groupId: g.id,
-          groupName: g.name,
-          challengeId: activeChallenge.id,
-          // mocks usam 'name', o banco usa 'title'
-          challengeTitle: activeChallenge.title || activeChallenge.name || 'Desafio',
-          rounds: activeChallenge.rounds || [],
-          isMock: isMockGroup,
+        g.challenges.forEach((activeChallenge: any) => {
+          list.push({
+            groupId: g.id,
+            groupName: g.name,
+            challengeId: activeChallenge.id,
+            // mocks usam 'name', o banco usa 'title'
+            challengeTitle: activeChallenge.title || activeChallenge.name || 'Desafio',
+            rounds: activeChallenge.rounds || [],
+            isMock: isMockGroup,
+          });
         });
       });
 
       setActiveChallengesList(list);
-      // Pré-seleciona TODOS os grupos por padrão
-      setSelectedGroupIds(new Set(list.map((i: any) => i.groupId)));
+      // Pré-seleciona TODOS os desafios por padrão
+      setSelectedChallengeIds(new Set(list.map((i: any) => i.challengeId)));
       // Usa o primeiro item como contexto para tarefas extras
       setSelectedChallenge(list[0] ?? null);
 
@@ -385,8 +383,8 @@ export default function CheckinScreen() {
       return;
     }
 
-    // Para hábitos padrão multi-grupo, permitir mesmo sem activeRoundId se houver grupos selecionados
-    const isMultiGroup = !selectedTask && selectedGroupIds.size > 0;
+    // Para hábitos padrão multi-grupo, permitir mesmo sem activeRoundId se houver desafios selecionados
+    const isMultiGroup = !selectedTask && selectedChallengeIds.size > 0;
     if (!activeRoundId && !isMultiGroup) {
       Alert.alert('Sem Desafio Ativo', 'Você precisa participar de um grupo com desafio ativo para fazer check-in.');
       return;
@@ -457,8 +455,8 @@ export default function CheckinScreen() {
         }
       } else {
         // ── HÁBITO PADRÃO MULTI-GRUPO ──
-        // Determina os itens de desafio que correspondem aos grupos selecionados
-        const targetItems = activeChallengesList.filter(item => selectedGroupIds.has(item.groupId));
+        // Determina os itens de desafio que correspondem aos desafios selecionados
+        const targetItems = activeChallengesList.filter(item => selectedChallengeIds.has(item.challengeId));
 
         for (const item of targetItems) {
           const isMock = item.isMock === true;
@@ -580,18 +578,18 @@ export default function CheckinScreen() {
                       Selecione todos os grupos onde este hábito deve ser registrado:
                     </Text>
                     {activeChallengesList.map((item: any) => {
-                      const isSelected = selectedGroupIds.has(item.groupId);
+                      const isSelected = selectedChallengeIds.has(item.challengeId);
                       return (
                         <TouchableOpacity
-                          key={item.groupId}
+                          key={item.challengeId}
                           activeOpacity={0.8}
                           onPress={() => {
-                            setSelectedGroupIds(prev => {
+                            setSelectedChallengeIds(prev => {
                               const next = new Set(prev);
-                              if (next.has(item.groupId)) {
-                                next.delete(item.groupId);
+                              if (next.has(item.challengeId)) {
+                                next.delete(item.challengeId);
                               } else {
-                                next.add(item.groupId);
+                                next.add(item.challengeId);
                               }
                               return next;
                             });
@@ -640,8 +638,8 @@ export default function CheckinScreen() {
                       completedHabitsToday.prayer && styles.habitButtonCompleted
                     ]}
                     onPress={() => {
-                      if (selectedGroupIds.size === 0) {
-                        Alert.alert('Selecione um grupo', 'Selecione ao menos um grupo acima para registrar este hábito.');
+                      if (selectedChallengeIds.size === 0) {
+                        Alert.alert('Selecione um desafio', 'Selecione ao menos um desafio acima para registrar este hábito.');
                         return;
                       }
                       handleSelectHabit('prayer');
@@ -679,8 +677,8 @@ export default function CheckinScreen() {
                       completedHabitsToday.bible && styles.habitButtonCompleted
                     ]}
                     onPress={() => {
-                      if (selectedGroupIds.size === 0) {
-                        Alert.alert('Selecione um grupo', 'Selecione ao menos um grupo acima para registrar este hábito.');
+                      if (selectedChallengeIds.size === 0) {
+                        Alert.alert('Selecione um desafio', 'Selecione ao menos um desafio acima para registrar este hábito.');
                         return;
                       }
                       handleSelectHabit('bible');
@@ -718,8 +716,8 @@ export default function CheckinScreen() {
                       completedHabitsToday.exercise && styles.habitButtonCompleted
                     ]}
                     onPress={() => {
-                      if (selectedGroupIds.size === 0) {
-                        Alert.alert('Selecione um grupo', 'Selecione ao menos um grupo acima para registrar este hábito.');
+                      if (selectedChallengeIds.size === 0) {
+                        Alert.alert('Selecione um desafio', 'Selecione ao menos um desafio acima para registrar este hábito.');
                         return;
                       }
                       handleSelectHabit('exercise');
@@ -847,7 +845,7 @@ export default function CheckinScreen() {
     const habitInfo = selectedTask ? { title: selectedTask.title } : HABIT_LABELS[selectedHabit!];
     // Labels dos grupos selecionados para o resumo no passo 2
     const selectedGroupLabels = !selectedTask
-      ? activeChallengesList.filter(i => selectedGroupIds.has(i.groupId)).map(i => i.groupName)
+      ? activeChallengesList.filter(i => selectedChallengeIds.has(i.challengeId)).map(i => `${i.groupName} (${i.challengeTitle})`)
       : null;
     return (
       <WebContainer>
