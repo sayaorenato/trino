@@ -750,6 +750,7 @@ export default function AdminScreen() {
                 if (MOCK_RANKINGS[challengeId]) {
                   MOCK_RANKINGS[challengeId] = MOCK_RANKINGS[challengeId].filter(m => m.user_id !== memberId);
                 }
+                await saveMockRankings();
               } else {
                 // Banco de dados real do Supabase
                 const { error } = await supabase

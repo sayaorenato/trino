@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, USER_MOCK_GROUPS } from '../constants/mock-data';
+import { MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, USER_MOCK_GROUPS, getMockRankings, saveMockRankings } from '../constants/mock-data';
 
 export const api = {
   async getUserGroups(userId: string) {
@@ -304,6 +304,7 @@ export const api = {
    */
   async getGroupMembers(groupId: string) {
     if (groupId.startsWith('group')) {
+      await getMockRankings();
       const challengeId = groupId === 'group_1' ? 'chal_1' : 'chal_2';
       const ranking = MOCK_RANKINGS[challengeId] || [];
       return ranking.map((member: any, index: number) => ({

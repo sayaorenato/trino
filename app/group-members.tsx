@@ -18,7 +18,7 @@ import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 import { supabase } from '../lib/supabase';
-import { MOCK_RANKINGS } from '../constants/mock-data';
+import { MOCK_RANKINGS, saveMockRankings } from '../constants/mock-data';
 
 interface MemberItem {
   user_id: string;
@@ -117,6 +117,7 @@ export default function GroupMembersScreen() {
                 if (MOCK_RANKINGS[challengeId]) {
                   MOCK_RANKINGS[challengeId] = MOCK_RANKINGS[challengeId].filter(m => m.user_id !== member.user_id);
                 }
+                await saveMockRankings();
               } else {
                 const { error } = await supabase
                   .from('group_members')
