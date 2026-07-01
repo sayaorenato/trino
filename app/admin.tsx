@@ -20,7 +20,7 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
-import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest, getMockRankings, saveMockRankings } from '../constants/mock-data';
+import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest, getMockRankings, saveMockRankings, removeRankingMember } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 function formatDateForInput(isoDateStr: string): string {
@@ -745,21 +745,21 @@ export default function AdminScreen() {
             try {
               const isMock = selectedGroupId.startsWith('group');
               if (isMock) {
-                // Remover o participante do ranking mockado
                 const challengeId = selectedGroupId === 'group_1' ? 'chal_1' : 'chal_2';
-                if (MOCK_RANKINGS[challengeId]) {
-                  MOCK_RANKINGS[challengeId] = MOCK_RANKINGS[challengeId].filter(m => m.user_id !== memberId);
-                }
-                await saveMockRankings();
+                await removeRankingMember(challengeId, memberId);
               } else {
                 // Banco de dados real do Supabase
-                const { error } = await supabase
+                const { data: deleted, error } = await supabase
                   .from('group_members')
                   .delete()
                   .eq('group_id', selectedGroupId)
-                  .eq('user_id', memberId);
+                  .eq('user_id', memberId)
+                  .select();
 
                 if (error) throw error;
+                if (!deleted || deleted.length === 0) {
+                  throw new Error('Ação não autorizada no banco de dados. Verifique se você é o administrador principal do grupo.');
+                }
               }
               
               Alert.alert('Sucesso', 'Participante banido com sucesso!');

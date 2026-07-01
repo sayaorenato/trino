@@ -58,7 +58,13 @@ export async function saveMockRankings(): Promise<void> {
     console.error('Erro ao salvar mock rankings:', e);
   }
 }
-
+export async function removeRankingMember(challengeId: string, userId: string): Promise<void> {
+  if (MOCK_RANKINGS[challengeId]) {
+    MOCK_RANKINGS[challengeId] = MOCK_RANKINGS[challengeId].filter(m => m.user_id !== userId);
+    console.log('[MOCK_DATA] removeRankingMember de fato filtrou o membro:', userId, 'do desafio:', challengeId);
+    await saveMockRankings();
+  }
+}
 export async function getChallengeRequests(): Promise<ChallengeRequest[]> {
   try {
     const data = await AsyncStorage.getItem('TRINO_CHALLENGE_REQUESTS');
