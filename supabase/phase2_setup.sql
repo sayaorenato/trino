@@ -51,15 +51,37 @@ ON storage.objects FOR DELETE
 TO authenticated
 USING ( auth.uid() = owner );
 
+-- Funções de segurança para evitar recursão infinita no RLS de group_members e groups
+CREATE OR REPLACE FUNCTION is_group_admin(p_group_id uuid, p_user_id uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM group_members
+    WHERE group_id = p_group_id AND user_id = p_user_id AND role = 'admin'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION is_group_member(p_group_id uuid, p_user_id uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM group_members
+    WHERE group_id = p_group_id AND user_id = p_user_id
+  );
+$$;
+
 -- 4. Corrigir RLS da tabela groups: só membros enxergam seus grupos
 DROP POLICY IF EXISTS "Groups are viewable by everyone." ON groups;
+DROP POLICY IF EXISTS "Membros podem ver seus grupos" ON groups;
 CREATE POLICY "Membros podem ver seus grupos"
 ON groups FOR SELECT
 TO authenticated
 USING (
-  id IN (
-    SELECT group_id FROM group_members WHERE user_id = auth.uid()
-  )
+  is_group_member(id, auth.uid())
 );
 
 -- 5. Habilitar RLS em group_members e criar políticas
@@ -70,9 +92,7 @@ CREATE POLICY "Membros podem ver membros do seu grupo"
 ON group_members FOR SELECT
 TO authenticated
 USING (
-  group_id IN (
-    SELECT group_id FROM group_members WHERE user_id = auth.uid()
-  )
+  is_group_member(group_id, auth.uid())
 );
 
 DROP POLICY IF EXISTS "Usuário pode se inserir como membro" ON group_members;
@@ -86,10 +106,7 @@ CREATE POLICY "Admins podem gerenciar membros"
 ON group_members FOR ALL
 TO authenticated
 USING (
-  group_id IN (
-    SELECT group_id FROM group_members
-    WHERE user_id = auth.uid() AND role = 'admin'
-  )
+  is_group_admin(group_id, auth.uid())
 );
 
 -- 6. RLS para desafios: só membros do grupo enxergam, só admins criam/gerenciam
