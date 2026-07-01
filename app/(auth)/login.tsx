@@ -94,16 +94,29 @@ export default function LoginScreen() {
       } else if (!isSignUp && (
         msg.toLowerCase().includes('invalid login credentials') ||
         msg.toLowerCase().includes('invalid_credentials') ||
-        msg.toLowerCase().includes('wrong password')
+        msg.toLowerCase().includes('wrong password') ||
+        msg.toLowerCase().includes('user not found') ||
+        msg.toLowerCase().includes('user_not_found')
       )) {
-        Alert.alert(
-          'Senha Incorreta',
-          'Deseja redefinir sua senha? Enviaremos um link de recuperação para o seu email.',
-          [
-            { text: 'Cancelar', style: 'cancel' },
-            { text: 'Redefinir Senha', onPress: handleResetPassword }
-          ]
-        );
+        setError('E-mail ou senha inválidos. Corrija os dados ou crie uma nova conta.');
+        if (Platform.OS === 'web') {
+          const opt = window.confirm(
+            'Usuário não encontrado ou senha incorreta.\n\nDeseja criar uma conta com esse e-mail? (Pressione OK para criar uma conta ou Cancelar para tentar novamente/redefinir).'
+          );
+          if (opt) {
+            setIsSignUp(true);
+          }
+        } else {
+          Alert.alert(
+            'Dados Incorretos',
+            'Usuário não cadastrado ou senha incorreta. O que deseja fazer?',
+            [
+              { text: 'Corrigir Dados', style: 'cancel' },
+              { text: 'Recuperar Senha', onPress: handleResetPassword },
+              { text: 'Criar Conta', onPress: () => setIsSignUp(true) }
+            ]
+          );
+        }
       } else {
         setError(msg || 'Falha ao autenticar. Tente novamente.');
       }
