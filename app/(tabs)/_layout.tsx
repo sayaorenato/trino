@@ -1,17 +1,34 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { StyleSheet, View, Text, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { COLORS, BORDER_RADIUS, SHADOWS, SPACING, FONTS } from '../../constants/theme';
+import { COLORS, SHADOWS, FONTS } from '../../constants/theme';
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+
+  // No Android e iOS, ajusta dinamicamente a altura e o paddingBottom da TabBar com base nas insets do sistema
+  const bottomPadding = Platform.OS === 'web' 
+    ? 8 
+    : Math.max(insets.bottom, Platform.OS === 'ios' ? 28 : 12);
+    
+  const tabBarHeight = Platform.OS === 'web'
+    ? 60
+    : (Platform.OS === 'ios' ? 60 : 54) + bottomPadding;
+
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: COLORS.secondary,
         tabBarInactiveTintColor: COLORS.textLight,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            height: tabBarHeight,
+            paddingBottom: bottomPadding,
+          }
+        ],
         tabBarLabelStyle: styles.tabBarLabel,
         headerShown: false,
       }}
@@ -97,8 +114,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: COLORS.borderLight,
-    height: Platform.OS === 'ios' ? 88 : 60,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 8,
     paddingTop: 8,
     position: 'absolute',
     bottom: 0,

@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.lg,
-    paddingBottom: SPACING.xl,
+    paddingBottom: Platform.OS === 'web' ? SPACING.xl : 110,
   },
   subtitle: {
     fontSize: FONTS.size.sm,
