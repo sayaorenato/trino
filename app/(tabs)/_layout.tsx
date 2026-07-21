@@ -8,13 +8,15 @@ import { COLORS, SHADOWS, FONTS } from '../../constants/theme';
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
 
-  // No Android e iOS, ajusta dinamicamente a altura e o paddingBottom da TabBar com base nas insets do sistema
-  const bottomPadding = Platform.OS === 'web' 
-    ? 8 
-    : Math.max(insets.bottom, Platform.OS === 'ios' ? 28 : 12);
+  const isWeb = Platform.OS === 'web';
+
+  // Ajusta dinamicamente a altura e o paddingBottom da TabBar no Web Mobile, Android e iOS
+  const bottomPadding = isWeb 
+    ? 16 
+    : Math.max(insets.bottom, Platform.OS === 'ios' ? 28 : 20);
     
-  const tabBarHeight = Platform.OS === 'web'
-    ? 60
+  const tabBarHeight = isWeb
+    ? 76
     : (Platform.OS === 'ios' ? 60 : 54) + bottomPadding;
 
   return (
@@ -126,6 +128,8 @@ const styles = StyleSheet.create({
         width: '100%',
         borderBottomLeftRadius: 0,
         borderBottomRightRadius: 0,
+        paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))' as any,
+        height: 'calc(60px + max(16px, env(safe-area-inset-bottom, 16px)))' as any,
       } as any,
     }),
     ...SHADOWS.medium,

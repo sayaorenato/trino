@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.lg,
-    paddingBottom: Platform.OS === 'web' ? SPACING.xl : 110,
+    paddingBottom: 120,
   },
   userCard: {
     padding: SPACING.lg,

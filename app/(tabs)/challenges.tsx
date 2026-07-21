@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: FONTS.size.lg, fontFamily: FONTS.family.heading, color: COLORS.primary, fontWeight: FONTS.weight.bold,
   },
-  scrollContent: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: Platform.OS === 'web' ? SPACING.xl : 110 },
+  scrollContent: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg, paddingBottom: 120 },
   subtitle: {
     fontSize: FONTS.size.sm, fontFamily: FONTS.family.body, color: COLORS.textSecondary,
     lineHeight: 20, marginBottom: SPACING.lg,

@@ -1005,7 +1005,7 @@ const styles = StyleSheet.create({
   greetingContainer: { marginLeft: SPACING.md },
   greetingText: { fontSize: FONTS.size.xs, fontFamily: FONTS.family.body, color: COLORS.textLight },
   nameText: { fontSize: FONTS.size.lg, fontFamily: FONTS.family.heading, color: COLORS.primary },
-  scrollContent: { paddingBottom: Platform.OS === 'web' ? SPACING.xl : 110 },
+  scrollContent: { paddingBottom: 120 },
 
   // Verse
   verseCard: {
