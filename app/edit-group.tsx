@@ -79,9 +79,18 @@ export default function EditGroupScreen() {
     loadGroupData();
   }, [user, groupId]);
 
+  const showNotice = (title: string, message: string, onOk?: () => void) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}: ${message}`);
+      if (onOk) onOk();
+    } else {
+      Alert.alert(title, message, onOk ? [{ text: 'OK', onPress: onOk }] : undefined);
+    }
+  };
+
   const handleUpdate = async () => {
     if (!name.trim()) {
-      Alert.alert('Erro', 'Por favor, informe o nome do grupo.');
+      showNotice('Erro', 'Por favor, informe o nome do grupo.');
       return;
     }
     
@@ -98,7 +107,7 @@ export default function EditGroupScreen() {
         .maybeSingle();
 
       if (existingGroup) {
-        Alert.alert('Erro', 'Já existe um grupo com este nome.');
+        showNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
         setSaving(false);
         return;
       }
@@ -111,23 +120,17 @@ export default function EditGroupScreen() {
 
       if (updateError) throw updateError;
 
-      if (Platform.OS === 'web') {
-        window.alert('Configurações do grupo atualizadas!');
+      showNotice('Sucesso', 'Configurações do grupo atualizadas!', () => {
         router.back();
-      } else {
-        Alert.alert(
-          'Sucesso', 
-          'Configurações do grupo atualizadas!',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.back() 
-            }
-          ]
-        );
-      }
+      });
     } catch (e: any) {
-      Alert.alert('Erro', e.message || 'Erro ao salvar alterações.');
+      console.error('Erro ao atualizar grupo:', e);
+      const isDuplicate = e?.code === '23505' || (e?.message || '').toLowerCase().includes('duplicate') || (e?.message || '').toLowerCase().includes('unique');
+      if (isDuplicate) {
+        showNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
+      } else {
+        showNotice('Erro', e.message || 'Erro ao salvar alterações.');
+      }
     } finally {
       setSaving(false);
     }

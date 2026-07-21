@@ -34,9 +34,18 @@ export default function CreateGroupScreen() {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const showNotice = (title: string, message: string, onOk?: () => void) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}: ${message}`);
+      if (onOk) onOk();
+    } else {
+      Alert.alert(title, message, onOk ? [{ text: 'OK', onPress: onOk }] : undefined);
+    }
+  };
+
   const handleCreate = async () => {
-    if (!name) {
-      Alert.alert('Erro', 'Por favor, informe o nome do grupo.');
+    if (!name.trim()) {
+      showNotice('Erro', 'Por favor, informe o nome do grupo.');
       return;
     }
     
@@ -52,7 +61,7 @@ export default function CreateGroupScreen() {
         .maybeSingle();
 
       if (existingGroup) {
-        Alert.alert('Erro', 'esse grupo já foi criado');
+        showNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
         setLoading(false);
         return;
       }
@@ -61,13 +70,13 @@ export default function CreateGroupScreen() {
       const inviteCode = generateInviteCode(name);
       const { data: group, error: groupError } = await supabase
         .from('groups')
-        .insert({ name: name.trim(), description, invite_code: inviteCode })
+        .insert({ name: name.trim(), description: description.trim(), invite_code: inviteCode })
         .select()
         .single();
 
       if (groupError) throw groupError;
 
-      // 2. Adicionar o usuário como Admin do grupo
+      // 3. Adicionar o usuário como Admin do grupo
       const { error: memberError } = await supabase
         .from('group_members')
         .insert({
@@ -78,23 +87,17 @@ export default function CreateGroupScreen() {
 
       if (memberError) throw memberError;
 
-      if (Platform.OS === 'web') {
-        window.alert('Grupo criado com sucesso!');
+      showNotice('Sucesso', 'Grupo criado com sucesso!', () => {
         router.replace({ pathname: '/group-dashboard', params: { groupId: group.id } });
-      } else {
-        Alert.alert(
-          'Sucesso', 
-          'Grupo criado com sucesso!',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.replace({ pathname: '/group-dashboard', params: { groupId: group.id } }) 
-            }
-          ]
-        );
-      }
+      });
     } catch (e: any) {
-      Alert.alert('Erro', e.message || 'Ocorreu um erro ao criar o grupo.');
+      console.error('Erro ao criar grupo:', e);
+      const isDuplicate = e?.code === '23505' || (e?.message || '').toLowerCase().includes('duplicate') || (e?.message || '').toLowerCase().includes('unique');
+      if (isDuplicate) {
+        showNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
+      } else {
+        showNotice('Erro', e.message || 'Ocorreu um erro ao criar o grupo.');
+      }
     } finally {
       setLoading(false);
     }

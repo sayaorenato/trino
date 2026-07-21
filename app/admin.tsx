@@ -322,9 +322,19 @@ export default function AdminScreen() {
   }, [selectedChallengeId]);
 
   // Ações de CRUD de Grupo
+  const showAdminNotice = (title: string, message: string, onOk?: () => void) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}: ${message}`);
+      if (onOk) onOk();
+    } else {
+      Alert.alert(title, message, onOk ? [{ text: 'OK', onPress: onOk }] : undefined);
+    }
+  };
+
+  // Ações de CRUD de Grupo
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) {
-      Alert.alert('Erro', 'Por favor, informe o nome do grupo.');
+      showAdminNotice('Erro', 'Por favor, informe o nome do grupo.');
       return;
     }
     
@@ -340,7 +350,7 @@ export default function AdminScreen() {
         .maybeSingle();
 
       if (existingGroup) {
-        Alert.alert('Erro', 'Já existe um grupo com este nome.');
+        showAdminNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
         setLoadingAction(false);
         return;
       }
@@ -365,7 +375,7 @@ export default function AdminScreen() {
 
       if (memberError) throw memberError;
 
-      Alert.alert('Sucesso', 'Grupo criado com sucesso!');
+      showAdminNotice('Sucesso', 'Grupo criado com sucesso!');
 
       // Resetar form
       setNewGroupName('');
@@ -391,7 +401,13 @@ export default function AdminScreen() {
       setActiveTab('group');
 
     } catch (e: any) {
-      Alert.alert('Erro', e.message || 'Erro ao criar grupo.');
+      console.error('Erro ao criar grupo:', e);
+      const isDuplicate = e?.code === '23505' || (e?.message || '').toLowerCase().includes('duplicate') || (e?.message || '').toLowerCase().includes('unique');
+      if (isDuplicate) {
+        showAdminNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
+      } else {
+        showAdminNotice('Erro', e.message || 'Erro ao criar grupo.');
+      }
     } finally {
       setLoadingAction(false);
     }
@@ -399,7 +415,7 @@ export default function AdminScreen() {
 
   const handleUpdateGroup = async () => {
     if (!groupName.trim()) {
-      Alert.alert('Erro', 'Por favor, informe o nome do grupo.');
+      showAdminNotice('Erro', 'Por favor, informe o nome do grupo.');
       return;
     }
 
@@ -416,7 +432,7 @@ export default function AdminScreen() {
         .maybeSingle();
 
       if (existingGroup) {
-        Alert.alert('Erro', 'Já existe um grupo com este nome.');
+        showAdminNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
         setLoadingAction(false);
         return;
       }
@@ -429,7 +445,7 @@ export default function AdminScreen() {
 
       if (updateError) throw updateError;
 
-      Alert.alert('Sucesso', 'Dados do grupo atualizados com sucesso!');
+      showAdminNotice('Sucesso', 'Dados do grupo atualizados com sucesso!');
 
       // Recarregar os grupos administrados
       const { data: memberData } = await supabase
@@ -448,7 +464,13 @@ export default function AdminScreen() {
       setAdminGroups(groupsList);
 
     } catch (e: any) {
-      Alert.alert('Erro', e.message || 'Erro ao salvar alterações.');
+      console.error('Erro ao atualizar grupo:', e);
+      const isDuplicate = e?.code === '23505' || (e?.message || '').toLowerCase().includes('duplicate') || (e?.message || '').toLowerCase().includes('unique');
+      if (isDuplicate) {
+        showAdminNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
+      } else {
+        showAdminNotice('Erro', e.message || 'Erro ao salvar alterações.');
+      }
     } finally {
       setLoadingAction(false);
     }
