@@ -478,9 +478,9 @@ export default function CreateChallengeScreen() {
 
       if (challengeError) throw challengeError;
 
+      const rounds = [];
       if (hasRounds) {
         const roundDays = roundDuration === '1_week' ? 7 : 30;
-        const rounds = [];
         let roundStart = new Date(start);
         let roundNumber = 1;
         while (roundStart < end) {
@@ -505,12 +505,20 @@ export default function CreateChallengeScreen() {
           roundStart.setDate(roundStart.getDate() + 1);
           roundNumber++;
         }
-
-        const { error: roundsError } = await supabase
-          .from('rounds')
-          .insert(rounds);
-        if (roundsError) throw roundsError;
+      } else {
+        // Criar um round padrão único cobrindo todo o período do desafio
+        rounds.push({
+          challenge_id: challenge.id,
+          round_number: 1,
+          start_date: start.toISOString().split('T')[0],
+          end_date: end.toISOString().split('T')[0],
+        });
       }
+
+      const { error: roundsError } = await supabase
+        .from('rounds')
+        .insert(rounds);
+      if (roundsError) throw roundsError;
 
       MOCK_RANKINGS[challenge.id] = [
         {

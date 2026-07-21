@@ -457,6 +457,7 @@ export default function CheckinScreen() {
         // ── HÁBITO PADRÃO MULTI-GRUPO ──
         // Determina os itens de desafio que correspondem aos desafios selecionados
         const targetItems = activeChallengesList.filter(item => selectedChallengeIds.has(item.challengeId));
+        let hasSaved = false;
 
         for (const item of targetItems) {
           const isMock = item.isMock === true;
@@ -478,6 +479,7 @@ export default function CheckinScreen() {
               reactions: []
             };
             MOCK_FEED.unshift(newCheckin);
+            hasSaved = true;
           } else {
             // Encontra o round ativo do item para o grupo real
             const rounds = item.rounds || [];
@@ -493,7 +495,10 @@ export default function CheckinScreen() {
               );
             }
             const roundId = currentRound?.id;
-            if (!roundId) continue; // pula grupo sem round ativo
+            if (!roundId) {
+              console.warn(`Grupo ${item.groupName} não possui round ativo.`);
+              continue; // pula grupo sem round ativo
+            }
 
             const { error } = await supabase.from('checkins').insert({
               user_id: user.id,
@@ -507,7 +512,12 @@ export default function CheckinScreen() {
               console.error(`Erro no check-in do grupo ${item.groupName}:`, error);
               throw error;
             }
+            hasSaved = true;
           }
+        }
+
+        if (!hasSaved && targetItems.length > 0) {
+          throw new Error('Não foi possível realizar o check-in. O desafio selecionado não possui nenhum round ativo cadastrado.');
         }
       }
 
