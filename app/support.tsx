@@ -6,8 +6,9 @@ import {
   ScrollView, 
   TouchableOpacity, 
   SafeAreaView, 
-  TextInput,
-  Alert
+  Alert,
+  Platform,
+  Image
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
@@ -17,20 +18,27 @@ import { Button } from '../components/ui/Button';
 import { WebContainer } from '../components/ui/WebContainer';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
+const PIX_CODE = "00020126670014BR.GOV.BCB.PIX0114293391890001230227Obrigado pela contribuição.5204000053039865802BR5925RENATO BEDA DE AMORIM SAY6009SAO PAULO62140510fPqfVGExYp6304FF95";
+const QR_CODE_URL = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(PIX_CODE)}`;
+
 export default function SupportScreen() {
   const router = useRouter();
-  const [selectedAmount, setSelectedAmount] = useState<number | 'other'>(25);
-  const [customAmount, setCustomAmount] = useState('');
-  const [step, setStep] = useState<'donate' | 'success'>('donate');
+  const [copied, setCopied] = useState(false);
 
   const handleCopyPix = async () => {
-    const pixCode = "00020101021126580014br.gov.bcb.pix0136trino-apoio-pix-chave-aleatoria-mock5204000053039865802BR5915Trino-Aplicativo6009SAO-PAULO62070503***6304D1B5";
-    await Clipboard.setStringAsync(pixCode);
-    Alert.alert('Copiado!', 'Chave Pix Copia e Cola copiada para a área de transferência.');
-  };
+    try {
+      await Clipboard.setStringAsync(PIX_CODE);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 4000);
 
-  const handleSimulatePayment = () => {
-    setStep('success');
+      if (Platform.OS === 'web') {
+        window.alert('Código Pix Copia e Cola copiado com sucesso! Abra o app do seu banco para colar.');
+      } else {
+        Alert.alert('Copiado com Sucesso! 🎉', 'O código Pix Copia e Cola foi copiado para a sua área de transferência.');
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   return (
@@ -40,132 +48,82 @@ export default function SupportScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.primary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Apoie o Projeto</Text>
+          <Text style={styles.headerTitle}>Contribuição via Pix</Text>
           <View style={{ width: 24 }} />
         </View>
 
-        {step === 'donate' ? (
-          <ScrollView 
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.iconHeader}>
-              <View style={styles.iconBg}>
-                <MaterialCommunityIcons name="heart-flash" size={40} color={COLORS.gold} />
-              </View>
-              <Text style={styles.title}>Trino é 100% Gratuito</Text>
-              <Text style={styles.description}>
-                Nosso objetivo é apoiar o seu crescimento físico e espiritual sem anúncios e sem cobrar assinaturas. Sua doação voluntária ajuda a custear os servidores de banco de dados e armazenamento do Supabase.
-              </Text>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* CABEÇALHO DA PÁGINA */}
+          <View style={styles.iconHeader}>
+            <View style={styles.iconBg}>
+              <MaterialCommunityIcons name="heart-flash" size={40} color={COLORS.goldDark} />
             </View>
-
-            {/* Seleção de Valor */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Escolha um valor para ofertar</Text>
-              
-              <View style={styles.amountGrid}>
-                {[10, 25, 50].map(amount => (
-                  <TouchableOpacity
-                    key={amount}
-                    style={[
-                      styles.amountCard,
-                      selectedAmount === amount && styles.amountCardActive
-                    ]}
-                    onPress={() => {
-                      setSelectedAmount(amount);
-                      setCustomAmount('');
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[
-                      styles.amountText,
-                      selectedAmount === amount && styles.amountTextActive
-                    ]}>
-                      R$ {amount}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-                
-                <TouchableOpacity
-                  style={[
-                    styles.amountCard,
-                    selectedAmount === 'other' && styles.amountCardActive
-                  ]}
-                  onPress={() => setSelectedAmount('other')}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[
-                    styles.amountText,
-                    selectedAmount === 'other' && styles.amountTextActive
-                  ]}>
-                    Outro
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {selectedAmount === 'other' && (
-                <View style={styles.customInputContainer}>
-                  <Text style={styles.currencyPrefix}>R$</Text>
-                  <TextInput
-                    style={styles.customInput}
-                    placeholder="Digite o valor"
-                    value={customAmount}
-                    onChangeText={setCustomAmount}
-                    keyboardType="numeric"
-                    autoFocus
-                  />
-                </View>
-              )}
-            </View>
-
-            {/* QR CODE E PIX COPIA E COLA */}
-            <Card variant="default" style={styles.pixCard}>
-              <Text style={styles.pixCardTitle}>Doação Rápida via PIX</Text>
-              <Text style={styles.pixCardSubtitle}>Escaneie o QR Code abaixo</Text>
-              
-              <View style={styles.qrCodePlaceholder}>
-                {/* Representação visual elegante do QR Code */}
-                <View style={styles.qrBorder}>
-                  <MaterialCommunityIcons name="qrcode" size={140} color={COLORS.primary} />
-                </View>
-              </View>
-
-              <Button
-                title="Copiar Pix Copia e Cola"
-                variant="outline"
-                size="md"
-                icon={<MaterialCommunityIcons name="content-copy" size={16} color={COLORS.primary} />}
-                onPress={handleCopyPix}
-                style={styles.copyBtn}
-              />
-
-              <Button
-                title="Simular Pagamento Pago"
-                variant="secondary"
-                size="md"
-                onPress={handleSimulatePayment}
-                style={styles.simulateBtn}
-              />
-            </Card>
-          </ScrollView>
-        ) : (
-          <View style={styles.successContainer}>
-            <View style={styles.successCircle}>
-              <MaterialCommunityIcons name="heart" size={60} color={COLORS.secondary} />
-            </View>
-            <Text style={styles.successTitle}>Muito Obrigado!</Text>
-            <Text style={styles.successText}>
-              Sua oferta foi recebida com sucesso. Nosso desejo é que esse app ajude você e a sua comunidade a se manterem firmes nos propósitos de leitura da palavra, vida de oração e saúde do corpo. Deus te abençoe!
+            <Text style={styles.title}>Apoie o Projeto Trino</Text>
+            <Text style={styles.description}>
+              O Trino é 100% gratuito e sem fins lucrativos. Sua doação voluntária nos ajuda a cobrir os custos de manutenção dos servidores e banco de dados.
             </Text>
-            <Button
-              title="Voltar ao Perfil"
-              variant="primary"
-              size="lg"
-              onPress={() => router.replace('/(tabs)/profile')}
-              style={styles.successBtn}
-            />
           </View>
-        )}
+
+          {/* CARD PRINCIPAL DO PIX */}
+          <Card variant="default" style={styles.pixCard}>
+            <View style={styles.pixBadge}>
+              <MaterialCommunityIcons name="lightning-bolt" size={16} color={COLORS.secondary} />
+              <Text style={styles.pixBadgeText}>PIX INSTANTÂNEO</Text>
+            </View>
+
+            <Text style={styles.instructionsTitle}>Escaneie o QR Code</Text>
+            <Text style={styles.instructionsSubtitle}>
+              Abra o app do seu banco e aponte a câmera para o código abaixo:
+            </Text>
+
+            {/* QR CODE GERADO */}
+            <View style={styles.qrContainer}>
+              <Image 
+                source={{ uri: QR_CODE_URL }} 
+                style={styles.qrCodeImage}
+                resizeMode="contain"
+              />
+            </View>
+
+            {/* BENEFICIÁRIO */}
+            <View style={styles.beneficiaryContainer}>
+              <Text style={styles.beneficiaryLabel}>DESTINATÁRIO</Text>
+              <Text style={styles.beneficiaryName}>RENATO BEDA DE AMORIM SAY</Text>
+              <Text style={styles.beneficiaryCity}>São Paulo / SP</Text>
+            </View>
+
+            <View style={styles.divider} />
+
+            {/* CÓDIGO COPIA E COLA */}
+            <Text style={styles.copyTitle}>Ou use o Pix Copia e Cola:</Text>
+            
+            <TouchableOpacity 
+              activeOpacity={0.85}
+              onPress={handleCopyPix}
+              style={styles.pixCodeBox}
+            >
+              <Text style={styles.pixCodeText} numberOfLines={4}>
+                {PIX_CODE}
+              </Text>
+            </TouchableOpacity>
+
+            <Button
+              title={copied ? "✓ Código Pix Copiado!" : "Copiar Código Pix"}
+              variant={copied ? "secondary" : "primary"}
+              size="lg"
+              icon={<MaterialCommunityIcons name={copied ? "check" : "content-copy"} size={20} color="#fff" />}
+              onPress={handleCopyPix}
+              style={styles.copyBtn}
+            />
+
+            <Text style={styles.anyAmountNote}>
+              💡 Você pode contribuir com <Text style={{ fontWeight: 'bold', color: COLORS.primary }}>qualquer valor</Text> diretamente no aplicativo do seu banco. Deus te abençoe!
+            </Text>
+          </Card>
+        </ScrollView>
       </SafeAreaView>
     </WebContainer>
   );
@@ -197,17 +155,17 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.xl,
-    paddingBottom: SPACING.xxl,
+    paddingTop: SPACING.lg,
+    paddingBottom: 60,
   },
   iconHeader: {
     alignItems: 'center',
-    marginBottom: SPACING.xxl,
+    marginBottom: SPACING.lg,
   },
   iconBg: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: '#fff9eb',
     justifyContent: 'center',
     alignItems: 'center',
@@ -219,7 +177,7 @@ const styles = StyleSheet.create({
     fontWeight: FONTS.weight.bold,
     color: COLORS.primary,
     fontFamily: FONTS.family.heading,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.xs,
   },
   description: {
     fontSize: FONTS.size.sm,
@@ -229,146 +187,124 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm,
     fontFamily: FONTS.family.body,
   },
-  section: {
-    marginBottom: SPACING.xl,
-  },
-  sectionTitle: {
-    fontSize: FONTS.size.md,
-    fontWeight: FONTS.weight.bold,
-    color: COLORS.primary,
-    marginBottom: SPACING.md,
-    fontFamily: FONTS.family.heading,
-  },
-  amountGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: SPACING.sm,
-  },
-  amountCard: {
-    width: '23%',
-    backgroundColor: COLORS.surfaceCard,
-    paddingVertical: SPACING.md,
-    borderRadius: BORDER_RADIUS.lg,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    ...SHADOWS.light,
-  },
-  amountCardActive: {
-    borderColor: COLORS.gold,
-    backgroundColor: '#fff9eb',
-  },
-  amountText: {
-    fontSize: FONTS.size.sm,
-    fontWeight: FONTS.weight.bold,
-    color: COLORS.textSecondary,
-    fontFamily: FONTS.family.body,
-  },
-  amountTextActive: {
-    color: COLORS.goldDark,
-  },
-  customInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surfaceCard,
-    borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 1.5,
-    borderColor: COLORS.gold,
-    marginTop: SPACING.md,
-    paddingHorizontal: SPACING.md,
-    height: 50,
-  },
-  currencyPrefix: {
-    fontSize: FONTS.size.md,
-    fontWeight: FONTS.weight.bold,
-    color: COLORS.goldDark,
-    marginRight: SPACING.xs,
-    fontFamily: FONTS.family.heading,
-  },
-  customInput: {
-    flex: 1,
-    height: '100%',
-    fontSize: FONTS.size.md,
-    color: COLORS.text,
-    fontFamily: FONTS.family.body,
-  },
   pixCard: {
     padding: SPACING.lg,
     alignItems: 'center',
     marginBottom: SPACING.xl,
   },
-  pixCardTitle: {
+  pixBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.secondaryMuted,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.lg,
+    marginBottom: SPACING.md,
+    gap: 4,
+  },
+  pixBadgeText: {
+    color: COLORS.secondary,
+    fontSize: 11,
+    fontWeight: FONTS.weight.bold,
+    fontFamily: FONTS.family.heading,
+    letterSpacing: 0.5,
+  },
+  instructionsTitle: {
     fontSize: FONTS.size.md,
     fontWeight: FONTS.weight.bold,
     color: COLORS.primary,
     fontFamily: FONTS.family.heading,
   },
-  pixCardSubtitle: {
+  instructionsSubtitle: {
     fontSize: FONTS.size.xs,
     color: COLORS.textLight,
-    textTransform: 'uppercase',
-    fontWeight: FONTS.weight.bold,
+    textAlign: 'center',
     marginTop: 2,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
     fontFamily: FONTS.family.body,
   },
-  qrCodePlaceholder: {
-    backgroundColor: '#fbf9fb',
+  qrContainer: {
+    backgroundColor: '#fff',
     padding: SPACING.md,
     borderRadius: BORDER_RADIUS.xl,
-    marginBottom: SPACING.lg,
-    ...SHADOWS.light,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    ...SHADOWS.medium,
   },
-  qrBorder: {
+  qrCodeImage: {
+    width: 200,
+    height: 200,
+  },
+  beneficiaryContainer: {
+    alignItems: 'center',
+    backgroundColor: '#fff9eb',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: 'rgba(196, 150, 60, 0.2)',
+    width: '100%',
+    marginBottom: SPACING.md,
+  },
+  beneficiaryLabel: {
+    fontSize: 10,
+    color: COLORS.goldDark,
+    fontWeight: FONTS.weight.bold,
+    fontFamily: FONTS.family.heading,
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  beneficiaryName: {
+    fontSize: FONTS.size.sm,
+    fontWeight: FONTS.weight.bold,
+    color: COLORS.primary,
+    fontFamily: FONTS.family.heading,
+  },
+  beneficiaryCity: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.textSecondary,
+    fontFamily: FONTS.family.body,
+    marginTop: 1,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.borderLight,
+    width: '100%',
+    marginVertical: SPACING.md,
+  },
+  copyTitle: {
+    fontSize: FONTS.size.sm,
+    fontWeight: FONTS.weight.bold,
+    color: COLORS.primary,
+    fontFamily: FONTS.family.heading,
+    marginBottom: SPACING.xs,
+    alignSelf: 'flex-start',
+  },
+  pixCodeBox: {
+    backgroundColor: COLORS.surfaceCard,
+    borderRadius: BORDER_RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.sm,
-    backgroundColor: '#fff',
+    padding: SPACING.md,
+    width: '100%',
+    marginBottom: SPACING.md,
+  },
+  pixCodeText: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.textSecondary,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    lineHeight: 16,
   },
   copyBtn: {
     width: '100%',
     marginBottom: SPACING.md,
   },
-  simulateBtn: {
-    width: '100%',
-  },
-  successContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.xl,
-    paddingTop: 80,
-  },
-  successCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#eefcf4',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: SPACING.xl,
-    borderWidth: 2,
-    borderColor: 'rgba(74, 101, 74, 0.2)',
-  },
-  successTitle: {
-    fontSize: FONTS.size.xxl,
-    fontWeight: FONTS.weight.bold,
-    color: COLORS.primary,
-    fontFamily: FONTS.family.heading,
-    marginBottom: SPACING.md,
-  },
-  successText: {
-    fontSize: FONTS.size.sm,
+  anyAmountNote: {
+    fontSize: FONTS.size.xs,
     color: COLORS.textSecondary,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: SPACING.xxl,
-    paddingHorizontal: SPACING.sm,
+    lineHeight: 18,
     fontFamily: FONTS.family.body,
   },
-  successBtn: {
-    width: '100%',
-  }
 });
