@@ -53,6 +53,54 @@ export default function ChallengeScreen() {
   const [rounds, setRounds] = useState<any[]>([]);
   const [extraTasks, setExtraTasks] = useState<ExtraTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dbCheckins, setDbCheckins] = useState<any[]>([]);
+
+  const calculateRoundProgress = (startStr: string, endStr: string) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const [sYear, sMonth, sDay] = startStr.split('-').map(Number);
+    const startDate = new Date(sYear, sMonth - 1, sDay);
+    startDate.setHours(0, 0, 0, 0);
+
+    const [eYear, eMonth, eDay] = endStr.split('-').map(Number);
+    const endDate = new Date(eYear, eMonth - 1, eDay);
+    endDate.setHours(0, 0, 0, 0);
+
+    const totalMs = endDate.getTime() - startDate.getTime();
+    const totalDays = Math.round(totalMs / (1000 * 60 * 60 * 24)) + 1;
+
+    if (totalDays <= 0) return { progress: 0, daysLeft: 0, totalDays: 0, statusLabel: 'Finalizado' };
+
+    let elapsedDays = 0;
+    if (today >= startDate) {
+      const elapsedMs = today.getTime() - startDate.getTime();
+      elapsedDays = Math.round(elapsedMs / (1000 * 60 * 60 * 24)) + 1;
+      if (elapsedDays > totalDays) elapsedDays = totalDays;
+    }
+
+    const daysLeft = totalDays - elapsedDays;
+    const progress = totalDays > 0 ? elapsedDays / totalDays : 0;
+
+    let statusLabel = '';
+    if (today < startDate) {
+      statusLabel = `Começa em ${Math.round((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))} dias`;
+    } else if (daysLeft === 0) {
+      statusLabel = 'Termina hoje';
+    } else if (today > endDate) {
+      statusLabel = 'Finalizado';
+    } else {
+      statusLabel = `Faltam ${daysLeft} ${daysLeft === 1 ? 'dia' : 'dias'}`;
+    }
+
+    return {
+      progress,
+      daysLeft,
+      totalDays,
+      elapsedDays,
+      statusLabel
+    };
+  };
   
   // Estados de controle de acesso a desafios
   const [hasNoAccess, setHasNoAccess] = useState(false);
@@ -206,14 +254,15 @@ export default function ChallengeScreen() {
                   const members = await api.getGroupMembers(data.group_id);
                   const roundIds = sortedRounds.map((r: any) => r.id);
                   
-                  let dbCheckins: any[] = [];
+                  let dbCheckinsData: any[] = [];
                   if (roundIds.length > 0) {
                     const { data: cData } = await supabase
                       .from('checkins')
-                      .select('user_id, note, type')
+                      .select('user_id, note, type, round_id')
                       .in('round_id', roundIds);
-                    dbCheckins = cData || [];
+                    dbCheckinsData = cData || [];
                   }
+                  setDbCheckins(dbCheckinsData);
 
                   // Mapeia pontuação de cada membro participante aprovado
                   const allowedRanking = MOCK_RANKINGS[targetChallengeId!] || [];
@@ -222,7 +271,7 @@ export default function ChallengeScreen() {
                   );
 
                   const calculatedRanking: RankingMember[] = activeMembers.map((m: any) => {
-                    const userCheckins = dbCheckins.filter((c: any) => c.user_id === m.user_id);
+                    const userCheckins = dbCheckinsData.filter((c: any) => c.user_id === m.user_id);
                     
                     let points = 0;
                     userCheckins.forEach((c: any) => {
@@ -240,7 +289,7 @@ export default function ChallengeScreen() {
                       name: m.full_name || 'Participante',
                       avatar_url: m.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
                       points: points,
-                      streak: m.user_id === user.id ? 12 : 5, // streak simulada
+                      streak: m.streak || 0,
                       rounds_won: 0
                     };
                   });
@@ -431,7 +480,8 @@ export default function ChallengeScreen() {
   const top2 = sortedRanking.find(m => m.position === 2);
   const top3 = sortedRanking.find(m => m.position === 3);
 
-  const activeRound = rounds.find(r => r.status === 'active') || rounds[0] || { round_number: 1, start_date: challenge.start_date, end_date: challenge.end_date, status: 'active' };
+  const activeRound = rounds.find(r => r.status === 'active') || rounds[0] || { id: null, round_number: 1, start_date: challenge.start_date, end_date: challenge.end_date, status: 'active' };
+  const roundProgress = calculateRoundProgress(activeRound.start_date, activeRound.end_date);
 
   const handleToggleTask = async (taskId: string) => {
     const task = extraTasks.find(t => t.id === taskId);
@@ -798,26 +848,30 @@ export default function ChallengeScreen() {
             <Card variant="default" style={styles.roundCard}>
               <View style={styles.roundHeader}>
                 <Text style={styles.roundTitle}>Round #{activeRound.round_number}</Text>
-                <Text style={styles.roundTimeLeft}>Faltam 2 dias</Text>
+                <Text style={styles.roundTimeLeft}>{roundProgress.statusLabel}</Text>
               </View>
               
               <View style={styles.roundDates}>
                 <Text style={styles.roundDateLabel}>
-                  Início: {new Date(activeRound.start_date).toLocaleDateString('pt-BR')}
+                  Início: {new Date(activeRound.start_date.replace(/-/g, '/')).toLocaleDateString('pt-BR')}
                 </Text>
                 <Text style={styles.roundDateLabel}>
-                  Fim: {new Date(activeRound.end_date).toLocaleDateString('pt-BR')}
+                  Fim: {new Date(activeRound.end_date.replace(/-/g, '/')).toLocaleDateString('pt-BR')}
                 </Text>
               </View>
 
               <ProgressBar 
-                progress={0.71} 
+                progress={roundProgress.progress} 
                 height={10} 
                 style={styles.progressBar}
               />
               
               <Text style={styles.progressNote}>
-                Seu grupo realizou 32 check-ins de 45 planejados neste round.
+                {currentChallengeId.startsWith('chal') ? (
+                  `Seu grupo realizou 32 check-ins neste round.`
+                ) : (
+                  `Seu grupo realizou ${dbCheckins.filter((c: any) => c.round_id === activeRound.id).length} check-ins neste round de ${roundProgress.totalDays} dias.`
+                )}
               </Text>
             </Card>
           </View>
