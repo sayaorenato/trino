@@ -61,8 +61,19 @@ export default function GroupMembersScreen() {
     }, [groupId, user])
   );
 
+  const showAlertMessage = (title: string, message: string, buttons?: any[]) => {
+    if (Platform.OS === 'web') {
+      const confirm = window.confirm(`${title}\n\n${message}`);
+      if (confirm && buttons && buttons.length > 1) {
+        buttons[1].onPress();
+      }
+    } else {
+      Alert.alert(title, message, buttons);
+    }
+  };
+
   const handlePromote = (member: MemberItem) => {
-    Alert.alert(
+    showAlertMessage(
       'Promover a Admin',
       `Deseja promover "${member.full_name}" a administrador do grupo?`,
       [
@@ -74,10 +85,10 @@ export default function GroupMembersScreen() {
             setPromoting(member.user_id);
             try {
               await api.promoteToAdmin(groupId, member.user_id);
-              Alert.alert('Sucesso', `${member.full_name} agora é administrador!`);
+              showAlertMessage('Sucesso', `${member.full_name} agora é administrador!`);
               await loadMembers();
             } catch (err: any) {
-              Alert.alert('Erro', err.message || 'Não foi possível promover o membro.');
+              showAlertMessage('Erro', err.message || 'Não foi possível promover o membro.');
             } finally {
               setPromoting(null);
             }
@@ -88,17 +99,6 @@ export default function GroupMembersScreen() {
   };
 
   const handleRemoveMember = (member: MemberItem) => {
-    const showAlertMessage = (title: string, message: string, buttons?: any[]) => {
-      if (Platform.OS === 'web') {
-        const confirm = window.confirm(`${title}\n\n${message}`);
-        if (confirm && buttons && buttons.length > 1) {
-          buttons[1].onPress();
-        }
-      } else {
-        Alert.alert(title, message, buttons);
-      }
-    };
-
     showAlertMessage(
       'Remover Participante',
       `Tem certeza que deseja remover "${member.full_name}" deste grupo?`,
@@ -129,18 +129,10 @@ export default function GroupMembersScreen() {
                 }
               }
 
-              if (Platform.OS === 'web') {
-                window.alert('Participante removido com sucesso!');
-              } else {
-                Alert.alert('Sucesso', 'Participante removido com sucesso!');
-              }
+              showAlertMessage('Sucesso', 'Participante removido com sucesso!');
               await loadMembers();
             } catch (err: any) {
-              if (Platform.OS === 'web') {
-                window.alert(err.message || 'Erro ao remover participante.');
-              } else {
-                Alert.alert('Erro', err.message || 'Erro ao remover participante.');
-              }
+              showAlertMessage('Erro', err.message || 'Erro ao remover participante.');
             } finally {
               setRemoving(null);
             }

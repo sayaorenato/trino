@@ -7,10 +7,12 @@ import {
   TouchableOpacity, 
   SafeAreaView, 
   Platform,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/auth';
 import { Avatar } from '../../components/ui/Avatar';
 import { Card } from '../../components/ui/Card';
@@ -19,12 +21,117 @@ import { WebContainer } from '../../components/ui/WebContainer';
 import { SupportCard } from '../../components/SupportCard';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [hasAdminGroups, setHasAdminGroups] = useState(false);
+  const [updatingAvatar, setUpdatingAvatar] = useState(false);
+
+  const handleChangeAvatar = async () => {
+    if (!user) return;
+
+    const uploadAndSaveAvatar = async (localUri: string) => {
+      setUpdatingAvatar(true);
+      try {
+        const publicUrl = await api.uploadAvatarImage(user.id, localUri);
+        if (!publicUrl) {
+          throw new Error('Falha ao fazer upload do avatar.');
+        }
+        await api.updateProfileAvatar(user.id, publicUrl);
+        await refreshProfile();
+        
+        if (Platform.OS === 'web') {
+          window.alert('Foto de perfil atualizada com sucesso!');
+        } else {
+          Alert.alert('Sucesso', 'Foto de perfil atualizada!');
+        }
+      } catch (err: any) {
+        console.error('Erro ao atualizar avatar:', err);
+        if (Platform.OS === 'web') {
+          window.alert(err.message || 'Erro ao atualizar foto de perfil.');
+        } else {
+          Alert.alert('Erro', err.message || 'Erro ao atualizar foto de perfil.');
+        }
+      } finally {
+        setUpdatingAvatar(false);
+      }
+    };
+
+    const pickFromGallery = async () => {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        if (Platform.OS === 'web') {
+          window.alert('Precisamos de acesso às fotos para alterar sua foto de perfil.');
+        } else {
+          Alert.alert('Permissão necessária', 'Precisamos de acesso às fotos para alterar sua foto de perfil.');
+        }
+        return;
+      }
+      try {
+        let result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.7,
+        });
+        if (!result.canceled && result.assets && result.assets[0]) {
+          await uploadAndSaveAvatar(result.assets[0].uri);
+        }
+      } catch (e) {
+        console.error('Erro ao escolher imagem:', e);
+      }
+    };
+
+    const takePhoto = async () => {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        if (Platform.OS === 'web') {
+          window.alert('Precisamos de acesso à câmera para tirar sua foto.');
+        } else {
+          Alert.alert('Permissão necessária', 'Precisamos de acesso à câmera para tirar sua foto.');
+        }
+        return;
+      }
+      try {
+        let result = await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.7,
+        });
+        if (!result.canceled && result.assets && result.assets[0]) {
+          await uploadAndSaveAvatar(result.assets[0].uri);
+        }
+      } catch (e) {
+        console.error('Erro ao tirar foto:', e);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const chooseOption = window.confirm("Deseja alterar sua foto de perfil?\n\nClique em OK para escolher da Galeria.\nClique em Cancelar para abrir a Câmera.");
+      if (chooseOption) {
+        await pickFromGallery();
+      } else {
+        try {
+          await takePhoto();
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    } else {
+      Alert.alert(
+        'Alterar Foto de Perfil',
+        'Escolha uma das opções abaixo:',
+        [
+          { text: 'Escolher da Galeria', onPress: pickFromGallery },
+          { text: 'Tirar Foto', onPress: takePhoto },
+          { text: 'Cancelar', style: 'cancel' }
+        ]
+      );
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -151,12 +258,26 @@ export default function ProfileScreen() {
         {/* CARD PRINCIPAL DO USUÁRIO */}
         <Card variant="gradient" gradientColors={COLORS.gradients.primary} style={styles.userCard}>
           <View style={styles.userInfoRow}>
-            <Avatar 
-              source={profile?.avatar_url ?? undefined} 
-              name={profile?.full_name || 'User'} 
-              size={70} 
-              style={styles.avatarBorder}
-            />
+            <TouchableOpacity 
+              activeOpacity={0.85} 
+              onPress={handleChangeAvatar}
+              disabled={updatingAvatar}
+              style={styles.avatarWrapper}
+            >
+              <Avatar 
+                source={profile?.avatar_url ?? undefined} 
+                name={profile?.full_name || 'User'} 
+                size={70} 
+                style={styles.avatarBorder}
+              />
+              <View style={styles.cameraIconContainer}>
+                {updatingAvatar ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <MaterialCommunityIcons name="camera" size={12} color="#fff" />
+                )}
+              </View>
+            </TouchableOpacity>
             <View style={styles.userInfoText}>
               <Text style={styles.userName}>{profile?.full_name}</Text>
               <Text style={styles.userEmail}>{user?.email}</Text>
@@ -499,5 +620,26 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: FONTS.size.xs,
     color: COLORS.textLight,
+  },
+  avatarWrapper: {
+    position: 'relative',
+  },
+  cameraIconContainer: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: COLORS.secondary,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#fff',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
   }
 });

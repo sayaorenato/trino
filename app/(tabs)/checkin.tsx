@@ -394,7 +394,7 @@ export default function CheckinScreen() {
     try {
       // Upload da imagem (apenas se for URI local, não URL simulada)
       let finalImageUrl: string | null = null;
-      const isLocalUri = imageUri.startsWith('file://') || imageUri.startsWith('content://');
+      const isLocalUri = !imageUri.startsWith('http://') && !imageUri.startsWith('https://');
       if (isLocalUri) {
         finalImageUrl = await api.uploadCheckinImage(user.id, imageUri);
         if (!finalImageUrl) {
@@ -505,6 +505,7 @@ export default function CheckinScreen() {
             });
             if (error) {
               console.error(`Erro no check-in do grupo ${item.groupName}:`, error);
+              throw error;
             }
           }
         }

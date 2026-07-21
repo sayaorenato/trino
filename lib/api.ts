@@ -1,6 +1,28 @@
 import { supabase } from './supabase';
 import { MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, USER_MOCK_GROUPS, getMockRankings, saveMockRankings } from '../constants/mock-data';
 
+function getFileInfo(uri: string) {
+  let ext = 'jpg';
+  let contentType = 'image/jpeg';
+
+  if (uri.startsWith('data:')) {
+    const match = uri.match(/^data:(image\/(png|jpeg|jpg|webp));base64,/);
+    if (match) {
+      contentType = match[1];
+      ext = match[2] === 'jpeg' ? 'jpg' : match[2];
+    }
+  } else {
+    const cleanUri = uri.split('?')[0].split('#')[0];
+    const pathExt = cleanUri.split('.').pop()?.toLowerCase();
+    if (pathExt && ['png', 'jpg', 'jpeg', 'webp'].includes(pathExt)) {
+      ext = pathExt;
+      contentType = pathExt === 'png' ? 'image/png' : 'image/jpeg';
+    }
+  }
+
+  return { ext, contentType };
+}
+
 export const api = {
   async getUserGroups(userId: string) {
     const { data, error } = await supabase
@@ -271,9 +293,8 @@ export const api = {
    */
   async uploadCheckinImage(userId: string, localUri: string): Promise<string | null> {
     try {
-      const ext = localUri.split('.').pop()?.toLowerCase() ?? 'jpg';
+      const { ext, contentType } = getFileInfo(localUri);
       const fileName = `${userId}/${Date.now()}.${ext}`;
-      const contentType = ext === 'png' ? 'image/png' : 'image/jpeg';
 
       const response = await fetch(localUri);
       const blob = await response.blob();
@@ -295,6 +316,53 @@ export const api = {
     } catch (err) {
       console.error('Unexpected error uploading image:', err);
       return null;
+    }
+  },
+
+  /**
+   * Faz upload de um avatar de perfil para o Supabase Storage (bucket 'avatars').
+   * Retorna a URL pública ou null em caso de erro.
+   */
+  async uploadAvatarImage(userId: string, localUri: string): Promise<string | null> {
+    try {
+      const { ext, contentType } = getFileInfo(localUri);
+      const fileName = `${userId}/avatar_${Date.now()}.${ext}`;
+
+      const response = await fetch(localUri);
+      const blob = await response.blob();
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, blob, { contentType, upsert: true });
+
+      if (uploadError) {
+        console.error('Error uploading avatar image:', uploadError);
+        return null;
+      }
+
+      const { data } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      return data.publicUrl;
+    } catch (err) {
+      console.error('Unexpected error uploading avatar:', err);
+      return null;
+    }
+  },
+
+  /**
+   * Atualiza o campo avatar_url na tabela profiles.
+   */
+  async updateProfileAvatar(userId: string, avatarUrl: string): Promise<void> {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ avatar_url: avatarUrl })
+      .eq('id', userId);
+
+    if (error) {
+      console.error('Error updating profile avatar:', error);
+      throw error;
     }
   },
 
