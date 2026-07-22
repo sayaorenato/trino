@@ -91,24 +91,11 @@ export default function SupportScreen() {
             {/* BENEFICIÁRIO */}
             <View style={styles.beneficiaryContainer}>
               <Text style={styles.beneficiaryLabel}>DESTINATÁRIO</Text>
-              <Text style={styles.beneficiaryName}>RENATO BEDA DE AMORIM SAY</Text>
-              <Text style={styles.beneficiaryCity}>São Paulo / SP</Text>
+              <Text style={styles.beneficiaryName}>Freedom Tech - Renato Sayão</Text>
+              <Text style={styles.beneficiaryCity}>Rio Claro / SP</Text>
             </View>
 
             <View style={styles.divider} />
-
-            {/* CÓDIGO COPIA E COLA */}
-            <Text style={styles.copyTitle}>Ou use o Pix Copia e Cola:</Text>
-            
-            <TouchableOpacity 
-              activeOpacity={0.85}
-              onPress={handleCopyPix}
-              style={styles.pixCodeBox}
-            >
-              <Text style={styles.pixCodeText} numberOfLines={4}>
-                {PIX_CODE}
-              </Text>
-            </TouchableOpacity>
 
             <Button
               title={copied ? "✓ Código Pix Copiado!" : "Copiar Código Pix"}
