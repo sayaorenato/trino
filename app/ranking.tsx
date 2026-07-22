@@ -98,44 +98,64 @@ export default function RankingScreen() {
 
         const roundIds = (chalData.rounds || []).map((r: any) => r.id);
 
-        // B. Buscar membros aprovados e participantes do grupo
+        // B. Buscar membros aprovados do desafio + todos os membros do grupo
         const { data: approvedRequests } = await supabase
           .from('challenge_requests')
           .select('user_id, profiles(id, full_name, avatar_url, streak)')
           .eq('challenge_id', selectedChallengeId)
           .eq('status', 'approved');
 
-        const { data: membersData } = await supabase
+        const { data: challengeMembers } = await supabase
+          .from('challenge_members')
+          .select('user_id, profiles(id, full_name, avatar_url, streak)')
+          .eq('challenge_id', selectedChallengeId);
+
+        const { data: groupMembersData } = await supabase
           .from('group_members')
           .select('user_id, role, profiles(id, full_name, avatar_url, streak)')
           .eq('group_id', chalData.group_id);
 
-        // Mapear participantes únicos
+        // Mapear participantes únicos (TODOS os membros do grupo + participantes inscritos no desafio)
         const participantsMap = new Map<string, { user_id: string; name: string; avatar_url: string | null; streak: number }>();
 
-        (membersData || []).forEach((m: any) => {
-          if (m.role === 'admin') {
-            const prof = m.profiles || {};
-            participantsMap.set(m.user_id, {
-              user_id: m.user_id,
-              name: prof.full_name || 'Admin',
-              avatar_url: prof.avatar_url || null,
-              streak: prof.streak || 0,
-            });
-          }
-        });
-
-        (approvedRequests || []).forEach((r: any) => {
-          const prof = r.profiles || {};
-          participantsMap.set(r.user_id, {
-            user_id: r.user_id,
+        // 1. Incluir TODOS os membros do grupo proprietário do desafio
+        (groupMembersData || []).forEach((m: any) => {
+          const prof = m.profiles || {};
+          participantsMap.set(m.user_id, {
+            user_id: m.user_id,
             name: prof.full_name || 'Participante',
             avatar_url: prof.avatar_url || null,
             streak: prof.streak || 0,
           });
         });
 
-        // Caso a solicitação local/mock também tenha aprovação registrada
+        // 2. Incluir participantes aprovados via solicitação
+        (approvedRequests || []).forEach((r: any) => {
+          const prof = r.profiles || {};
+          if (!participantsMap.has(r.user_id)) {
+            participantsMap.set(r.user_id, {
+              user_id: r.user_id,
+              name: prof.full_name || 'Participante',
+              avatar_url: prof.avatar_url || null,
+              streak: prof.streak || 0,
+            });
+          }
+        });
+
+        // 3. Incluir participantes gravados na tabela challenge_members
+        (challengeMembers || []).forEach((cm: any) => {
+          const prof = cm.profiles || {};
+          if (!participantsMap.has(cm.user_id)) {
+            participantsMap.set(cm.user_id, {
+              user_id: cm.user_id,
+              name: prof.full_name || 'Participante',
+              avatar_url: prof.avatar_url || null,
+              streak: prof.streak || 0,
+            });
+          }
+        });
+
+        // 4. Caso exista no mock local
         const mockAllowed = MOCK_RANKINGS[selectedChallengeId] || [];
         mockAllowed.forEach((m: any) => {
           if (!participantsMap.has(m.user_id)) {
@@ -373,12 +393,12 @@ export default function RankingScreen() {
                   </Card>
                 ) : (
                   <Card variant="default" style={styles.leaderboardCard}>
-                    {(remainder.length > 0 ? remainder : sortedRanking).map((member, index, array) => (
+                    {sortedRanking.map((member, index) => (
                       <View 
                         key={member.user_id} 
                         style={[
                           styles.leaderboardRow,
-                          index === array.length - 1 && { borderBottomWidth: 0 }
+                          index === sortedRanking.length - 1 && { borderBottomWidth: 0 }
                         ]}
                       >
                         {/* Posição */}
@@ -391,12 +411,12 @@ export default function RankingScreen() {
                             <Text style={styles.userNameText}>{member.name}</Text>
                             <View style={styles.detailsRow}>
                               {/* Streak */}
-                              {member.streak > 0 && (
-                                <View style={styles.streakBadgeInline}>
-                                  <MaterialCommunityIcons name="fire" size={12} color="#ff4e50" />
-                                  <Text style={styles.streakTextInline}>{member.streak}d</Text>
-                                </View>
-                              )}
+                              <View style={styles.streakBadgeInline}>
+                                <MaterialCommunityIcons name="fire" size={12} color={member.streak > 0 ? "#ff4e50" : COLORS.textLight} />
+                                <Text style={[styles.streakTextInline, member.streak === 0 && { color: COLORS.textLight }]}>
+                                  {member.streak}d
+                                </Text>
+                              </View>
                               {/* Rounds vencidos */}
                               {member.rounds_won > 0 && (
                                 <View style={styles.roundsBadgeInline}>
