@@ -149,7 +149,8 @@ export async function getChallengeRequests(): Promise<ChallengeRequest[]> {
         ),
         challenges (
           id,
-          title
+          title,
+          group_id
         )
       `);
 
@@ -159,7 +160,7 @@ export async function getChallengeRequests(): Promise<ChallengeRequest[]> {
         id: r.id,
         challenge_id: r.challenge_id,
         challenge_name: r.challenges?.title || 'Desafio',
-        group_id: r.group_id,
+        group_id: r.group_id || r.challenges?.group_id,
         user_id: r.user_id,
         user_name: r.profiles?.full_name || 'Participante',
         user_avatar: r.profiles?.avatar_url || null,

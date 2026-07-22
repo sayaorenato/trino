@@ -230,6 +230,9 @@ export default function AdminScreen() {
         const membersData = await api.getGroupMembers(selectedGroupId);
         setMembers(membersData);
 
+        // Carregar solicitações de liberação atualizadas do Supabase
+        const reqs = await getChallengeRequests();
+        setChallengeRequests(reqs);
       } catch (err) {
         console.error('Erro ao carregar detalhes do grupo administrador:', err);
       } finally {
