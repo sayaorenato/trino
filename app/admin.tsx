@@ -1322,67 +1322,58 @@ export default function AdminScreen() {
             </ScrollView>
           </View>
 
-          {/* TAB BAR DO PAINEL */}
-          <View style={styles.tabBar}>
-            <TouchableOpacity 
-              style={[styles.tabItem, activeTab === 'group' && styles.tabItemActive]}
-              onPress={() => setActiveTab('group')}
+          {/* NAVEGAÇÃO POR BOTÕES DO PAINEL ADMIN */}
+          <View style={styles.navButtonsContainer}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.navButtonsScroll}
             >
-              <MaterialCommunityIcons 
-                name="cog-outline" 
-                size={18} 
-                color={activeTab === 'group' ? COLORS.secondary : COLORS.textLight} 
-              />
-              <Text style={[styles.tabText, activeTab === 'group' && styles.tabTextActive]}>Grupo</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.tabItem, activeTab === 'tasks' && styles.tabItemActive]}
-              onPress={() => setActiveTab('tasks')}
-            >
-              <MaterialCommunityIcons 
-                name="star-outline" 
-                size={18} 
-                color={activeTab === 'tasks' ? COLORS.secondary : COLORS.textLight} 
-              />
-              <Text style={[styles.tabText, activeTab === 'tasks' && styles.tabTextActive]}>Tarefas</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.tabItem, activeTab === 'members' && styles.tabItemActive]}
-              onPress={() => setActiveTab('members')}
-            >
-              <MaterialCommunityIcons 
-                name="account-group-outline" 
-                size={18} 
-                color={activeTab === 'members' ? COLORS.secondary : COLORS.textLight} 
-              />
-              <Text style={[styles.tabText, activeTab === 'members' && styles.tabTextActive]}>Membros</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.tabItem, activeTab === 'challenges' && styles.tabItemActive]}
-              onPress={() => setActiveTab('challenges')}
-            >
-              <MaterialCommunityIcons 
-                name="trophy-outline" 
-                size={18} 
-                color={activeTab === 'challenges' ? COLORS.secondary : COLORS.textLight} 
-              />
-              <Text style={[styles.tabText, activeTab === 'challenges' && styles.tabTextActive]}>Desafios</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.tabItem, activeTab === 'approvals' && styles.tabItemActive]}
-              onPress={() => setActiveTab('approvals')}
-            >
-              <MaterialCommunityIcons 
-                name="clipboard-check-outline" 
-                size={18} 
-                color={activeTab === 'approvals' ? COLORS.secondary : COLORS.textLight} 
-              />
-              <Text style={[styles.tabText, activeTab === 'approvals' && styles.tabTextActive]}>Aprovações</Text>
-            </TouchableOpacity>
+              {[
+                { key: 'group', label: 'Grupo', icon: 'cog-outline' },
+                { key: 'tasks', label: 'Tarefas Extras', icon: 'star-outline' },
+                { key: 'members', label: 'Membros', icon: 'account-group-outline' },
+                { key: 'challenges', label: 'Desafios', icon: 'trophy-outline' },
+                { 
+                  key: 'approvals', 
+                  label: 'Aprovações', 
+                  icon: 'clipboard-check-outline',
+                  badgeCount: challengeRequests.filter((r: any) => r.group_id === selectedGroupId && r.status === 'pending').length
+                },
+              ].map(item => {
+                const isActive = activeTab === item.key;
+                return (
+                  <TouchableOpacity
+                    key={item.key}
+                    activeOpacity={0.8}
+                    style={[
+                      styles.navButton,
+                      isActive && styles.navButtonActive
+                    ]}
+                    onPress={() => setActiveTab(item.key as any)}
+                  >
+                    <MaterialCommunityIcons 
+                      name={item.icon as any} 
+                      size={20} 
+                      color={isActive ? '#fff' : COLORS.primary} 
+                    />
+                    <Text style={[
+                      styles.navButtonText,
+                      isActive && styles.navButtonTextActive
+                    ]}>
+                      {item.label}
+                    </Text>
+                    {item.badgeCount ? (
+                      <View style={[styles.navBadgeCount, isActive && styles.navBadgeCountActive]}>
+                        <Text style={[styles.navBadgeCountText, isActive && styles.navBadgeCountTextActive]}>
+                          {item.badgeCount}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
 
           {loadingGroupDetails ? (
@@ -2053,34 +2044,66 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family.bodySemibold,
   },
 
-  // Tab Bar
-  tabBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+  // Botões de Navegação do Painel Admin
+  navButtonsContainer: {
+    backgroundColor: COLORS.surface,
+    paddingVertical: SPACING.md,
     marginBottom: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
   },
-  tabItem: {
-    flex: 1,
+  navButtonsScroll: {
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.sm,
+    alignItems: 'center',
+  },
+  navButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    backgroundColor: COLORS.surfaceCard,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: BORDER_RADIUS.md,
+    gap: 8,
   },
-  tabItemActive: {
-    borderBottomColor: COLORS.secondary,
+  navButtonActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  tabText: {
+  navButtonText: {
+    fontSize: FONTS.size.sm, // 14px - bem nítido e legível!
+    fontFamily: FONTS.family.heading,
+    fontWeight: FONTS.weight.bold,
+    color: COLORS.primary,
+  },
+  navButtonTextActive: {
+    color: '#fff',
+  },
+  navBadgeCount: {
+    backgroundColor: COLORS.secondary,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
+    marginLeft: 2,
+  },
+  navBadgeCountActive: {
+    backgroundColor: '#fff',
+  },
+  navBadgeCountText: {
+    color: '#fff',
     fontSize: 11,
-    fontFamily: FONTS.family.bodySemibold,
-    color: COLORS.textLight,
+    fontWeight: 'bold',
+    fontFamily: FONTS.family.body,
   },
-  tabTextActive: {
-    color: COLORS.secondary,
-    fontFamily: FONTS.family.bodyBold,
+  navBadgeCountTextActive: {
+    color: COLORS.primary,
   },
 
   // Empty state para abas
