@@ -29,7 +29,8 @@ import {
   MOCK_FEED, 
   MOCK_CURRENT_USER,
   ExtraTask, 
-  Checkin 
+  Checkin,
+  checkExtraTaskAvailability
 } from '../../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
 
@@ -292,6 +293,25 @@ export default function CheckinScreen() {
   };
 
   const handleSelectTask = (task: ExtraTask) => {
+    const allowLate = selectedChallenge?.allow_late_checkins ?? true;
+    const availability = checkExtraTaskAvailability(task, allowLate);
+
+    if (availability.isExpired) {
+      Alert.alert(
+        'Tarefa Expirada',
+        availability.reason || 'Esta tarefa já expirou e não está mais disponível para check-in.'
+      );
+      return;
+    }
+
+    if (availability.isLocked) {
+      Alert.alert(
+        'Tarefa Bloqueada',
+        availability.reason || 'Esta tarefa ainda não está liberada para check-in.'
+      );
+      return;
+    }
+
     setSelectedTask(task);
     setSelectedHabit(null);
     setStep('upload');
@@ -770,23 +790,11 @@ export default function CheckinScreen() {
                   <View style={styles.extraTasksContainer}>
                     {extraTasks.map(task => {
                       const isCompleted = task.completed_by.includes(user?.id || '');
-                      
-                      // Determina bloqueio
-                      let isLocked = false;
-                      let warningText = '';
-                      if (!isCompleted && (task.type === 'presence' || task.type === 'punctuality')) {
-                        const taskDateStr = task.expires_at.split('T')[0];
-                        const [hour, minute] = (task.start_time || '00:00').split(':');
-                        const startDateTime = new Date(`${taskDateStr}T${hour}:${minute}:00`);
-                        const now = new Date();
-                        isLocked = now < startDateTime;
-                        
-                        if (isLocked) {
-                          const day = String(startDateTime.getDate()).padStart(2, '0');
-                          const month = String(startDateTime.getMonth() + 1).padStart(2, '0');
-                          warningText = `Disponível a partir de ${day}/${month} às ${task.start_time}`;
-                        }
-                      }
+                      const allowLate = selectedChallenge?.allow_late_checkins ?? true;
+                      const availability = checkExtraTaskAvailability(task, allowLate);
+                      const isLocked = !isCompleted && availability.isLocked;
+                      const isExpired = !isCompleted && availability.isExpired;
+                      const warningText = availability.reason || '';
 
                       // Ícones baseados no tipo
                       const iconName = task.type === 'presence' ? 'map-marker-check-outline' :

@@ -33,6 +33,7 @@ import {
   savePersistedMockData,
   getChallengeRequests,
   saveChallengeRequests,
+  checkExtraTaskAvailability,
   ChallengeRequest,
   getMockRankings,
   saveMockRankings
@@ -524,43 +525,28 @@ export default function ChallengeScreen() {
       return;
     }
 
-    const isExpired = new Date(task.expires_at) < new Date();
-    if (isExpired) {
+    const allowLate = challenge?.allow_late_checkins ?? true;
+    const availability = checkExtraTaskAvailability(task, allowLate);
+
+    if (availability.isExpired) {
       if (Platform.OS === 'web') {
-        window.alert('Aviso: Esta tarefa já expirou e não está mais disponível para check-in.');
+        window.alert(`Aviso: ${availability.reason || 'Esta tarefa já expirou e não está mais disponível para check-in.'}`);
       } else {
         Alert.alert(
           'Tarefa Expirada',
-          'Esta tarefa já expirou e não está mais disponível para check-in.'
+          availability.reason || 'Esta tarefa já expirou e não está mais disponível para check-in.'
         );
       }
       return;
     }
 
-    // Calcular bloqueio
-    let isLocked = false;
-    let warningText = '';
-    if (task.type === 'presence' || task.type === 'punctuality') {
-      const taskDateStr = task.expires_at.split('T')[0];
-      const [hour, minute] = (task.start_time || '00:00').split(':');
-      const startDateTime = new Date(`${taskDateStr}T${hour}:${minute}:00`);
-      const now = new Date();
-      isLocked = now < startDateTime;
-
-      if (isLocked) {
-        const day = String(startDateTime.getDate()).padStart(2, '0');
-        const month = String(startDateTime.getMonth() + 1).padStart(2, '0');
-        warningText = `Disponível em ${day}/${month} às ${task.start_time}`;
-      }
-    }
-
-    if (isLocked) {
+    if (availability.isLocked) {
       if (Platform.OS === 'web') {
-        window.alert(`Aviso: Esta tarefa extra só estará liberada para check-in a partir de: ${warningText.replace('Disponível em ', '')}`);
+        window.alert(`Aviso: Tarefa Bloqueada — ${availability.reason}`);
       } else {
         Alert.alert(
           'Tarefa Bloqueada',
-          `Esta tarefa extra só estará liberada para check-in a partir de: ${warningText.replace('Disponível em ', '')}`
+          availability.reason || 'Esta tarefa ainda não está liberada para check-in.'
         );
       }
       return;
@@ -941,24 +927,11 @@ export default function ChallengeScreen() {
                 .sort((a, b) => new Date(b.expires_at).getTime() - new Date(a.expires_at).getTime())
                 .map(task => {
                   const isCompleted = task.completed_by.includes(user?.id || 'user_1');
-                  const isExpired = new Date(task.expires_at) < new Date();
-                  
-                  // Determina bloqueio
-                  let isLocked = false;
-                  let warningText = '';
-                  if (!isCompleted && !isExpired && (task.type === 'presence' || task.type === 'punctuality')) {
-                    const taskDateStr = task.expires_at.split('T')[0];
-                    const [hour, minute] = (task.start_time || '00:00').split(':');
-                    const startDateTime = new Date(`${taskDateStr}T${hour}:${minute}:00`);
-                    const now = new Date();
-                    isLocked = now < startDateTime;
-                    
-                    if (isLocked) {
-                      const day = String(startDateTime.getDate()).padStart(2, '0');
-                      const month = String(startDateTime.getMonth() + 1).padStart(2, '0');
-                      warningText = `Indisponível antes de ${day}/${month} às ${task.start_time}`;
-                    }
-                  }
+                  const allowLate = challenge?.allow_late_checkins ?? true;
+                  const availability = checkExtraTaskAvailability(task, allowLate);
+                  const isLocked = !isCompleted && availability.isLocked;
+                  const isExpired = !isCompleted && availability.isExpired;
+                  const warningText = availability.reason || '';
 
                   return (
                     <TouchableOpacity

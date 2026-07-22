@@ -613,3 +613,103 @@ export interface ChallengeInvitation {
 }
 
 export const MOCK_CHALLENGE_INVITATIONS: ChallengeInvitation[] = [];
+
+export interface TaskAvailability {
+  isAvailable: boolean;
+  isLocked: boolean;     // Ainda não começou o horário de liberação
+  isExpired: boolean;    // Já passou do horário/prazo permitido
+  reason?: string;       // Motivo amigável para exibir ao usuário
+}
+
+export function checkExtraTaskAvailability(
+  task: {
+    type: 'general' | 'presence' | 'punctuality';
+    start_time?: string;
+    expires_at: string;
+  },
+  allowLateCheckins: boolean = true,
+  now: Date = new Date()
+): TaskAvailability {
+  if (!task) return { isAvailable: false, isLocked: false, isExpired: true, reason: 'Tarefa inválida.' };
+
+  const taskDateStr = task.expires_at ? task.expires_at.split('T')[0] : new Date().toISOString().split('T')[0];
+  const [hourStr, minStr] = (task.start_time || '00:00').split(':');
+  const hour = parseInt(hourStr || '0', 10);
+  const min = parseInt(minStr || '0', 10);
+
+  // Data/Hora exata estipulada para a tarefa
+  const startDateTime = new Date(`${taskDateStr}T${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}:00`);
+
+  // 1. PONTUALIDADE: Disponível de [startDateTime - 30 min] até [startDateTime + 5 min]
+  if (task.type === 'punctuality') {
+    const windowStart = new Date(startDateTime.getTime() - 30 * 60 * 1000); // 30 min antes
+    const windowEnd = new Date(startDateTime.getTime() + 5 * 60 * 1000);    // 5 min depois
+
+    if (now < windowStart) {
+      const windowStartStr = windowStart.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      return {
+        isAvailable: false,
+        isLocked: true,
+        isExpired: false,
+        reason: `Liberado 30 min antes do horário (às ${windowStartStr})`,
+      };
+    }
+
+    if (now > windowEnd) {
+      const windowEndStr = windowEnd.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      return {
+        isAvailable: false,
+        isLocked: false,
+        isExpired: true,
+        reason: `Prazo de pontualidade encerrado (tolerância de 5 min expirou às ${windowEndStr})`,
+      };
+    }
+
+    return { isAvailable: true, isLocked: false, isExpired: false };
+  }
+
+  // 2. PRESENÇA: Disponível a partir de startDateTime para frente
+  if (task.type === 'presence') {
+    if (now < startDateTime) {
+      const day = String(startDateTime.getDate()).padStart(2, '0');
+      const month = String(startDateTime.getMonth() + 1).padStart(2, '0');
+      return {
+        isAvailable: false,
+        isLocked: true,
+        isExpired: false,
+        reason: `Disponível a partir de ${day}/${month} às ${task.start_time}`,
+      };
+    }
+
+    // Fim da disponibilidade para presença respeitando regras do desafio
+    const endOfDay = new Date(`${taskDateStr}T23:59:59`);
+    const expiresAtDate = new Date(task.expires_at);
+    const deadline = allowLateCheckins ? expiresAtDate : endOfDay;
+
+    if (now > deadline) {
+      return {
+        isAvailable: false,
+        isLocked: false,
+        isExpired: true,
+        reason: allowLateCheckins 
+          ? 'Tarefa expirada.' 
+          : 'Check-in atrasado não permitido para este desafio.',
+      };
+    }
+
+    return { isAvailable: true, isLocked: false, isExpired: false };
+  }
+
+  // 3. GERAL: Disponível até a data de expiração
+  const expiresAtDate = new Date(task.expires_at);
+  if (now > expiresAtDate) {
+    return {
+      isAvailable: false,
+      isLocked: false,
+      isExpired: true,
+      reason: 'Tarefa expirada.',
+    };
+  }
+
+  return { isAvailable: true, isLocked: false, isExpired: false };
+}
