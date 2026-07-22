@@ -14,7 +14,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from '../components/ui/Card';
 import { Avatar } from '../components/ui/Avatar';
 import { WebContainer } from '../components/ui/WebContainer';
-import { MOCK_RANKINGS, MOCK_GROUPS, MOCK_CHALLENGES, MOCK_ROUNDS, RankingMember, getMockRankings } from '../constants/mock-data';
+import { MOCK_RANKINGS, MOCK_GROUPS, MOCK_ROUNDS, RankingMember, getMockRankings } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
@@ -22,92 +22,181 @@ import { supabase } from '../lib/supabase';
 
 export default function RankingScreen() {
   const router = useRouter();
-  const { challengeId } = useLocalSearchParams<{ challengeId?: string }>();
+  const { challengeId, groupId } = useLocalSearchParams<{ challengeId?: string; groupId?: string }>();
   const { user } = useAuth();
 
+  const [challengesList, setChallengesList] = useState<any[]>([]);
+  const [selectedChallengeId, setSelectedChallengeId] = useState<string>('');
   const [rankingData, setRankingData] = useState<RankingMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingRanking, setLoadingRanking] = useState(false);
 
-  const targetChalId = challengeId || 'chal_1';
-
+  // 1. Carregar lista de desafios disponíveis (do grupo ou gerais)
   useEffect(() => {
-    async function loadRanking() {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      await getMockRankings();
+    async function loadChallenges() {
+      try {
+        setLoading(true);
+        let list: any[] = [];
 
-      const isMock = targetChalId.startsWith('chal');
-      if (isMock) {
-        const mRank = MOCK_RANKINGS[targetChalId] || [];
-        setRankingData(mRank);
-        setLoading(false);
-      } else {
-        try {
-          // 1. Buscar o desafio para obter o groupId
-          const { data: chalData } = await supabase
-            .from('challenges')
-            .select('*, rounds(*)')
-            .eq('id', targetChalId)
-            .maybeSingle();
-
-          if (chalData) {
-            // 2. Buscar membros do grupo
-            const members = await api.getGroupMembers(chalData.group_id);
-            const roundIds = (chalData.rounds || []).map((r: any) => r.id);
-
-            let dbCheckins: any[] = [];
-            if (roundIds.length > 0) {
-              const { data: cData } = await supabase
-                .from('checkins')
-                .select('user_id, note')
-                .in('round_id', roundIds);
-              dbCheckins = cData || [];
-            }
-
-            // 3. Calcular pontos reais (10 pts por check-in diário e 30 pts por tarefa extra)
-            const allowedRanking = MOCK_RANKINGS[targetChalId] || [];
-            const activeMembers = members.filter((m: any) => 
-              m.role === 'admin' || allowedRanking.some((r: any) => r.user_id === m.user_id)
-            );
-
-            const calculatedRanking: RankingMember[] = activeMembers.map((m: any) => {
-              const userCheckins = dbCheckins.filter((c: any) => c.user_id === m.user_id);
-              
-              let points = 0;
-              userCheckins.forEach((c: any) => {
-                if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
-                  points += 30;
-                } else {
-                  points += 10;
-                }
-              });
-
-              return {
-                user_id: m.user_id,
-                name: m.full_name || 'Participante',
-                avatar_url: m.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-                points: points,
-                streak: m.user_id === user.id ? 12 : 5, // streak simulada
-                rounds_won: 0
-              };
-            });
-
-            setRankingData(calculatedRanking);
-          }
-        } catch (e) {
-          console.error('Erro ao buscar ranking dinâmico no Supabase:', e);
-        } finally {
-          setLoading(false);
+        if (groupId) {
+          list = await api.getGroupChallenges(groupId);
+        } else {
+          const { data } = await supabase.from('challenges').select('*');
+          list = data || [];
         }
+
+        const fullList = list;
+
+        setChallengesList(fullList);
+
+        if (fullList.length > 0) {
+          // Selecionar por padrão o challengeId recebido ou o primeiro da lista
+          let defaultId = fullList[0].id;
+          if (challengeId && fullList.some(c => c.id === challengeId)) {
+            defaultId = challengeId;
+          }
+          setSelectedChallengeId(defaultId);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar desafios para o ranking:', err);
+      } finally {
+        setLoading(false);
       }
     }
-    loadRanking();
-  }, [targetChalId, user]);
+    loadChallenges();
+  }, [groupId, challengeId]);
 
-  // Mapear posições de acordo com os pontos
+  // 2. Carregar e calcular o ranking dinâmico sempre que o desafio selecionado mudar
+  useEffect(() => {
+    if (!selectedChallengeId) return;
+
+    async function loadRankingForSelectedChallenge() {
+      setLoadingRanking(true);
+      await getMockRankings();
+
+      const isMock = selectedChallengeId.startsWith('chal');
+      if (isMock) {
+        const mRank = MOCK_RANKINGS[selectedChallengeId] || [];
+        setRankingData(mRank);
+        setLoadingRanking(false);
+        return;
+      }
+
+      try {
+        // A. Buscar dados do desafio e seus rounds no Supabase
+        const { data: chalData } = await supabase
+          .from('challenges')
+          .select('*, rounds(*)')
+          .eq('id', selectedChallengeId)
+          .maybeSingle();
+
+        if (!chalData) {
+          setRankingData([]);
+          setLoadingRanking(false);
+          return;
+        }
+
+        const roundIds = (chalData.rounds || []).map((r: any) => r.id);
+
+        // B. Buscar membros aprovados e participantes do grupo
+        const { data: approvedRequests } = await supabase
+          .from('challenge_requests')
+          .select('user_id, profiles(id, full_name, avatar_url, streak)')
+          .eq('challenge_id', selectedChallengeId)
+          .eq('status', 'approved');
+
+        const { data: membersData } = await supabase
+          .from('group_members')
+          .select('user_id, role, profiles(id, full_name, avatar_url, streak)')
+          .eq('group_id', chalData.group_id);
+
+        // Mapear participantes únicos
+        const participantsMap = new Map<string, { user_id: string; name: string; avatar_url: string | null; streak: number }>();
+
+        (membersData || []).forEach((m: any) => {
+          if (m.role === 'admin') {
+            const prof = m.profiles || {};
+            participantsMap.set(m.user_id, {
+              user_id: m.user_id,
+              name: prof.full_name || 'Admin',
+              avatar_url: prof.avatar_url || null,
+              streak: prof.streak || 0,
+            });
+          }
+        });
+
+        (approvedRequests || []).forEach((r: any) => {
+          const prof = r.profiles || {};
+          participantsMap.set(r.user_id, {
+            user_id: r.user_id,
+            name: prof.full_name || 'Participante',
+            avatar_url: prof.avatar_url || null,
+            streak: prof.streak || 0,
+          });
+        });
+
+        // Caso a solicitação local/mock também tenha aprovação registrada
+        const mockAllowed = MOCK_RANKINGS[selectedChallengeId] || [];
+        mockAllowed.forEach((m: any) => {
+          if (!participantsMap.has(m.user_id)) {
+            participantsMap.set(m.user_id, {
+              user_id: m.user_id,
+              name: m.name,
+              avatar_url: m.avatar_url,
+              streak: m.streak || 0
+            });
+          }
+        });
+
+        // C. Buscar check-ins gravados no banco para esses rounds
+        let dbCheckins: any[] = [];
+        if (roundIds.length > 0) {
+          const { data: cData } = await supabase
+            .from('checkins')
+            .select('user_id, note, round_id')
+            .in('round_id', roundIds);
+          dbCheckins = cData || [];
+        }
+
+        // D. Calcular pontuação real: 10 pts por check-in regular e 30 pts por tarefa extra
+        const calculatedRanking: RankingMember[] = Array.from(participantsMap.values()).map(p => {
+          const userCheckins = dbCheckins.filter(c => c.user_id === p.user_id);
+          
+          let points = 0;
+          userCheckins.forEach(c => {
+            if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
+              points += 30; // 30 pontos por tarefa extra concluída
+            } else {
+              points += 10; // 10 pontos por check-in diário
+            }
+          });
+
+          return {
+            user_id: p.user_id,
+            name: p.name,
+            avatar_url: p.avatar_url || '',
+            points: points,
+            streak: userCheckins.length > 0 ? Math.max(p.streak, userCheckins.length) : p.streak,
+            rounds_won: 0
+          };
+        });
+
+        // Ordenar por pontos decrescentes
+        calculatedRanking.sort((a, b) => b.points - a.points);
+        setRankingData(calculatedRanking);
+
+      } catch (e) {
+        console.error('Erro ao buscar ranking dinâmico no Supabase:', e);
+        setRankingData([]);
+      } finally {
+        setLoadingRanking(false);
+      }
+    }
+
+    loadRankingForSelectedChallenge();
+  }, [selectedChallengeId, user]);
+
+  // Mapear posições de acordo com a ordem de pontuação
   const sortedRanking = [...rankingData]
     .sort((a, b) => b.points - a.points)
     .map((member, index) => ({
@@ -115,11 +204,13 @@ export default function RankingScreen() {
       position: index + 1
     }));
 
-  // Separar pódio (Top 3) e o restante
+  // Separar pódio (Top 3) e o restante da classificação
   const top1 = sortedRanking.find(m => m.position === 1);
   const top2 = sortedRanking.find(m => m.position === 2);
   const top3 = sortedRanking.find(m => m.position === 3);
   const remainder = sortedRanking.filter(m => m.position > 3);
+
+  const selectedChallengeObj = challengesList.find(c => c.id === selectedChallengeId);
 
   if (loading) {
     return (
@@ -134,129 +225,207 @@ export default function RankingScreen() {
   return (
     <WebContainer>
       <SafeAreaView style={styles.container}>
+        {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.primary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Ranking do Desafio</Text>
-          <View style={{ width: 24 }} /> {/* Espaçador */}
+          <View style={{ width: 24 }} />
         </View>
 
         <ScrollView 
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          
-          {/* PÓDIO TOP 3 */}
-          <View style={styles.podiumContainer}>
-            {/* Segundo Lugar (Esquerda) */}
-            {top2 && (
-              <View style={styles.podiumCol}>
-                <View style={styles.avatarWrapper}>
-                  <Avatar source={top2.avatar_url} name={top2.name} size={60} />
-                  <View style={[styles.podiumBadge, { backgroundColor: '#a0a0a5' }]}>
-                    <Text style={styles.podiumBadgeText}>2</Text>
-                  </View>
-                </View>
-                <Text style={styles.podiumName} numberOfLines={1}>{top2.name.split(' ')[0]}</Text>
-                <Text style={styles.podiumPoints}>{top2.points} pts</Text>
-                <View style={[styles.podiumBase, styles.podium2]}>
-                  <Text style={styles.podiumBaseText}>2º</Text>
-                </View>
-              </View>
-            )}
+          {/* SELETOR DE DESAFIOS */}
+          {challengesList.length > 0 && (
+            <View style={styles.selectorContainer}>
+              <Text style={styles.selectorTitle}>ESCOLHA O DESAFIO:</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.selectorScroll}
+              >
+                {challengesList.map(chal => {
+                  const isSelected = chal.id === selectedChallengeId;
+                  return (
+                    <TouchableOpacity
+                      key={chal.id}
+                      activeOpacity={0.8}
+                      onPress={() => setSelectedChallengeId(chal.id)}
+                      style={[
+                        styles.challengeChip,
+                        isSelected && styles.challengeChipSelected
+                      ]}
+                    >
+                      <MaterialCommunityIcons 
+                        name={isSelected ? "trophy" : "trophy-outline"} 
+                        size={16} 
+                        color={isSelected ? "#fff" : COLORS.primary} 
+                      />
+                      <Text 
+                        style={[
+                          styles.challengeChipText,
+                          isSelected && styles.challengeChipTextSelected
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {chal.title || chal.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
 
-            {/* Primeiro Lugar (Centro - Destaque) */}
-            {top1 && (
-              <View style={[styles.podiumCol, styles.podiumColCenter]}>
-                <MaterialCommunityIcons name="crown" size={26} color={COLORS.gold} style={styles.crownIcon} />
-                <View style={styles.avatarWrapperCenter}>
-                  <Avatar source={top1.avatar_url} name={top1.name} size={76} style={styles.goldAvatarBorder} />
-                  <View style={[styles.podiumBadge, { backgroundColor: COLORS.gold }]}>
-                    <Text style={styles.podiumBadgeText}>1</Text>
-                  </View>
+          {loadingRanking ? (
+            <View style={{ paddingVertical: 60, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color={COLORS.secondary} />
+              <Text style={{ marginTop: SPACING.md, fontSize: FONTS.size.xs, color: COLORS.textSecondary, fontFamily: FONTS.family.body }}>
+                Calculando pontos e posições...
+              </Text>
+            </View>
+          ) : (
+            <>
+              {/* TÍTULO DO DESAFIO ATIVO */}
+              {selectedChallengeObj && (
+                <View style={styles.activeChallengeHeader}>
+                  <Text style={styles.activeChallengeTitle}>
+                    {selectedChallengeObj.title || selectedChallengeObj.name}
+                  </Text>
                 </View>
-                <Text style={styles.podiumNameCenter} numberOfLines={1}>{top1.name.split(' ')[0]}</Text>
-                <Text style={styles.podiumPointsCenter}>{top1.points} pts</Text>
-                <View style={[styles.podiumBase, styles.podium1, SHADOWS.medium]}>
-                  <Text style={styles.podiumBaseText}>1º</Text>
-                </View>
-              </View>
-            )}
+              )}
 
-            {/* Terceiro Lugar (Direita) */}
-            {top3 && (
-              <View style={styles.podiumCol}>
-                <View style={styles.avatarWrapper}>
-                  <Avatar source={top3.avatar_url} name={top3.name} size={60} />
-                  <View style={[styles.podiumBadge, { backgroundColor: '#cd7f32' }]}>
-                    <Text style={styles.podiumBadgeText}>3</Text>
-                  </View>
-                </View>
-                <Text style={styles.podiumName} numberOfLines={1}>{top3.name.split(' ')[0]}</Text>
-                <Text style={styles.podiumPoints}>{top3.points} pts</Text>
-                <View style={[styles.podiumBase, styles.podium3]}>
-                  <Text style={styles.podiumBaseText}>3º</Text>
-                </View>
-              </View>
-            )}
-          </View>
-
-          {/* RESTANTE DOS PARTICIPANTES */}
-          <View style={styles.listSection}>
-            <Text style={styles.listSectionTitle}>Classificação Geral</Text>
-            
-            <Card variant="default" style={styles.leaderboardCard}>
-              {remainder.map((member, index) => (
-                <View 
-                  key={member.user_id} 
-                  style={[
-                    styles.leaderboardRow,
-                    index === remainder.length - 1 && { borderBottomWidth: 0 }
-                  ]}
-                >
-                  {/* Posição */}
-                  <Text style={styles.positionText}>{member.position}</Text>
-                  
-                  {/* Usuário */}
-                  <View style={styles.userCol}>
-                    <Avatar source={member.avatar_url} name={member.name} size={36} />
-                    <View style={{ marginLeft: SPACING.sm }}>
-                      <Text style={styles.userNameText}>{member.name}</Text>
-                      <View style={styles.detailsRow}>
-                        {/* Streak */}
-                        {member.streak > 0 && (
-                          <View style={styles.streakBadgeInline}>
-                            <MaterialCommunityIcons name="fire" size={12} color="#ff4e50" />
-                            <Text style={styles.streakTextInline}>{member.streak}d</Text>
-                          </View>
-                        )}
-                        {/* Rounds vencidos */}
-                        {member.rounds_won > 0 && (
-                          <View style={styles.roundsBadgeInline}>
-                            <MaterialCommunityIcons name="crown" size={12} color={COLORS.gold} />
-                            <Text style={styles.roundsTextInline}>{member.rounds_won} rd</Text>
-                          </View>
-                        )}
+              {/* PÓDIO TOP 3 */}
+              <View style={styles.podiumContainer}>
+                {/* Segundo Lugar (Esquerda) */}
+                {top2 ? (
+                  <View style={styles.podiumCol}>
+                    <View style={styles.avatarWrapper}>
+                      <Avatar source={top2.avatar_url} name={top2.name} size={58} />
+                      <View style={[styles.podiumBadge, { backgroundColor: '#a0a0a5' }]}>
+                        <Text style={styles.podiumBadgeText}>2</Text>
                       </View>
                     </View>
+                    <Text style={styles.podiumName} numberOfLines={1}>{top2.name.split(' ')[0]}</Text>
+                    <Text style={styles.podiumPoints}>{top2.points} pts</Text>
+                    <View style={[styles.podiumBase, styles.podium2]}>
+                      <Text style={styles.podiumBaseText}>2º</Text>
+                    </View>
                   </View>
+                ) : (
+                  <View style={styles.podiumCol} />
+                )}
 
-                  {/* Pontos */}
-                  <View style={styles.pointsCol}>
-                    <Text style={styles.pointsValueText}>{member.points}</Text>
-                    <Text style={styles.pointsLabelText}>pts</Text>
+                {/* Primeiro Lugar (Centro - Destaque) */}
+                {top1 ? (
+                  <View style={[styles.podiumCol, styles.podiumColCenter]}>
+                    <MaterialCommunityIcons name="crown" size={26} color={COLORS.gold} style={styles.crownIcon} />
+                    <View style={styles.avatarWrapperCenter}>
+                      <Avatar source={top1.avatar_url} name={top1.name} size={74} style={styles.goldAvatarBorder} />
+                      <View style={[styles.podiumBadge, { backgroundColor: COLORS.gold }]}>
+                        <Text style={styles.podiumBadgeText}>1</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.podiumNameCenter} numberOfLines={1}>{top1.name.split(' ')[0]}</Text>
+                    <Text style={styles.podiumPointsCenter}>{top1.points} pts</Text>
+                    <View style={[styles.podiumBase, styles.podium1, SHADOWS.medium]}>
+                      <Text style={styles.podiumBaseText}>1º</Text>
+                    </View>
                   </View>
-                </View>
-              ))}
-            </Card>
-          </View>
+                ) : (
+                  <View style={[styles.podiumCol, styles.podiumColCenter]} />
+                )}
 
-          {/* Informação sobre os rounds */}
+                {/* Terceiro Lugar (Direita) */}
+                {top3 ? (
+                  <View style={styles.podiumCol}>
+                    <View style={styles.avatarWrapper}>
+                      <Avatar source={top3.avatar_url} name={top3.name} size={58} />
+                      <View style={[styles.podiumBadge, { backgroundColor: '#cd7f32' }]}>
+                        <Text style={styles.podiumBadgeText}>3</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.podiumName} numberOfLines={1}>{top3.name.split(' ')[0]}</Text>
+                    <Text style={styles.podiumPoints}>{top3.points} pts</Text>
+                    <View style={[styles.podiumBase, styles.podium3]}>
+                      <Text style={styles.podiumBaseText}>3º</Text>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.podiumCol} />
+                )}
+              </View>
+
+              {/* RESTANTE DOS PARTICIPANTES (CLASSIFICAÇÃO GERAL NA SEQUÊNCIA) */}
+              <View style={styles.listSection}>
+                <Text style={styles.listSectionTitle}>
+                  {remainder.length > 0 ? "Classificação Geral" : "Participantes do Desafio"}
+                </Text>
+                
+                {sortedRanking.length === 0 ? (
+                  <Card variant="flat" style={{ padding: SPACING.lg, alignItems: 'center' }}>
+                    <Text style={{ fontSize: FONTS.size.xs, color: COLORS.textSecondary, fontFamily: FONTS.family.body }}>
+                      Nenhum participante pontuou neste desafio ainda.
+                    </Text>
+                  </Card>
+                ) : (
+                  <Card variant="default" style={styles.leaderboardCard}>
+                    {(remainder.length > 0 ? remainder : sortedRanking).map((member, index, array) => (
+                      <View 
+                        key={member.user_id} 
+                        style={[
+                          styles.leaderboardRow,
+                          index === array.length - 1 && { borderBottomWidth: 0 }
+                        ]}
+                      >
+                        {/* Posição */}
+                        <Text style={styles.positionText}>{member.position}º</Text>
+                        
+                        {/* Usuário */}
+                        <View style={styles.userCol}>
+                          <Avatar source={member.avatar_url} name={member.name} size={36} />
+                          <View style={{ marginLeft: SPACING.sm }}>
+                            <Text style={styles.userNameText}>{member.name}</Text>
+                            <View style={styles.detailsRow}>
+                              {/* Streak */}
+                              {member.streak > 0 && (
+                                <View style={styles.streakBadgeInline}>
+                                  <MaterialCommunityIcons name="fire" size={12} color="#ff4e50" />
+                                  <Text style={styles.streakTextInline}>{member.streak}d</Text>
+                                </View>
+                              )}
+                              {/* Rounds vencidos */}
+                              {member.rounds_won > 0 && (
+                                <View style={styles.roundsBadgeInline}>
+                                  <MaterialCommunityIcons name="crown" size={12} color={COLORS.gold} />
+                                  <Text style={styles.roundsTextInline}>{member.rounds_won} rd</Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                        </View>
+
+                        {/* Pontos */}
+                        <View style={styles.pointsCol}>
+                          <Text style={styles.pointsValueText}>{member.points}</Text>
+                          <Text style={styles.pointsLabelText}>pts</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </Card>
+                )}
+              </View>
+            </>
+          )}
+
+          {/* INFORMAÇÃO DOS PONTOS */}
           <Card variant="flat" style={styles.infoBox}>
             <MaterialCommunityIcons name="information-outline" size={20} color={COLORS.textSecondary} />
             <Text style={styles.infoBoxText}>
-              A pontuação é zerada a cada round semanal de modo a motivar a todos. O vencedor geral do desafio de 8 semanas será quem acumular mais rounds vencidos.
+              A pontuação é acumulada através da conclusão dos check-ins diários da rotina (+10 pts) e das tarefas extras ativas (+30 pts) de cada round do desafio.
             </Text>
           </Card>
         </ScrollView>
@@ -291,6 +460,63 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: SPACING.xl,
+  },
+  selectorContainer: {
+    backgroundColor: COLORS.surface,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  selectorTitle: {
+    fontSize: 10,
+    fontWeight: FONTS.weight.bold,
+    color: COLORS.textLight,
+    fontFamily: FONTS.family.heading,
+    letterSpacing: 0.5,
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.xs,
+  },
+  selectorScroll: {
+    paddingHorizontal: SPACING.lg,
+    gap: SPACING.sm,
+    alignItems: 'center',
+  },
+  challengeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceCard,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs + 2,
+    borderRadius: 999,
+    gap: 6,
+  },
+  challengeChipSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  challengeChipText: {
+    fontSize: FONTS.size.xs,
+    fontFamily: FONTS.family.bodyBold,
+    fontWeight: FONTS.weight.bold,
+    color: COLORS.primary,
+  },
+  challengeChipTextSelected: {
+    color: '#fff',
+  },
+  activeChallengeHeader: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    alignItems: 'center',
+  },
+  activeChallengeTitle: {
+    fontSize: FONTS.size.md,
+    fontFamily: FONTS.family.heading,
+    fontWeight: FONTS.weight.bold,
+    color: COLORS.primary,
+    textAlign: 'center',
   },
   podiumContainer: {
     flexDirection: 'row',

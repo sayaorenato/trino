@@ -291,7 +291,7 @@ export default function GroupDashboardScreen() {
             <TouchableOpacity
               style={styles.actionCard}
               activeOpacity={0.7}
-              onPress={() => router.push('/ranking')}
+              onPress={() => router.push({ pathname: '/ranking', params: { groupId: group.id } })}
             >
               <View style={[styles.actionIconBg, { backgroundColor: COLORS.goldMuted }]}>
                 <MaterialCommunityIcons name="podium" size={24} color={COLORS.gold} />
