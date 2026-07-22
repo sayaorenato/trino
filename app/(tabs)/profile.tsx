@@ -8,8 +8,10 @@ import {
   SafeAreaView, 
   Platform,
   ActivityIndicator,
-  Alert
+  Alert,
+  Share
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -29,6 +31,39 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(false);
   const [hasAdminGroups, setHasAdminGroups] = useState(false);
   const [updatingAvatar, setUpdatingAvatar] = useState(false);
+
+  const handleShareApp = async () => {
+    const shareUrl = 'https://trino-cyan.vercel.app/';
+    const shareMessage = `Venha fazer parte do Trino! Acompanhe hábitos, desafios e constância na fé com o aplicativo: ${shareUrl}`;
+
+    try {
+      if (Clipboard && typeof Clipboard.setStringAsync === 'function') {
+        await Clipboard.setStringAsync(shareUrl);
+      }
+      
+      if (Platform.OS === 'web') {
+        window.alert('Link Copiado!\n\nO link de acesso do aplicativo foi copiado para a área de transferência. Escolha onde compartilhar!');
+      } else {
+        Alert.alert('Link Copiado!', 'O link de acesso do aplicativo foi copiado para a área de transferência. Escolha onde compartilhar!');
+      }
+
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && (navigator as any).share) {
+        await (navigator as any).share({
+          title: 'Trino — Fé em Constância',
+          text: shareMessage,
+          url: shareUrl,
+        });
+      } else {
+        await Share.share({
+          message: shareMessage,
+          url: shareUrl,
+          title: 'Trino — Fé em Constância',
+        });
+      }
+    } catch (e) {
+      console.log('Compartilhamento finalizado ou cancelado.');
+    }
+  };
 
   const handleChangeAvatar = async () => {
     if (!user) return;
@@ -399,22 +434,10 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Convidar Amigos */}
-            <TouchableOpacity 
-              style={styles.optionItem}
-              onPress={() => router.push('/invite')}
-            >
-              <View style={styles.optionLeft}>
-                <MaterialCommunityIcons name="account-plus-outline" size={22} color={COLORS.primary} />
-                <Text style={styles.optionText}>Convidar Participantes</Text>
-              </View>
-              <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} />
-            </TouchableOpacity>
-
             {/* Compartilhar App */}
             <TouchableOpacity 
               style={[styles.optionItem, { borderBottomWidth: 0 }]}
-              onPress={() => router.push('/invite')}
+              onPress={handleShareApp}
             >
               <View style={styles.optionLeft}>
                 <MaterialCommunityIcons name="share-variant-outline" size={22} color={COLORS.primary} />

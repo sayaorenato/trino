@@ -7,7 +7,8 @@ import {
   SafeAreaView, 
   Alert,
   ActivityIndicator,
-  Platform
+  Platform,
+  Share
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -67,12 +68,33 @@ export default function InviteScreen() {
   const inviteCode = group?.invite_code || "TRI-GEN-000";
   const inviteLink = `https://trino.app/invite?code=${inviteCode}`;
 
-  const handleCopyLink = async () => {
-    await Clipboard.setStringAsync(inviteLink);
-    if (Platform.OS === 'web') {
-      window.alert('Link Copiado! O link de convite foi copiado para a área de transferência.');
-    } else {
-      Alert.alert('Link Copiado!', 'O link de convite foi copiado para a área de transferência.');
+  const handleShareLink = async () => {
+    const shareMessage = `Venha fazer parte do nosso grupo "${group?.name || 'Trino'}"! Use o código ${inviteCode} ou acesse direto pelo link: ${inviteLink}`;
+
+    try {
+      await Clipboard.setStringAsync(inviteLink);
+      
+      if (Platform.OS === 'web') {
+        window.alert('Link Copiado! O link de convite foi copiado para a sua área de transferência. Escolha onde compartilhar!');
+      } else {
+        Alert.alert('Link Copiado!', 'O link de convite foi copiado para a sua área de transferência. Escolha onde compartilhar!');
+      }
+
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && (navigator as any).share) {
+        await (navigator as any).share({
+          title: `Convite para ${group?.name || 'Trino'}`,
+          text: shareMessage,
+          url: inviteLink,
+        });
+      } else {
+        await Share.share({
+          message: shareMessage,
+          url: inviteLink,
+          title: `Convite para ${group?.name || 'Trino'}`,
+        });
+      }
+    } catch (e) {
+      console.log('Compartilhamento finalizado.');
     }
   };
 
@@ -137,11 +159,11 @@ export default function InviteScreen() {
 
             <View style={styles.buttonRow}>
               <Button
-                title="Copiar Link de Convite"
+                title="Compartilhar Link do Grupo"
                 variant="primary"
                 size="md"
-                icon={<MaterialCommunityIcons name="link-variant" size={16} color="#fff" />}
-                onPress={handleCopyLink}
+                icon={<MaterialCommunityIcons name="share-variant" size={16} color="#fff" />}
+                onPress={handleShareLink}
                 style={styles.actionBtn}
               />
             </View>
