@@ -800,15 +800,38 @@ export default function AdminScreen() {
   };
 
   const handleApproveRequest = async (requestId: string, approve: boolean) => {
+    const targetRequest = challengeRequests.find((r: any) => r.id === requestId);
+    if (!targetRequest) return;
+
+    const newStatus = approve ? 'approved' : 'declined';
+
+    if (!targetRequest.challenge_id.startsWith('chal')) {
+      const { error: updateErr } = await supabase
+        .from('challenge_requests')
+        .update({ status: newStatus })
+        .eq('challenge_id', targetRequest.challenge_id)
+        .eq('user_id', targetRequest.user_id);
+
+      if (updateErr) {
+        console.error('Erro ao atualizar solicitação no Supabase:', updateErr);
+      }
+
+      if (approve) {
+        await supabase
+          .from('challenge_members')
+          .upsert({
+            challenge_id: targetRequest.challenge_id,
+            user_id: targetRequest.user_id
+          }, { onConflict: 'challenge_id,user_id' });
+      }
+    }
+
     const updatedRequests = challengeRequests.map((r: any) => {
       if (r.id === requestId) {
-        return { ...r, status: approve ? 'approved' : 'declined' };
+        return { ...r, status: newStatus };
       }
       return r;
     });
-
-    const targetRequest = challengeRequests.find((r: any) => r.id === requestId);
-    if (!targetRequest) return;
 
     if (approve) {
       // Adicionar o participante no MOCK_RANKINGS do desafio

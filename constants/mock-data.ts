@@ -192,20 +192,33 @@ export async function saveChallengeRequests(requests: ChallengeRequest[]): Promi
     for (const r of requests) {
       const isMockChallenge = r.challenge_id.startsWith('chal');
       if (!isMockChallenge) {
-        // Enviar para a tabela do Supabase
-        const { error } = await supabase
+        // Tentar primeiro atualizar a solicitação existente no banco
+        const { data: updated, error: updateError } = await supabase
           .from('challenge_requests')
-          .upsert({
-            challenge_id: r.challenge_id,
-            group_id: r.group_id,
-            user_id: r.user_id,
-            status: r.status
-          }, { onConflict: 'challenge_id,user_id' });
+          .update({ status: r.status })
+          .eq('challenge_id', r.challenge_id)
+          .eq('user_id', r.user_id)
+          .select();
 
-        if (error) {
-          console.error('[MOCK_DATA] Erro ao sincronizar solicitação com Supabase:', error);
+        if (updateError) {
+          console.error('[MOCK_DATA] Erro ao atualizar solicitação no Supabase:', updateError);
+        } else if (!updated || updated.length === 0) {
+          // Se não encontrou nenhuma linha para atualizar e é uma solicitação pendente nova
+          if (r.status === 'pending') {
+            const { error: insertError } = await supabase
+              .from('challenge_requests')
+              .insert({
+                challenge_id: r.challenge_id,
+                group_id: r.group_id,
+                user_id: r.user_id,
+                status: 'pending'
+              });
+            if (insertError) {
+              console.error('[MOCK_DATA] Erro ao criar nova solicitação no Supabase:', insertError);
+            }
+          }
         } else {
-          console.log('[MOCK_DATA] Solicitação sincronizada com Supabase:', r.challenge_id, r.user_id, r.status);
+          console.log('[MOCK_DATA] Status da solicitação sincronizado com sucesso no Supabase:', r.challenge_id, r.user_id, r.status);
         }
 
         // Se foi aprovada, garantir a inserção na tabela challenge_members
