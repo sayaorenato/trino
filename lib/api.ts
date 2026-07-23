@@ -367,6 +367,45 @@ export const api = {
   },
 
   /**
+   * Atualiza o campo full_name na tabela profiles.
+   */
+  async updateProfileName(userId: string, fullName: string): Promise<void> {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ full_name: fullName })
+      .eq('id', userId);
+
+    if (error) {
+      console.error('Error updating profile name:', error);
+      throw error;
+    }
+
+    // Também tentar atualizar nos metadados do auth do usuário
+    try {
+      await supabase.auth.updateUser({
+        data: { full_name: fullName }
+      });
+    } catch (authErr) {
+      console.log('Aviso: erro não-crítico ao atualizar metadata do auth:', authErr);
+    }
+  },
+
+  /**
+   * Atualiza a senha do usuário autenticado no Supabase Auth.
+   */
+  async updatePassword(newPassword: string): Promise<void> {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword
+    });
+
+    if (error) {
+      console.error('Error updating user password:', error);
+      throw error;
+    }
+  },
+
+
+  /**
    * Busca todos os membros de um grupo com dados de perfil.
    * Admins aparecem primeiro, depois membros, ordenados por joined_at.
    */
