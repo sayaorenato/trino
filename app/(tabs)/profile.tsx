@@ -44,6 +44,67 @@ export default function ProfileScreen() {
   const [editError, setEditError] = useState('');
   const [editSuccess, setEditSuccess] = useState('');
 
+  // Estados para Modal de Versículo / Tema da Semana (Admin)
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+  const [themeText, setThemeText] = useState('');
+  const [themeReference, setThemeReference] = useState('');
+  const [savingTheme, setSavingTheme] = useState(false);
+  const [themeError, setThemeError] = useState('');
+  const [themeSuccess, setThemeSuccess] = useState('');
+
+  const handleOpenThemeModal = async () => {
+    setThemeError('');
+    setThemeSuccess('');
+    setSavingTheme(true);
+    setIsThemeModalOpen(true);
+
+    try {
+      const currentTheme = await api.getWeeklyTheme();
+      setThemeText(currentTheme.text || '');
+      setThemeReference(currentTheme.reference || '');
+    } catch (err) {
+      console.error('Erro ao carregar tema atual:', err);
+    } finally {
+      setSavingTheme(false);
+    }
+  };
+
+  const handleSaveTheme = async () => {
+    if (!themeText.trim()) {
+      setThemeError('O texto do versículo/assunto não pode ficar em branco.');
+      return;
+    }
+
+    setThemeError('');
+    setThemeSuccess('');
+    setSavingTheme(true);
+
+    try {
+      await api.updateWeeklyTheme({
+        text: themeText.trim(),
+        reference: themeReference.trim() || 'Tema da Semana'
+      });
+
+      const msg = 'Versículo/Assunto Tema atualizado com sucesso!';
+      setThemeSuccess(msg);
+
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+        setIsThemeModalOpen(false);
+      } else {
+        Alert.alert('Sucesso', msg, [
+          { text: 'OK', onPress: () => setIsThemeModalOpen(false) }
+        ]);
+      }
+    } catch (err: any) {
+      console.error('Erro ao salvar tema:', err);
+      setThemeError(err.message || 'Erro ao salvar o tema da semana.');
+    } finally {
+      setSavingTheme(false);
+    }
+  };
+
+
   const handleOpenEditModal = () => {
     setEditFullName(profile?.full_name || '');
     setNewPassword('');
@@ -525,17 +586,19 @@ export default function ProfileScreen() {
               <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} />
             </TouchableOpacity>
 
-            {/* Apoie o Projeto */}
-            <TouchableOpacity 
-              style={styles.optionItem}
-              onPress={() => router.push('/support')}
-            >
-              <View style={styles.optionLeft}>
-                <MaterialCommunityIcons name="heart-outline" size={22} color={COLORS.primary} />
-                <Text style={styles.optionText}>Apoie o Projeto (Doações)</Text>
-              </View>
-              <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} />
-            </TouchableOpacity>
+            {/* Versículo / Assunto Tema (Admin) */}
+            {hasAdminGroups && (
+              <TouchableOpacity 
+                style={styles.optionItem}
+                onPress={handleOpenThemeModal}
+              >
+                <View style={styles.optionLeft}>
+                  <MaterialCommunityIcons name="book-open-page-variant-outline" size={22} color={COLORS.primary} />
+                  <Text style={styles.optionText}>Versículo/Assunto Tema</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} />
+              </TouchableOpacity>
+            )}
 
             {/* Painel do Admin */}
             {hasAdminGroups && (
@@ -557,6 +620,7 @@ export default function ProfileScreen() {
               onPress={handleShareApp}
             >
               <View style={styles.optionLeft}>
+
                 <MaterialCommunityIcons name="share-variant-outline" size={22} color={COLORS.primary} />
                 <Text style={styles.optionText}>Compartilhar Aplicativo</Text>
               </View>
@@ -706,9 +770,113 @@ export default function ProfileScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      {/* MODAL DE EDIÇÃO DE VERSÍCULO / TEMA DA SEMANA (ADMIN) */}
+      <Modal
+        visible={isThemeModalOpen}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsThemeModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalKeyboardAvoid}
+          >
+            <View style={styles.modalContent}>
+              {/* Header do Modal */}
+              <View style={styles.modalHeader}>
+                <View style={styles.modalTitleRow}>
+                  <MaterialCommunityIcons name="book-open-page-variant-outline" size={24} color={COLORS.primary} />
+                  <Text style={styles.modalTitle}>Versículo/Assunto Tema</Text>
+                </View>
+                <TouchableOpacity 
+                  onPress={() => setIsThemeModalOpen(false)}
+                  style={styles.closeModalButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialCommunityIcons name="close" size={22} color={COLORS.textLight} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {themeError ? (
+                  <View style={styles.modalErrorContainer}>
+                    <MaterialCommunityIcons name="alert-circle-outline" size={16} color={COLORS.error} />
+                    <Text style={styles.modalErrorText}>{themeError}</Text>
+                  </View>
+                ) : null}
+
+                {themeSuccess ? (
+                  <View style={styles.modalSuccessContainer}>
+                    <MaterialCommunityIcons name="check-circle-outline" size={16} color={COLORS.secondary} />
+                    <Text style={styles.modalSuccessText}>{themeSuccess}</Text>
+                  </View>
+                ) : null}
+
+                <Text style={styles.passwordSectionSubtitle}>
+                  Defina o texto e a referência que serão exibidos no topo da tela Início para todos os membros.
+                </Text>
+
+                {/* Texto do Versículo / Assunto */}
+                <View style={styles.inputGroupModal}>
+                  <Text style={styles.inputLabelModal}>Texto do Versículo ou Tema</Text>
+                  <View style={[styles.inputWrapperModal, { height: 'auto', minHeight: 90, alignItems: 'flex-start', paddingTop: SPACING.sm }]}>
+                    <TextInput
+                      style={[styles.textInputModal, { height: 'auto', minHeight: 80, textAlignVertical: 'top' }]}
+                      placeholder="Ex: Não fui eu que ordenei a você? Seja forte e corajoso..."
+                      placeholderTextColor={COLORS.textLight}
+                      value={themeText}
+                      onChangeText={setThemeText}
+                      multiline
+                      numberOfLines={4}
+                    />
+                  </View>
+                </View>
+
+                {/* Referência / Título */}
+                <View style={styles.inputGroupModal}>
+                  <Text style={styles.inputLabelModal}>Referência / Título do Tema</Text>
+                  <View style={styles.inputWrapperModal}>
+                    <MaterialCommunityIcons name="format-quote-close" size={20} color={COLORS.textLight} style={styles.inputIconModal} />
+                    <TextInput
+                      style={styles.textInputModal}
+                      placeholder="Ex: Josué 1:9 • Tema da Semana"
+                      placeholderTextColor={COLORS.textLight}
+                      value={themeReference}
+                      onChangeText={setThemeReference}
+                    />
+                  </View>
+                </View>
+
+                {/* Botões de Ação */}
+                <View style={styles.modalActions}>
+                  <Button
+                    title="Salvar Tema da Semana"
+                    variant="primary"
+                    size="lg"
+                    loading={savingTheme}
+                    onPress={handleSaveTheme}
+                    style={styles.saveButton}
+                  />
+                  <Button
+                    title="Cancelar"
+                    variant="outline"
+                    size="md"
+                    disabled={savingTheme}
+                    onPress={() => setIsThemeModalOpen(false)}
+                    style={styles.cancelButton}
+                  />
+                </View>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
     </WebContainer>
   );
+
 }
 
 const styles = StyleSheet.create({

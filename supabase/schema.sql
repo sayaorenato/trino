@@ -93,4 +93,17 @@ CREATE POLICY "Groups are viewable by everyone." ON groups FOR SELECT USING (tru
 DROP POLICY IF EXISTS "Authenticated users can create groups" ON groups;
 CREATE POLICY "Authenticated users can create groups" ON groups FOR INSERT TO authenticated WITH CHECK (true);
 
--- (E assim por diante para as outras tabelas... o RLS pode ser aprofundado depois)
+-- Tabela de Configurações Globais do Aplicativo (Tema da Semana, etc.)
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value JSONB NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Settings viewable by everyone" ON app_settings;
+CREATE POLICY "Settings viewable by everyone" ON app_settings FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Authenticated users can update settings" ON app_settings;
+CREATE POLICY "Authenticated users can update settings" ON app_settings FOR ALL TO authenticated USING (true);
+

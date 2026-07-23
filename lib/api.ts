@@ -1,5 +1,18 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import { MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, USER_MOCK_GROUPS, getMockRankings, saveMockRankings } from '../constants/mock-data';
+
+export interface WeeklyTheme {
+  text: string;
+  reference: string;
+  updated_at?: string;
+}
+
+const DEFAULT_WEEKLY_THEME: WeeklyTheme = {
+  text: "Não fui eu que ordenei a você? Seja forte e corajoso! Não se apavore nem desanime, pois o Senhor, o seu Deus, estará com você por onde você andar.",
+  reference: "Josué 1:9 • Tema da Semana"
+};
+
 
 function getFileInfo(uri: string) {
   let ext = 'jpg';
@@ -624,5 +637,77 @@ export const api = {
       if (insertError) throw insertError;
       return { action: 'added', emoji };
     }
+  },
+
+  /**
+   * Busca o versículo ou assunto tema da semana configurado pelo admin.
+   */
+  async getWeeklyTheme(): Promise<WeeklyTheme> {
+    try {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'weekly_theme')
+        .maybeSingle();
+
+      if (data?.value && !error) {
+        const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        if (parsed && parsed.text) {
+          await AsyncStorage.setItem('trino_weekly_theme', JSON.stringify(parsed));
+          return parsed as WeeklyTheme;
+        }
+      }
+    } catch (err) {
+      console.log('Busca do tema via Supabase indisponível, tentando cache/fallback:', err);
+    }
+
+    try {
+      const localData = await AsyncStorage.getItem('trino_weekly_theme');
+      if (localData) {
+        const parsed = JSON.parse(localData);
+        if (parsed && parsed.text) {
+          return parsed as WeeklyTheme;
+        }
+      }
+    } catch (err) {
+      console.log('Erro ao ler tema local:', err);
+    }
+
+    return DEFAULT_WEEKLY_THEME;
+  },
+
+  /**
+   * Atualiza o versículo ou assunto tema da semana (apenas admins).
+   */
+  async updateWeeklyTheme(theme: WeeklyTheme): Promise<void> {
+    const payload = {
+      text: theme.text.trim(),
+      reference: theme.reference.trim() || 'Tema da Semana',
+      updated_at: new Date().toISOString()
+    };
+
+    // 1. Atualizar cache local no AsyncStorage
+    try {
+      await AsyncStorage.setItem('trino_weekly_theme', JSON.stringify(payload));
+    } catch (err) {
+      console.error('Erro ao salvar tema localmente:', err);
+    }
+
+    // 2. Atualizar no Supabase
+    try {
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert(
+          { key: 'weekly_theme', value: payload, updated_at: payload.updated_at },
+          { onConflict: 'key' }
+        );
+
+      if (error) {
+        console.log('Aviso ao salvar tema no Supabase (app_settings):', error);
+      }
+    } catch (err) {
+      console.log('Erro ao atualizar tema no Supabase:', err);
+    }
   }
 };
+
