@@ -32,16 +32,14 @@ import { COLORS, SPACING, FONTS, SHADOWS, BORDER_RADIUS, ANIMATION } from '../..
 
 const { width } = Dimensions.get('window');
 
-const VERSES = [
-  { text: "Não fui eu que ordenei a você? Seja forte e corajoso! Não se apavore nem desanime, pois o Senhor, o seu Deus, estará com você por onde você andar.", reference: "Josué 1:9" },
-  { text: "Tudo posso naquele que me fortalece.", reference: "Filipenses 4:13" },
-  { text: "O Senhor é o meu pastor; de nada terei falta.", reference: "Salmos 23:1" },
-  { text: "Pois Deus não nos deu espírito de covardia, mas de poder, de amor e de equilíbrio.", reference: "2 Timóteo 1:7" },
-];
-
 export default function DashboardScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
+
+  const [weeklyTheme, setWeeklyTheme] = useState({
+    text: "Não fui eu que ordenei a você? Seja forte e corajoso! Não se apavore nem desanime, pois o Senhor, o seu Deus, estará com você por onde você andar.",
+    reference: "Josué 1:9 • Tema da Semana"
+  });
 
   const [groups, setGroups] = useState<any[]>([]);
   const [habits, setHabits] = useState({ prayer: false, bible: false, exercise: false });
@@ -49,6 +47,7 @@ export default function DashboardScreen() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteCode, setInviteCode] = useState('');
+
 
   const showAlert = (title: string, message: string, buttons?: any[]) => {
     if (Platform.OS === 'web') {
@@ -85,10 +84,8 @@ export default function DashboardScreen() {
     ]).start();
   }, []);
 
-  const verseIndex = new Date().getDate() % VERSES.length;
-  const todayVerse = VERSES[verseIndex];
-
   // Lista 1: Meus Desafios (Apenas os desafios ativos em que o usuário participa do ranking)
+
   const myActiveChallenges = groups.reduce((acc: any[], g: any) => {
     if (g.challenges && Array.isArray(g.challenges)) {
       g.challenges.forEach((challenge: any) => {
@@ -486,6 +483,13 @@ export default function DashboardScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
+      // Carregar o tema da semana cadastrado pelo admin
+      api.getWeeklyTheme().then(theme => {
+        if (theme && theme.text) {
+          setWeeklyTheme(theme);
+        }
+      });
+
       if (!user) return;
       setLoading(true);
 
@@ -565,10 +569,11 @@ export default function DashboardScreen() {
           <Animated.View style={{ opacity: verseFade, transform: [{ translateY: verseSlide }] }}>
             <Card variant="gradient" gradientColors={COLORS.gradients.primaryWarm} style={styles.verseCard}>
               <MaterialCommunityIcons name="format-quote-open" size={36} color={COLORS.goldLight} style={styles.quoteIcon} />
-              <Text style={styles.verseText}>{todayVerse.text}</Text>
-              <Text style={styles.verseReference}>{todayVerse.reference}</Text>
+              <Text style={styles.verseText}>{weeklyTheme.text}</Text>
+              <Text style={styles.verseReference}>{weeklyTheme.reference}</Text>
             </Card>
           </Animated.View>
+
 
           <Animated.View style={{ opacity: contentFade, transform: [{ translateY: contentSlide }] }}>
             {/* Summary stats */}

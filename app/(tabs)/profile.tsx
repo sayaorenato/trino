@@ -9,7 +9,10 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  Share
+  Share,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
@@ -31,6 +34,160 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(false);
   const [hasAdminGroups, setHasAdminGroups] = useState(false);
   const [updatingAvatar, setUpdatingAvatar] = useState(false);
+
+  // Estados para Modal de Edição de Dados (Nome e Senha)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFullName, setEditFullName] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editSuccess, setEditSuccess] = useState('');
+
+  // Estados para Modal de Versículo / Tema da Semana (Admin)
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
+  const [themeText, setThemeText] = useState('');
+  const [themeReference, setThemeReference] = useState('');
+  const [savingTheme, setSavingTheme] = useState(false);
+  const [themeError, setThemeError] = useState('');
+  const [themeSuccess, setThemeSuccess] = useState('');
+
+  const handleOpenThemeModal = async () => {
+    setThemeError('');
+    setThemeSuccess('');
+    setSavingTheme(true);
+    setIsThemeModalOpen(true);
+
+    try {
+      const currentTheme = await api.getWeeklyTheme();
+      setThemeText(currentTheme.text || '');
+      setThemeReference(currentTheme.reference || '');
+    } catch (err) {
+      console.error('Erro ao carregar tema atual:', err);
+    } finally {
+      setSavingTheme(false);
+    }
+  };
+
+  const handleSaveTheme = async () => {
+    if (!themeText.trim()) {
+      setThemeError('O texto do versículo/assunto não pode ficar em branco.');
+      return;
+    }
+
+    setThemeError('');
+    setThemeSuccess('');
+    setSavingTheme(true);
+
+    try {
+      await api.updateWeeklyTheme({
+        text: themeText.trim(),
+        reference: themeReference.trim() || 'Tema da Semana'
+      });
+
+      const msg = 'Versículo/Assunto Tema atualizado com sucesso!';
+      setThemeSuccess(msg);
+
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+        setIsThemeModalOpen(false);
+      } else {
+        Alert.alert('Sucesso', msg, [
+          { text: 'OK', onPress: () => setIsThemeModalOpen(false) }
+        ]);
+      }
+    } catch (err: any) {
+      console.error('Erro ao salvar tema:', err);
+      setThemeError(err.message || 'Erro ao salvar o tema da semana.');
+    } finally {
+      setSavingTheme(false);
+    }
+  };
+
+
+  const handleOpenEditModal = () => {
+    setEditFullName(profile?.full_name || '');
+    setNewPassword('');
+    setConfirmPassword('');
+    setEditError('');
+    setEditSuccess('');
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+
+    const trimmedName = editFullName.trim();
+    if (!trimmedName) {
+      setEditError('O nome completo não pode ficar em branco.');
+      return;
+    }
+
+    const wantsPasswordChange = newPassword.length > 0 || confirmPassword.length > 0;
+    if (wantsPasswordChange) {
+      if (newPassword.length < 6) {
+        setEditError('A nova senha deve ter no mínimo 6 caracteres.');
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setEditError('A confirmação da senha não coincide.');
+        return;
+      }
+    }
+
+    setEditError('');
+    setEditSuccess('');
+    setSavingProfile(true);
+
+    try {
+      let nameUpdated = false;
+      let passwordUpdated = false;
+
+      // 1. Atualizar Nome se foi alterado
+      if (trimmedName !== (profile?.full_name || '')) {
+        await api.updateProfileName(user.id, trimmedName);
+        await refreshProfile();
+        nameUpdated = true;
+      }
+
+      // 2. Atualizar Senha se foi informada
+      if (wantsPasswordChange) {
+        await api.updatePassword(newPassword);
+        passwordUpdated = true;
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+
+      if (!nameUpdated && !passwordUpdated) {
+        setEditError('Nenhuma alteração foi realizada.');
+        setSavingProfile(false);
+        return;
+      }
+
+      const successMessage = passwordUpdated && nameUpdated
+        ? 'Nome e senha atualizados com sucesso!'
+        : nameUpdated
+        ? 'Nome de perfil atualizado com sucesso!'
+        : 'Senha alterada com sucesso!';
+
+      setEditSuccess(successMessage);
+
+      if (Platform.OS === 'web') {
+        window.alert(successMessage);
+        setIsEditModalOpen(false);
+      } else {
+        Alert.alert('Sucesso', successMessage, [
+          { text: 'OK', onPress: () => setIsEditModalOpen(false) }
+        ]);
+      }
+    } catch (err: any) {
+      console.error('Erro ao atualizar perfil:', err);
+      setEditError(err.message || 'Erro ao atualizar dados do perfil.');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
 
   const handleShareApp = async () => {
     const shareUrl = 'https://trino-cyan.vercel.app/';
@@ -317,6 +474,15 @@ export default function ProfileScreen() {
               <Text style={styles.userName}>{profile?.full_name}</Text>
               <Text style={styles.userEmail}>{user?.email}</Text>
             </View>
+
+            <TouchableOpacity 
+              style={styles.editProfileCardButton}
+              onPress={handleOpenEditModal}
+              activeOpacity={0.8}
+            >
+              <MaterialCommunityIcons name="pencil-outline" size={16} color="#fff" />
+              <Text style={styles.editProfileCardButtonText}>Editar</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.statsDivider} />
@@ -408,17 +574,31 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Configurações e Ações</Text>
           
           <Card variant="default" style={styles.optionsCard}>
-            {/* Apoie o Projeto */}
+            {/* Alterar Dados de Perfil */}
             <TouchableOpacity 
               style={styles.optionItem}
-              onPress={() => router.push('/support')}
+              onPress={handleOpenEditModal}
             >
               <View style={styles.optionLeft}>
-                <MaterialCommunityIcons name="heart-outline" size={22} color={COLORS.primary} />
-                <Text style={styles.optionText}>Apoie o Projeto (Doações)</Text>
+                <MaterialCommunityIcons name="account-edit-outline" size={22} color={COLORS.primary} />
+                <Text style={styles.optionText}>Editar Dados (Nome e Senha)</Text>
               </View>
               <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} />
             </TouchableOpacity>
+
+            {/* Versículo / Assunto Tema (Admin) */}
+            {hasAdminGroups && (
+              <TouchableOpacity 
+                style={styles.optionItem}
+                onPress={handleOpenThemeModal}
+              >
+                <View style={styles.optionLeft}>
+                  <MaterialCommunityIcons name="book-open-page-variant-outline" size={22} color={COLORS.primary} />
+                  <Text style={styles.optionText}>Versículo/Assunto Tema</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} />
+              </TouchableOpacity>
+            )}
 
             {/* Painel do Admin */}
             {hasAdminGroups && (
@@ -440,6 +620,7 @@ export default function ProfileScreen() {
               onPress={handleShareApp}
             >
               <View style={styles.optionLeft}>
+
                 <MaterialCommunityIcons name="share-variant-outline" size={22} color={COLORS.primary} />
                 <Text style={styles.optionText}>Compartilhar Aplicativo</Text>
               </View>
@@ -467,12 +648,239 @@ export default function ProfileScreen() {
         {/* Espaçamento TabBar */}
         <View style={{ height: Platform.OS === 'ios' ? 100 : 80 }} />
       </ScrollView>
+
+      {/* MODAL DE EDIÇÃO DE PERFIL */}
+      <Modal
+        visible={isEditModalOpen}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsEditModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalKeyboardAvoid}
+          >
+            <View style={styles.modalContent}>
+              {/* Header do Modal */}
+              <View style={styles.modalHeader}>
+                <View style={styles.modalTitleRow}>
+                  <MaterialCommunityIcons name="account-edit-outline" size={24} color={COLORS.primary} />
+                  <Text style={styles.modalTitle}>Editar Dados do Perfil</Text>
+                </View>
+                <TouchableOpacity 
+                  onPress={() => setIsEditModalOpen(false)}
+                  style={styles.closeModalButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialCommunityIcons name="close" size={22} color={COLORS.textLight} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {editError ? (
+                  <View style={styles.modalErrorContainer}>
+                    <MaterialCommunityIcons name="alert-circle-outline" size={16} color={COLORS.error} />
+                    <Text style={styles.modalErrorText}>{editError}</Text>
+                  </View>
+                ) : null}
+
+                {editSuccess ? (
+                  <View style={styles.modalSuccessContainer}>
+                    <MaterialCommunityIcons name="check-circle-outline" size={16} color={COLORS.secondary} />
+                    <Text style={styles.modalSuccessText}>{editSuccess}</Text>
+                  </View>
+                ) : null}
+
+                {/* Nome Completo */}
+                <View style={styles.inputGroupModal}>
+                  <Text style={styles.inputLabelModal}>Nome Completo</Text>
+                  <View style={styles.inputWrapperModal}>
+                    <MaterialCommunityIcons name="account-outline" size={20} color={COLORS.textLight} style={styles.inputIconModal} />
+                    <TextInput
+                      style={styles.textInputModal}
+                      placeholder="Seu nome completo"
+                      placeholderTextColor={COLORS.textLight}
+                      value={editFullName}
+                      onChangeText={setEditFullName}
+                      autoCapitalize="words"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.modalSectionDivider} />
+
+                {/* Alterar Senha */}
+                <Text style={styles.passwordSectionTitle}>Alterar Senha</Text>
+                <Text style={styles.passwordSectionSubtitle}>Preencha apenas se desejar trocar a senha atual.</Text>
+
+                <View style={styles.inputGroupModal}>
+                  <Text style={styles.inputLabelModal}>Nova Senha</Text>
+                  <View style={styles.inputWrapperModal}>
+                    <MaterialCommunityIcons name="lock-outline" size={20} color={COLORS.textLight} style={styles.inputIconModal} />
+                    <TextInput
+                      style={styles.textInputModal}
+                      placeholder="Mínimo 6 caracteres"
+                      placeholderTextColor={COLORS.textLight}
+                      value={newPassword}
+                      onChangeText={setNewPassword}
+                      secureTextEntry
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroupModal}>
+                  <Text style={styles.inputLabelModal}>Confirmar Nova Senha</Text>
+                  <View style={styles.inputWrapperModal}>
+                    <MaterialCommunityIcons name="lock-check-outline" size={20} color={COLORS.textLight} style={styles.inputIconModal} />
+                    <TextInput
+                      style={styles.textInputModal}
+                      placeholder="Repita a nova senha"
+                      placeholderTextColor={COLORS.textLight}
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      secureTextEntry
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </View>
+
+                {/* Botões de Ação */}
+                <View style={styles.modalActions}>
+                  <Button
+                    title="Salvar Alterações"
+                    variant="primary"
+                    size="lg"
+                    loading={savingProfile}
+                    onPress={handleSaveProfile}
+                    style={styles.saveButton}
+                  />
+                  <Button
+                    title="Cancelar"
+                    variant="outline"
+                    size="md"
+                    disabled={savingProfile}
+                    onPress={() => setIsEditModalOpen(false)}
+                    style={styles.cancelButton}
+                  />
+                </View>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* MODAL DE EDIÇÃO DE VERSÍCULO / TEMA DA SEMANA (ADMIN) */}
+      <Modal
+        visible={isThemeModalOpen}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsThemeModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalKeyboardAvoid}
+          >
+            <View style={styles.modalContent}>
+              {/* Header do Modal */}
+              <View style={styles.modalHeader}>
+                <View style={styles.modalTitleRow}>
+                  <MaterialCommunityIcons name="book-open-page-variant-outline" size={24} color={COLORS.primary} />
+                  <Text style={styles.modalTitle}>Versículo/Assunto Tema</Text>
+                </View>
+                <TouchableOpacity 
+                  onPress={() => setIsThemeModalOpen(false)}
+                  style={styles.closeModalButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialCommunityIcons name="close" size={22} color={COLORS.textLight} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {themeError ? (
+                  <View style={styles.modalErrorContainer}>
+                    <MaterialCommunityIcons name="alert-circle-outline" size={16} color={COLORS.error} />
+                    <Text style={styles.modalErrorText}>{themeError}</Text>
+                  </View>
+                ) : null}
+
+                {themeSuccess ? (
+                  <View style={styles.modalSuccessContainer}>
+                    <MaterialCommunityIcons name="check-circle-outline" size={16} color={COLORS.secondary} />
+                    <Text style={styles.modalSuccessText}>{themeSuccess}</Text>
+                  </View>
+                ) : null}
+
+                <Text style={styles.passwordSectionSubtitle}>
+                  Defina o texto e a referência que serão exibidos no topo da tela Início para todos os membros.
+                </Text>
+
+                {/* Texto do Versículo / Assunto */}
+                <View style={styles.inputGroupModal}>
+                  <Text style={styles.inputLabelModal}>Texto do Versículo ou Tema</Text>
+                  <View style={[styles.inputWrapperModal, { height: 'auto', minHeight: 90, alignItems: 'flex-start', paddingTop: SPACING.sm }]}>
+                    <TextInput
+                      style={[styles.textInputModal, { height: 'auto', minHeight: 80, textAlignVertical: 'top' }]}
+                      placeholder="Ex: Não fui eu que ordenei a você? Seja forte e corajoso..."
+                      placeholderTextColor={COLORS.textLight}
+                      value={themeText}
+                      onChangeText={setThemeText}
+                      multiline
+                      numberOfLines={4}
+                    />
+                  </View>
+                </View>
+
+                {/* Referência / Título */}
+                <View style={styles.inputGroupModal}>
+                  <Text style={styles.inputLabelModal}>Referência / Título do Tema</Text>
+                  <View style={styles.inputWrapperModal}>
+                    <MaterialCommunityIcons name="format-quote-close" size={20} color={COLORS.textLight} style={styles.inputIconModal} />
+                    <TextInput
+                      style={styles.textInputModal}
+                      placeholder="Ex: Josué 1:9 • Tema da Semana"
+                      placeholderTextColor={COLORS.textLight}
+                      value={themeReference}
+                      onChangeText={setThemeReference}
+                    />
+                  </View>
+                </View>
+
+                {/* Botões de Ação */}
+                <View style={styles.modalActions}>
+                  <Button
+                    title="Salvar Tema da Semana"
+                    variant="primary"
+                    size="lg"
+                    loading={savingTheme}
+                    onPress={handleSaveTheme}
+                    style={styles.saveButton}
+                  />
+                  <Button
+                    title="Cancelar"
+                    variant="outline"
+                    size="md"
+                    disabled={savingTheme}
+                    onPress={() => setIsThemeModalOpen(false)}
+                    style={styles.cancelButton}
+                  />
+                </View>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
     </WebContainer>
   );
+
 }
 
 const styles = StyleSheet.create({
+
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -664,5 +1072,146 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 1,
+  },
+  editProfileCardButton: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.lg,
+    gap: 4,
+  },
+  editProfileCardButtonText: {
+    color: '#fff',
+    fontSize: FONTS.size.xs,
+    fontFamily: FONTS.family.bodySemibold,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  modalKeyboardAvoid: {
+    width: '100%',
+    maxWidth: 500,
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.xl,
+    maxHeight: '90%',
+    ...SHADOWS.medium,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  modalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  modalTitle: {
+    fontSize: FONTS.size.lg,
+    fontFamily: FONTS.family.heading,
+    color: COLORS.primary,
+  },
+  closeModalButton: {
+    padding: SPACING.xs,
+  },
+  modalErrorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(192, 57, 43, 0.08)',
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: SPACING.md,
+    gap: SPACING.sm,
+  },
+  modalErrorText: {
+    flex: 1,
+    color: COLORS.error,
+    fontSize: FONTS.size.sm,
+    fontFamily: FONTS.family.bodyMedium,
+  },
+  modalSuccessContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.secondaryMuted,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: SPACING.md,
+    gap: SPACING.sm,
+  },
+  modalSuccessText: {
+    flex: 1,
+    color: COLORS.secondary,
+    fontSize: FONTS.size.sm,
+    fontFamily: FONTS.family.bodyMedium,
+  },
+  inputGroupModal: {
+    marginBottom: SPACING.md,
+  },
+  inputLabelModal: {
+    fontSize: FONTS.size.sm,
+    fontFamily: FONTS.family.bodySemibold,
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+  },
+  inputWrapperModal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceVariant,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+  },
+  inputIconModal: {
+    marginRight: SPACING.sm,
+  },
+  textInputModal: {
+    flex: 1,
+    height: 48,
+    fontSize: FONTS.size.md,
+    fontFamily: FONTS.family.body,
+    color: COLORS.text,
+  },
+  modalSectionDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: SPACING.md,
+  },
+  passwordSectionTitle: {
+    fontSize: FONTS.size.md,
+    fontFamily: FONTS.family.heading,
+    color: COLORS.primary,
+    marginBottom: 2,
+  },
+  passwordSectionSubtitle: {
+    fontSize: FONTS.size.xs,
+    fontFamily: FONTS.family.body,
+    color: COLORS.textLight,
+    marginBottom: SPACING.md,
+  },
+  modalActions: {
+    marginTop: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  saveButton: {
+    width: '100%',
+  },
+  cancelButton: {
+    width: '100%',
   }
 });
+
