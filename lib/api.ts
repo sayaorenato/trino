@@ -180,13 +180,78 @@ export const api = {
       if (c.type === 'workout') habitsState.exercise = true;
     });
 
+    const streakCount = await this.calculateUserStreak(userId);
+
     return { 
       groups: groupsWithChallenges, 
       habits: habitsState, 
       todayCheckins: todayCheckins || [],
-      tasks: dbTasks
+      tasks: dbTasks,
+      streakCount
     };
   },
+
+  async calculateUserStreak(userId: string): Promise<number> {
+    try {
+      const { data: userCheckins } = await supabase
+        .from('checkins')
+        .select('created_at')
+        .eq('user_id', userId);
+
+      const { MOCK_FEED } = require('../constants/mock-data');
+      const userFeedCheckins = (MOCK_FEED || []).filter((f: any) => f.user_id === userId);
+      const allDates = [
+        ...(userCheckins || []).map((c: any) => c.created_at),
+        ...userFeedCheckins.map((f: any) => f.created_at)
+      ];
+
+      if (allDates.length === 0) return 0;
+
+      const uniqueDates = new Set(
+        allDates.map(d => {
+          try {
+            return new Date(d).toISOString().split('T')[0];
+          } catch {
+            return String(d).split('T')[0];
+          }
+        })
+      );
+
+      let streak = 0;
+      const checkDate = new Date();
+      let dateStr = checkDate.toISOString().split('T')[0];
+
+      // Se não houver checkin hoje, verifica se houve ontem
+      if (!uniqueDates.has(dateStr)) {
+        checkDate.setDate(checkDate.getDate() - 1);
+        dateStr = checkDate.toISOString().split('T')[0];
+      }
+
+      // Conta os dias consecutivos retroativos
+      while (uniqueDates.has(dateStr)) {
+        streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+        dateStr = checkDate.toISOString().split('T')[0];
+      }
+
+      // Atualiza a tabela de profiles em background para sincronizar
+      (async () => {
+        try {
+          await supabase
+            .from('profiles')
+            .update({ streak_count: streak })
+            .eq('id', userId);
+        } catch {}
+      })();
+
+
+      return streak;
+    } catch (err) {
+      console.error('Erro ao calcular streak:', err);
+      return 0;
+    }
+  },
+
 
   async getTodayCheckins(userId: string, roundId: string) {
     const today = new Date();

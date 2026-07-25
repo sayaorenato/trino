@@ -45,8 +45,10 @@ export default function DashboardScreen() {
   const [habits, setHabits] = useState({ prayer: false, bible: false, exercise: false });
   const [todayCheckins, setTodayCheckins] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [streakCount, setStreakCount] = useState<number>(profile?.streak_count || 0);
   const [loading, setLoading] = useState(true);
   const [inviteCode, setInviteCode] = useState('');
+
 
 
   const showAlert = (title: string, message: string, buttons?: any[]) => {
@@ -502,6 +504,9 @@ export default function DashboardScreen() {
           setHabits(data.habits);
           setTodayCheckins(data.todayCheckins || []);
           setTasks(data.tasks || []);
+          if (data.streakCount !== undefined) {
+            setStreakCount(data.streakCount);
+          }
           setLoading(false);
           
           // Verificar se há convites pendentes na memória global
@@ -561,8 +566,9 @@ export default function DashboardScreen() {
               <Text style={styles.nameText}>{profile?.full_name?.split(' ')[0] || 'Visitante'}</Text>
             </View>
           </View>
-          <StreakBadge count={profile?.streak_count || 0} />
+          <StreakBadge count={streakCount} />
         </Animated.View>
+
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Verse Card */}
