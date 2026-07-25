@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, Animated, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Animated, SafeAreaView, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -93,16 +93,13 @@ export default function WelcomeScreen() {
         <SafeAreaView style={styles.safeArea}>
           {/* Logo + Brand */}
           <Animated.View style={[styles.brandSection, { opacity: logoFade, transform: [{ translateY: logoSlide }] }]}>
-            <View style={styles.logoContainer}>
-              <LinearGradient
-                colors={COLORS.gradients.primaryWarm}
-                style={styles.logoIcon}
-              >
-                <Text style={styles.logoLetter}>T</Text>
-              </LinearGradient>
-            </View>
-            <Text style={styles.brandName}>Trino</Text>
+            <Image 
+              source={require('../../assets/images/trino_logo.png')} 
+              style={styles.welcomeLogoImage}
+              resizeMode="contain"
+            />
           </Animated.View>
+
 
           {/* Tagline */}
           <Animated.View style={[styles.taglineSection, { opacity: taglineFade, transform: [{ translateY: taglineSlide }] }]}>
@@ -180,30 +177,13 @@ const styles = StyleSheet.create({
 
   brandSection: {
     alignItems: 'center',
-    marginBottom: SPACING.xxl,
+    marginBottom: SPACING.lg,
   },
-  logoContainer: {
-    marginBottom: SPACING.md,
+  welcomeLogoImage: {
+    width: 180,
+    height: 180,
   },
-  logoIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: BORDER_RADIUS.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...SHADOWS.medium,
-  },
-  logoLetter: {
-    color: '#fff',
-    fontFamily: FONTS.family.heading,
-    fontSize: 28,
-  },
-  brandName: {
-    fontSize: FONTS.size.xxl,
-    fontFamily: FONTS.family.heading,
-    color: COLORS.primary,
-    letterSpacing: 1,
-  },
+
 
   taglineSection: {
     alignItems: 'center',
