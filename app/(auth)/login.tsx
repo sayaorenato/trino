@@ -324,10 +324,10 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   logoImage: {
-    width: 120,
-    height: 120,
-    borderRadius: BORDER_RADIUS.xl,
+    width: 140,
+    height: 140,
   },
+
   title: {
     fontSize: FONTS.size.xxxl,
     fontFamily: FONTS.family.heading,
