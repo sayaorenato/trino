@@ -11,6 +11,7 @@ import {
   SafeAreaView,
   Alert,
   Animated,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -162,8 +163,15 @@ export default function LoginScreen() {
               <MaterialCommunityIcons name="arrow-left" size={22} color={COLORS.primary} />
             </TouchableOpacity>
 
-            {/* Header */}
+            {/* Header com Logo */}
             <Animated.View style={[styles.header, { opacity: headerFade, transform: [{ translateY: headerSlide }] }]}>
+              <View style={styles.logoContainer}>
+                <Image 
+                  source={require('../../assets/images/trino_logo.png')} 
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
+              </View>
               <Text style={styles.title}>
                 {isSignUp ? 'Criar Conta' : 'Boas-vindas'}
               </Text>
@@ -173,6 +181,7 @@ export default function LoginScreen() {
                   : 'Que bom ver você de volta!'}
               </Text>
             </Animated.View>
+
 
             {/* Form */}
             <Animated.View style={[styles.formSection, { opacity: formFade, transform: [{ translateY: formSlide }] }]}>
@@ -307,20 +316,33 @@ const styles = StyleSheet.create({
     ...SHADOWS.light,
   },
   header: {
-    marginBottom: SPACING.xxl,
+    marginBottom: SPACING.xl,
+    alignItems: 'center',
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  logoImage: {
+    width: 120,
+    height: 120,
+    borderRadius: BORDER_RADIUS.xl,
   },
   title: {
     fontSize: FONTS.size.xxxl,
     fontFamily: FONTS.family.heading,
     color: COLORS.primary,
     marginBottom: SPACING.xs,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: FONTS.size.md,
     fontFamily: FONTS.family.body,
     color: COLORS.textSecondary,
     lineHeight: 22,
+    textAlign: 'center',
   },
+
   formSection: {
     backgroundColor: COLORS.surface,
     borderRadius: BORDER_RADIUS.xl,
