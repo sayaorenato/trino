@@ -10,10 +10,13 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
         <title>Trino — Fé em Constância</title>
 
-        {/* Favicon & Apple Touch Icon */}
+        {/* Favicon & Mobile Home Screen Launcher Icons */}
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
         <link rel="shortcut icon" href="/favicon.ico" />
-        <link rel="apple-touch-icon" href="/favicon.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <link rel="apple-touch-icon-precomposed" href="/apple-touch-icon-precomposed.png" />
+        <link rel="manifest" href="/manifest.json" />
+
 
         <ScrollViewStyleReset />
       </head>
