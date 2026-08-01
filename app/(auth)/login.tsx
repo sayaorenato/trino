@@ -148,6 +148,68 @@ export default function LoginScreen() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setError('');
+    setSuccess('');
+    setLoading(true);
+    try {
+      const redirectTo = Platform.OS === 'web'
+        ? `${window.location.origin}/(tabs)`
+        : 'trino://(tabs)';
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      if (Platform.OS === 'web' && data?.url) {
+        window.location.href = data.url;
+      }
+    } catch (err: any) {
+      console.error('Erro no login com Google:', err);
+      setError(err.message || 'Falha ao conectar com a conta do Google.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setError('');
+    setSuccess('');
+    setLoading(true);
+    try {
+      const redirectTo = Platform.OS === 'web'
+        ? `${window.location.origin}/(tabs)`
+        : 'trino://(tabs)';
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: {
+          redirectTo,
+        },
+      });
+
+      if (error) throw error;
+
+      if (Platform.OS === 'web' && data?.url) {
+        window.location.href = data.url;
+      }
+    } catch (err: any) {
+      console.error('Erro no login com Apple:', err);
+      setError(err.message || 'Falha ao conectar com a conta da Apple.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <WebContainer>
       <SafeAreaView style={styles.container}>
@@ -264,16 +326,27 @@ export default function LoginScreen() {
               </View>
 
               <View style={styles.socialContainer}>
-                <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
+                <TouchableOpacity 
+                  style={styles.socialButton} 
+                  activeOpacity={0.7}
+                  onPress={handleGoogleSignIn}
+                  disabled={loading}
+                >
                   <MaterialCommunityIcons name="google" size={20} color={COLORS.text} />
                   <Text style={styles.socialText}>Google</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
+                <TouchableOpacity 
+                  style={styles.socialButton} 
+                  activeOpacity={0.7}
+                  onPress={handleAppleSignIn}
+                  disabled={loading}
+                >
                   <MaterialCommunityIcons name="apple" size={20} color={COLORS.text} />
                   <Text style={styles.socialText}>Apple</Text>
                 </TouchableOpacity>
               </View>
             </Animated.View>
+
 
             <View style={styles.footer}>
               <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
