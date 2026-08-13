@@ -304,7 +304,7 @@ export default function AdminScreen() {
               challenge_id: t.challenge_id,
               title: parsed.title || 'Tarefa Extra',
               description: parsed.description || t.description,
-              type: (parsed.type && parsed.type !== 'other' ? parsed.type : (t.type && t.type !== 'other' ? t.type : 'general')) as 'general' | 'presence' | 'punctuality',
+              type: (parsed.type && (parsed as any).type !== 'other' ? parsed.type : (t.type && (t as any).type !== 'other' ? t.type : 'general')) as 'general' | 'presence' | 'punctuality',
               points: t.points || 30,
               expires_at: parsed.expires_at || t.created_at,
               start_time: parsed.start_time,
