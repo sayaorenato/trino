@@ -599,14 +599,20 @@ export default function CheckinScreen() {
               </Card>
             ) : (
               <>
-                {/* Flags de Grupo — apenas para hábitos padrão */}
+                <Text style={styles.instructionText}>
+                  Qual hábito de fé ou saúde você concluiu e deseja validar hoje?
+                </Text>
+
+                <Text style={[styles.sectionTitle, { marginTop: SPACING.md }]}>Tarefas Diárias</Text>
+                
+                {/* Flags de Grupo — apenas para tarefas diárias básicas */}
                 {activeChallengesList.length > 1 && (
                   <Card variant="flat" style={{ marginBottom: SPACING.md, padding: SPACING.sm }}>
-                    <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: SPACING.xs }]}>
+                    <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: SPACING.xs, fontSize: FONTS.size.xs }]}>
                       Compartilhar em qual grupo?
                     </Text>
                     <Text style={{ fontSize: FONTS.size.xs, color: COLORS.textSecondary, fontFamily: FONTS.family.body, marginBottom: SPACING.sm }}>
-                      Selecione todos os grupos onde este hábito deve ser registrado:
+                      Selecione os grupos onde suas tarefas básicas (Oração, Bíblia, Exercício) serão registradas:
                     </Text>
                     {activeChallengesList.map((item: any) => {
                       const isSelected = selectedChallengeIds.has(item.challengeId);
@@ -655,11 +661,6 @@ export default function CheckinScreen() {
                   </Card>
                 )}
 
-                <Text style={styles.instructionText}>
-                  Qual hábito de fé ou saúde você concluiu e deseja validar hoje?
-                </Text>
-
-                <Text style={[styles.sectionTitle, { marginTop: SPACING.md }]}>Tarefas Diárias</Text>
                 <View style={styles.habitButtonsContainer}>
                   {/* ORAÇÃO */}
                   <TouchableOpacity 
@@ -782,75 +783,95 @@ export default function CheckinScreen() {
                 <View style={styles.dividerLine} />
 
                 <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Tarefas Extras</Text>
-                {extraTasks.length === 0 ? (
-                  <Text style={{ fontSize: FONTS.size.xs, color: COLORS.textLight, fontFamily: FONTS.family.body, fontStyle: 'italic', textAlign: 'center', marginVertical: SPACING.md }}>
-                    Nenhuma tarefa extra cadastrada para este desafio.
-                  </Text>
-                ) : (
-                  <View style={styles.extraTasksContainer}>
-                    {extraTasks.map(task => {
-                      const isCompleted = task.completed_by.includes(user?.id || '');
-                      const allowLate = selectedChallenge?.allow_late_checkins ?? true;
-                      const availability = checkExtraTaskAvailability(task, allowLate);
-                      const isLocked = !isCompleted && availability.isLocked;
-                      const isExpired = !isCompleted && availability.isExpired;
-                      const warningText = availability.reason || '';
+                {(() => {
+                  const allowLate = selectedChallenge?.allow_late_checkins ?? true;
 
-                      // Ícones baseados no tipo
-                      const iconName = task.type === 'presence' ? 'map-marker-check-outline' :
-                                       task.type === 'punctuality' ? 'clock-check-outline' :
-                                       'star-check-outline';
-                      const iconColor = task.type === 'presence' ? COLORS.primary :
-                                        task.type === 'punctuality' ? COLORS.secondary :
-                                        COLORS.gold;
+                  const visibleExtraTasks = extraTasks.filter(task => {
+                    const isCompleted = task.completed_by.includes(user?.id || '');
+                    // Ocultar se já foi concluída
+                    if (isCompleted) return false;
 
-                      return (
-                        <TouchableOpacity
-                          key={task.id}
-                          style={[
-                            styles.taskButton,
-                            isCompleted && styles.taskButtonCompleted,
-                            isLocked && styles.taskButtonLocked
-                          ]}
-                          disabled={isCompleted || isLocked}
-                          onPress={() => handleSelectTask(task)}
-                          activeOpacity={0.8}
-                        >
-                          <View style={[
-                            styles.taskIconBg,
-                            { backgroundColor: isCompleted ? COLORS.secondary : isLocked ? COLORS.border : iconColor }
-                          ]}>
-                            <MaterialCommunityIcons 
-                              name={isCompleted ? 'check' : isLocked ? 'lock' : iconName} 
-                              size={24} 
-                              color="#fff" 
-                            />
-                          </View>
-                          <View style={styles.taskButtonDetails}>
-                            <Text style={[
-                              styles.taskButtonTitle,
-                              isCompleted && styles.taskButtonTitleCompleted
-                            ]}>{task.title}</Text>
-                            {isLocked ? (
-                              <Text style={styles.warningText}>{warningText}</Text>
-                            ) : (
-                              <Text style={styles.taskButtonDesc}>{task.description}</Text>
-                            )}
-                          </View>
-                          <View style={[
-                            styles.pointsBadge,
-                            { backgroundColor: isCompleted ? COLORS.secondaryMuted : isLocked ? COLORS.surfaceVariant : '#eef3f8' }
-                          ]}>
-                            <Text style={[
-                              styles.pointsText,
-                              { color: isCompleted ? COLORS.secondary : isLocked ? COLORS.textLight : COLORS.primary }
-                            ]}>+{task.points} pts</Text>
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )}
+                    const availability = checkExtraTaskAvailability(task, allowLate);
+                    // Ocultar se já expirou
+                    if (availability.isExpired) return false;
+
+                    // Se estiver bloqueada (isLocked), mostrar apenas tarefas dos tipos 'presence' ou 'punctuality'
+                    if (availability.isLocked) {
+                      return task.type === 'presence' || task.type === 'punctuality';
+                    }
+
+                    return availability.isAvailable;
+                  });
+
+                  if (visibleExtraTasks.length === 0) {
+                    return (
+                      <Text style={{ fontSize: FONTS.size.xs, color: COLORS.textLight, fontFamily: FONTS.family.body, fontStyle: 'italic', textAlign: 'center', marginVertical: SPACING.md }}>
+                        Nenhuma tarefa extra pendente para este desafio.
+                      </Text>
+                    );
+                  }
+
+                  return (
+                    <View style={styles.extraTasksContainer}>
+                      {visibleExtraTasks.map(task => {
+                        const availability = checkExtraTaskAvailability(task, allowLate);
+                        const isLocked = availability.isLocked;
+                        const warningText = availability.reason || 'Liberará em breve';
+
+                        const iconName = task.type === 'presence' ? 'map-marker-check-outline' :
+                                         task.type === 'punctuality' ? 'clock-check-outline' :
+                                         'star-check-outline';
+                        const iconColor = task.type === 'presence' ? COLORS.primary :
+                                          task.type === 'punctuality' ? COLORS.secondary :
+                                          COLORS.gold;
+
+                        return (
+                          <TouchableOpacity
+                            key={task.id}
+                            style={[
+                              styles.taskButton,
+                              isLocked && styles.taskButtonLocked
+                            ]}
+                            disabled={isLocked}
+                            onPress={() => handleSelectTask(task)}
+                            activeOpacity={0.8}
+                          >
+                            <View style={[
+                              styles.taskIconBg,
+                              { backgroundColor: isLocked ? COLORS.border : iconColor }
+                            ]}>
+                              <MaterialCommunityIcons 
+                                name={isLocked ? 'lock-clock' : iconName} 
+                                size={24} 
+                                color="#fff" 
+                              />
+                            </View>
+                            <View style={styles.taskButtonDetails}>
+                              <Text style={styles.taskButtonTitle}>{task.title}</Text>
+                              {isLocked ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                                  <MaterialCommunityIcons name="clock-outline" size={14} color={COLORS.error} style={{ marginRight: 4 }} />
+                                  <Text style={[styles.warningText, { color: COLORS.error, fontWeight: 'bold' }]}>{warningText}</Text>
+                                </View>
+                              ) : (
+                                <Text style={styles.taskButtonDesc}>{task.description}</Text>
+                              )}
+                            </View>
+                            <View style={[
+                              styles.pointsBadge,
+                              { backgroundColor: isLocked ? COLORS.surfaceVariant : '#eef3f8' }
+                            ]}>
+                              <Text style={[
+                                styles.pointsText,
+                                { color: isLocked ? COLORS.textLight : COLORS.primary }
+                              ]}>+{task.points} pts</Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  );
+                })()}
               </>
             )}
           </ScrollView>
