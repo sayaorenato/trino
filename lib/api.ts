@@ -55,6 +55,17 @@ export const api = {
       console.error('Error fetching user groups:', error);
     }
 
+    // Se o usuário possui grupos reais ou é um usuário real autenticado no Supabase, retorna apenas os seus grupos
+    const isRealUser = userId && !userId.startsWith('user_');
+    if (userGroups.length > 0 || isRealUser) {
+      return userGroups.sort((a, b) => {
+        if (a.role === 'admin' && b.role !== 'admin') return -1;
+        if (a.role !== 'admin' && b.role === 'admin') return 1;
+        return 0;
+      });
+    }
+
+    // Fallback apenas para mock de testes locais sem login real
     const combinedGroups = [...userGroups];
     USER_MOCK_GROUPS.forEach((mg: any) => {
       if (!combinedGroups.some((cg: any) => cg.id === mg.id)) {

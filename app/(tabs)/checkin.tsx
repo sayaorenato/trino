@@ -85,21 +85,33 @@ export default function CheckinScreen() {
       const list: any[] = [];
 
       groups.forEach((g: any) => {
-        if (!g.challenges || !Array.isArray(g.challenges)) return;
+        if (!g.challenges || !Array.isArray(g.challenges) || g.challenges.length === 0) return;
 
         const isMockGroup = Boolean(g.id?.startsWith('group'));
+        const now = new Date();
 
-        g.challenges.forEach((activeChallenge: any) => {
+        // Filtrar desafios vigentes (data de término maior ou igual a hoje)
+        const activeChallenges = g.challenges.filter((c: any) => {
+          if (!c.end_date) return true;
+          return new Date(c.end_date) >= now;
+        });
+
+        // Pegar o desafio ativo vigente ou o mais recente como fallback
+        const challengeToUse = activeChallenges.length > 0
+          ? activeChallenges[0]
+          : g.challenges[0];
+
+        if (challengeToUse) {
           list.push({
             groupId: g.id,
             groupName: g.name,
-            challengeId: activeChallenge.id,
+            challengeId: challengeToUse.id,
             // mocks usam 'name', o banco usa 'title'
-            challengeTitle: activeChallenge.title || activeChallenge.name || 'Desafio',
-            rounds: activeChallenge.rounds || [],
+            challengeTitle: challengeToUse.title || challengeToUse.name || 'Desafio',
+            rounds: challengeToUse.rounds || [],
             isMock: isMockGroup,
           });
-        });
+        }
       });
 
       setActiveChallengesList(list);
