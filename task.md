@@ -23,7 +23,7 @@
 - [x] 19. Sincronizar perfis (Auth -> Profiles via Trigger)
 - [x] 20. Configurar e testar integração de Auth (SignUp, SignIn, SignOut)
 - [x] 21. Sincronizar dados na tela Home (Desafio ativo, Streak, Versículo, etc)
-- [ ] 22. Implementar fluxo real de Check-in com upload de imagem
+- [x] 22. Implementar fluxo real de Check-in com upload de imagem
 - [x] 23. Criar e Listar grupos reais (Tela Criar Grupo e Home)
-- [ ] 24. Implementar Feed do Grupo com dados reais e suporte a imagens
-- [ ] 25. Calcular e exibir Ranking/Leaderboard real
+- [x] 24. Implementar Feed do Grupo com dados reais e suporte a imagens
+- [x] 25. Calcular e exibir Ranking/Leaderboard real

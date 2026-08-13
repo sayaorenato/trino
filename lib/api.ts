@@ -375,14 +375,20 @@ export const api = {
       const fileName = `${userId}/${Date.now()}.${ext}`;
 
       const response = await fetch(localUri);
-      const blob = await response.blob();
+      let fileData: ArrayBuffer | Blob;
+
+      try {
+        fileData = await response.arrayBuffer();
+      } catch {
+        fileData = await response.blob();
+      }
 
       const { error: uploadError } = await supabase.storage
         .from('checkins')
-        .upload(fileName, blob, { contentType, upsert: false });
+        .upload(fileName, fileData, { contentType, upsert: false });
 
       if (uploadError) {
-        console.error('Error uploading checkin image:', uploadError);
+        console.error('Error uploading checkin image to Supabase:', uploadError.message || uploadError);
         return null;
       }
 
@@ -407,14 +413,20 @@ export const api = {
       const fileName = `${userId}/avatar_${Date.now()}.${ext}`;
 
       const response = await fetch(localUri);
-      const blob = await response.blob();
+      let fileData: ArrayBuffer | Blob;
+
+      try {
+        fileData = await response.arrayBuffer();
+      } catch {
+        fileData = await response.blob();
+      }
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, blob, { contentType, upsert: true });
+        .upload(fileName, fileData, { contentType, upsert: true });
 
       if (uploadError) {
-        console.error('Error uploading avatar image:', uploadError);
+        console.error('Error uploading avatar image to Supabase:', uploadError.message || uploadError);
         return null;
       }
 

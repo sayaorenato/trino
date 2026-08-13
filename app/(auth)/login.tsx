@@ -13,6 +13,7 @@ import {
   Animated,
   Image,
 } from 'react-native';
+import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
@@ -134,7 +135,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'trino://reset-password',
+        redirectTo: Linking.createURL('/reset-password'),
       });
       if (error) throw error;
       Alert.alert(
@@ -154,8 +155,8 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const redirectTo = Platform.OS === 'web'
-        ? `${window.location.origin}/(tabs)`
-        : 'trino://(tabs)';
+        ? window.location.origin
+        : Linking.createURL('/');
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -187,8 +188,8 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const redirectTo = Platform.OS === 'web'
-        ? `${window.location.origin}/(tabs)`
-        : 'trino://(tabs)';
+        ? window.location.origin
+        : Linking.createURL('/');
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
