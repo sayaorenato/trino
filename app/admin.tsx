@@ -20,7 +20,7 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
-import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest, getMockRankings, saveMockRankings, removeRankingMember } from '../constants/mock-data';
+import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest, getMockRankings, saveMockRankings, removeRankingMember, checkExtraTaskAvailability } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 function formatDateForInput(isoDateStr: string): string {
@@ -1583,57 +1583,99 @@ export default function AdminScreen() {
                         )}
                       </Card>
 
-                      {/* LISTA DE TAREFAS ATIVAS */}
-                      <View style={styles.listSection}>
-                        <Text style={styles.sectionTitle}>Tarefas Ativas no Desafio</Text>
-                        {tasks.filter(task => task.active !== false).length === 0 ? (
-                          <Card variant="flat" style={styles.emptyTabCard}>
-                            <MaterialCommunityIcons name="star-off-outline" size={24} color={COLORS.textLight} />
-                            <Text style={styles.emptyTabText}>Nenhuma tarefa extra ativa.</Text>
+                      {/* LISTA DE TAREFAS SEPARADA EM BLOCOS: PENDENTES E PASSADAS */}
+                      {(() => {
+                        const activeTasks = tasks.filter(t => t.active !== false);
+                        const selectedChallengeObj = challenges.find(c => c.id === selectedChallengeId);
+                        const allowLate = selectedChallengeObj?.allow_late_checkins ?? true;
+
+                        const pendingTasks = activeTasks.filter(task => {
+                          const availability = checkExtraTaskAvailability(task, allowLate);
+                          return !availability.isExpired;
+                        });
+
+                        const pastTasks = activeTasks.filter(task => {
+                          const availability = checkExtraTaskAvailability(task, allowLate);
+                          return availability.isExpired;
+                        });
+
+                        const renderTaskCardItem = (task: ExtraTask, isPast = false) => (
+                          <Card key={task.id} variant="default" style={[styles.taskCard, isPast && { opacity: 0.8, backgroundColor: COLORS.surfaceVariant }]}>
+                            <View style={styles.taskHeader}>
+                              <View style={styles.taskTitleRow}>
+                                <View style={[styles.taskTypeBadge, isPast && { backgroundColor: COLORS.border }]}>
+                                  <Text style={[styles.taskTypeText, isPast && { color: COLORS.textSecondary }]}>{task.type.toUpperCase()}</Text>
+                                </View>
+                                <Text style={[styles.taskPoints, isPast && { color: COLORS.textSecondary }]}>+{task.points} pts</Text>
+                              </View>
+                              <View style={{ flexDirection: 'row', gap: SPACING.md, alignItems: 'center' }}>
+                                <TouchableOpacity onPress={() => handleEditSelect(task)}>
+                                  <MaterialCommunityIcons name="pencil-outline" size={20} color={COLORS.secondary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => handleDeleteTask(task.id)}>
+                                  <MaterialCommunityIcons name="trash-can-outline" size={20} color={COLORS.error} />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                            
+                            <Text style={styles.taskName}>{task.title}</Text>
+                            <Text style={styles.taskDescText}>{task.description}</Text>
+                            {task.start_time && (
+                              <View style={styles.taskTimeBadge}>
+                                <MaterialCommunityIcons name="clock-outline" size={12} color={COLORS.textSecondary} />
+                                <Text style={styles.taskTimeText}>Início: {task.start_time}</Text>
+                              </View>
+                            )}
+                            
+                            <View style={styles.taskFooter}>
+                              <Text style={styles.expiryText}>
+                                {isPast ? 'Expirou em: ' : 'Expira em: '}{new Date(task.expires_at).toLocaleDateString('pt-BR')}
+                              </Text>
+                              <Text style={styles.completedText}>
+                                {task.completed_by?.length || 0} membros completaram
+                              </Text>
+                            </View>
                           </Card>
-                        ) : (
-                          <View style={styles.tasksList}>
-                            {tasks.filter(task => task.active !== false).map(task => (
-                              <Card key={task.id} variant="default" style={styles.taskCard}>
-                                <View style={styles.taskHeader}>
-                                  <View style={styles.taskTitleRow}>
-                                    <View style={styles.taskTypeBadge}>
-                                      <Text style={styles.taskTypeText}>{task.type.toUpperCase()}</Text>
-                                    </View>
-                                    <Text style={styles.taskPoints}>+{task.points} pts</Text>
-                                  </View>
-                                  <View style={{ flexDirection: 'row', gap: SPACING.md, alignItems: 'center' }}>
-                                    <TouchableOpacity onPress={() => handleEditSelect(task)}>
-                                      <MaterialCommunityIcons name="pencil-outline" size={20} color={COLORS.secondary} />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity onPress={() => handleDeleteTask(task.id)}>
-                                      <MaterialCommunityIcons name="trash-can-outline" size={20} color={COLORS.error} />
-                                    </TouchableOpacity>
-                                  </View>
-                                </View>
-                                
-                                <Text style={styles.taskName}>{task.title}</Text>
-                                <Text style={styles.taskDescText}>{task.description}</Text>
-                                {task.start_time && (
-                                  <View style={styles.taskTimeBadge}>
-                                    <MaterialCommunityIcons name="clock-outline" size={12} color={COLORS.textSecondary} />
-                                    <Text style={styles.taskTimeText}>Início: {task.start_time}</Text>
-                                  </View>
-                                )}
-                                
-                                <View style={styles.taskFooter}>
-                                  <Text style={styles.expiryText}>
-                                    Expira em: {new Date(task.expires_at).toLocaleDateString('pt-BR')}
-                                  </Text>
-                                  <Text style={styles.completedText}>
-                                    {task.completed_by?.length || 0} membros completaram
-                                  </Text>
-                                </View>
+                        );
+
+                        return (
+                          <View style={styles.listSection}>
+                            {/* BLOCO 1: TAREFAS PENDENTES */}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm }}>
+                              <MaterialCommunityIcons name="clock-outline" size={20} color={COLORS.primary} style={{ marginRight: 6 }} />
+                              <Text style={styles.sectionTitle}>Tarefas Pendentes ({pendingTasks.length})</Text>
+                            </View>
+
+                            {pendingTasks.length === 0 ? (
+                              <Card variant="flat" style={[styles.emptyTabCard, { marginBottom: SPACING.xl }]}>
+                                <MaterialCommunityIcons name="check-circle-outline" size={24} color={COLORS.secondary} />
+                                <Text style={styles.emptyTabText}>Nenhuma tarefa extra pendente no momento.</Text>
                               </Card>
-                            ))}
+                            ) : (
+                              <View style={[styles.tasksList, { marginBottom: SPACING.xl }]}>
+                                {pendingTasks.map(task => renderTaskCardItem(task, false))}
+                              </View>
+                            )}
+
+                            {/* BLOCO 2: TAREFAS PASSADAS */}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm }}>
+                              <MaterialCommunityIcons name="history" size={20} color={COLORS.textLight} style={{ marginRight: 6 }} />
+                              <Text style={[styles.sectionTitle, { color: COLORS.textSecondary }]}>Tarefas Passadas / Encerradas ({pastTasks.length})</Text>
+                            </View>
+
+                            {pastTasks.length === 0 ? (
+                              <Card variant="flat" style={styles.emptyTabCard}>
+                                <MaterialCommunityIcons name="calendar-blank-outline" size={24} color={COLORS.textLight} />
+                                <Text style={styles.emptyTabText}>Nenhuma tarefa encerrada no histórico.</Text>
+                              </Card>
+                            ) : (
+                              <View style={styles.tasksList}>
+                                {pastTasks.map(task => renderTaskCardItem(task, true))}
+                              </View>
+                            )}
                           </View>
-                        )}
-                      </View>
+                        );
+                      })()}
                     </>
                   ) : (
                     <Card variant="flat" style={styles.emptyTabCard}>
