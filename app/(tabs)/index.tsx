@@ -27,7 +27,7 @@ import { ProgressBar } from '../../components/ui/ProgressBar';
 import { Button } from '../../components/ui/Button';
 import { WebContainer } from '../../components/ui/WebContainer';
 import { SupportCard } from '../../components/SupportCard';
-import { HABIT_LABELS, HabitType, MOCK_RANKINGS, RankingMember, MOCK_CHALLENGE_INVITATIONS, MOCK_FEED, MOCK_EXTRA_TASKS, USER_MOCK_GROUPS, getMockRankings, getChallengeRequests } from '../../constants/mock-data';
+import { HABIT_LABELS, HabitType, MOCK_RANKINGS, RankingMember, MOCK_CHALLENGE_INVITATIONS, MOCK_FEED, MOCK_EXTRA_TASKS, USER_MOCK_GROUPS, getMockRankings, getChallengeRequests, checkExtraTaskAvailability } from '../../constants/mock-data';
 import { COLORS, SPACING, FONTS, SHADOWS, BORDER_RADIUS, ANIMATION } from '../../constants/theme';
 
 const { width } = Dimensions.get('window');
@@ -152,45 +152,37 @@ export default function DashboardScreen() {
 
   // Helper para obter tarefas extras ativas de um desafio
   const getChallengeExtraTasks = (challengeId: string) => {
-    const isToday = (dateString: string) => {
-      if (!dateString) return false;
-      try {
-        const date = new Date(dateString);
-        const today = new Date();
-        return (
-          date.getFullYear() === today.getFullYear() &&
-          date.getMonth() === today.getMonth() &&
-          date.getDate() === today.getDate()
-        );
-      } catch (e) {
-        return false;
-      }
-    };
+    let rawTasks: any[] = [];
 
     if (challengeId.startsWith('chal')) {
-      return (MOCK_EXTRA_TASKS[challengeId] || [])
-        .filter((t: any) => t.active !== false && isToday(t.expires_at));
+      rawTasks = MOCK_EXTRA_TASKS[challengeId] || [];
+    } else {
+      rawTasks = tasks
+        .filter((t: any) => t.challenge_id === challengeId)
+        .map((t: any) => {
+          let parsed = { title: 'Tarefa Extra', description: '', type: 'general', active: true, points: 30, expires_at: '', start_time: '' };
+          try {
+            parsed = JSON.parse(t.description);
+          } catch (e) {}
+          return {
+            id: t.id,
+            challenge_id: t.challenge_id,
+            title: parsed.title || 'Tarefa Extra',
+            description: parsed.description || t.description,
+            type: (parsed.type && parsed.type !== 'other' ? parsed.type : (t.type && t.type !== 'other' ? t.type : 'general')),
+            points: t.points || 30,
+            active: parsed.active !== false,
+            expires_at: parsed.expires_at || t.created_at,
+            start_time: parsed.start_time || undefined
+          };
+        });
     }
-    return tasks
-      .filter((t: any) => t.challenge_id === challengeId)
-      .map((t: any) => {
-        let parsed = { title: 'Tarefa Extra', description: '', type: 'general', active: true, points: 30, expires_at: '', start_time: '' };
-        try {
-          parsed = JSON.parse(t.description);
-        } catch (e) {}
-        return {
-          id: t.id,
-          challenge_id: t.challenge_id,
-          title: parsed.title || 'Tarefa Extra',
-          description: parsed.description || t.description,
-          type: parsed.type || 'general',
-          points: t.points || 30,
-          active: parsed.active !== false,
-          expires_at: parsed.expires_at || '',
-          start_time: parsed.start_time || undefined
-        };
-      })
-      .filter((t: any) => t.active !== false && isToday(t.expires_at));
+
+    return rawTasks.filter((t: any) => {
+      if (t.active === false) return false;
+      const availability = checkExtraTaskAvailability(t);
+      return !availability.isExpired;
+    });
   };
 
   // Helper para verificar se a tarefa extra já foi liberada pelo horário de início
@@ -931,14 +923,15 @@ export default function DashboardScreen() {
                             <View style={styles.extraTasksRow}>
                               {challengeExtraTasks.map((task: any) => {
                                 const done = isExtraTaskDone(task.id, challenge.id);
-                                const released = isTimeReleased(task.start_time);
+                                const availability = checkExtraTaskAvailability(task);
+                                const isLocked = availability.isLocked;
                                 
                                 const handlePress = () => {
                                   if (done) return;
-                                  if (!released) {
-                                    Alert.alert(
-                                      'Tarefa Não Liberada',
-                                      `Esta tarefa estará disponível para check-in somente a partir das ${task.start_time}.`
+                                  if (isLocked) {
+                                    showAlert(
+                                      '🔒 Tarefa Bloqueada',
+                                      availability.reason || `Esta tarefa estará disponível para check-in somente a partir das ${task.start_time}.`
                                     );
                                     return;
                                   }
@@ -957,15 +950,15 @@ export default function DashboardScreen() {
                                       styles.miniTaskBadge,
                                       done 
                                         ? styles.miniTaskBadgeCompleted 
-                                        : !released 
+                                        : isLocked 
                                           ? styles.miniTaskBadgeLocked 
                                           : styles.miniTaskBadgePending
                                     ]}
                                   >
                                     <MaterialCommunityIcons 
-                                      name={done ? "star" : !released ? "lock-outline" : "star-outline"} 
+                                      name={done ? "star" : isLocked ? "lock-clock" : "star-outline"} 
                                       size={10} 
-                                      color={done ? "#fff" : !released ? '#8e8e93' : COLORS.goldDark} 
+                                      color={done ? "#fff" : isLocked ? '#8e8e93' : COLORS.goldDark} 
                                       style={{ marginRight: 2 }}
                                     />
                                     <Text 
@@ -973,13 +966,13 @@ export default function DashboardScreen() {
                                         styles.miniTaskBadgeText,
                                         done 
                                           ? styles.miniTaskBadgeTextCompleted 
-                                          : !released 
+                                          : isLocked 
                                             ? styles.miniTaskBadgeTextLocked 
                                             : styles.miniTaskBadgeTextPending
                                       ]}
                                       numberOfLines={1}
                                     >
-                                      {task.title}{!released && task.start_time ? ` (Libera às ${task.start_time})` : ''}
+                                      {task.title}{isLocked && task.start_time ? ` (${task.type === 'punctuality' ? 'Pontualidade' : 'Presença'} às ${task.start_time})` : ''}
                                     </Text>
                                   </TouchableOpacity>
                                 );

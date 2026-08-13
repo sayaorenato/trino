@@ -632,15 +632,37 @@ export function checkExtraTaskAvailability(
 ): TaskAvailability {
   if (!task) return { isAvailable: false, isLocked: false, isExpired: true, reason: 'Tarefa inválida.' };
 
-  const taskDateStr = task.expires_at ? task.expires_at.split('T')[0] : new Date().toISOString().split('T')[0];
+  const expiresAtDate = new Date(task.expires_at);
+  // 1. Expiração Global: Se a data limite estipulada já passou, a tarefa expirou
+  if (now > expiresAtDate) {
+    return {
+      isAvailable: false,
+      isLocked: false,
+      isExpired: true,
+      reason: 'Tarefa expirada.',
+    };
+  }
+
+  // 2. Tipo GERAL: Liberado até a data de expiração
+  if (task.type !== 'presence' && task.type !== 'punctuality') {
+    return { isAvailable: true, isLocked: false, isExpired: false };
+  }
+
+  // 3. Tipos PRESENÇA e PONTUALIDADE:
+  // Combina o dia de hoje (no fuso local) com o horário HH:MM estipulado
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const todayDateStr = `${y}-${m}-${d}`;
+
   const [hourStr, minStr] = (task.start_time || '00:00').split(':');
   const hour = parseInt(hourStr || '0', 10);
   const min = parseInt(minStr || '0', 10);
 
-  // Data/Hora exata estipulada para a tarefa
-  const startDateTime = new Date(`${taskDateStr}T${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}:00`);
+  // Data/Hora exata estipulada para a tarefa no dia de hoje
+  const startDateTime = new Date(`${todayDateStr}T${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}:00`);
 
-  // 1. PONTUALIDADE: Disponível de [startDateTime - 30 min] até [startDateTime + 5 min]
+  // PONTUALIDADE: Liberado de [startDateTime - 30 min] até [startDateTime + 5 min]
   if (task.type === 'punctuality') {
     const windowStart = new Date(startDateTime.getTime() - 30 * 60 * 1000); // 30 min antes
     const windowEnd = new Date(startDateTime.getTime() + 5 * 60 * 1000);    // 5 min depois
@@ -668,47 +690,20 @@ export function checkExtraTaskAvailability(
     return { isAvailable: true, isLocked: false, isExpired: false };
   }
 
-  // 2. PRESENÇA: Disponível a partir de startDateTime para frente
+  // PRESENÇA: Liberado a partir de startDateTime em diante
   if (task.type === 'presence') {
     if (now < startDateTime) {
-      const day = String(startDateTime.getDate()).padStart(2, '0');
-      const month = String(startDateTime.getMonth() + 1).padStart(2, '0');
+      const dayStr = String(startDateTime.getDate()).padStart(2, '0');
+      const monthStr = String(startDateTime.getMonth() + 1).padStart(2, '0');
       return {
         isAvailable: false,
         isLocked: true,
         isExpired: false,
-        reason: `Disponível a partir de ${day}/${month} às ${task.start_time}`,
-      };
-    }
-
-    // Fim da disponibilidade para presença respeitando regras do desafio
-    const endOfDay = new Date(`${taskDateStr}T23:59:59`);
-    const expiresAtDate = new Date(task.expires_at);
-    const deadline = allowLateCheckins ? expiresAtDate : endOfDay;
-
-    if (now > deadline) {
-      return {
-        isAvailable: false,
-        isLocked: false,
-        isExpired: true,
-        reason: allowLateCheckins 
-          ? 'Tarefa expirada.' 
-          : 'Check-in atrasado não permitido para este desafio.',
+        reason: `Disponível a partir de ${dayStr}/${monthStr} às ${task.start_time || '00:00'}`,
       };
     }
 
     return { isAvailable: true, isLocked: false, isExpired: false };
-  }
-
-  // 3. GERAL: Disponível até a data de expiração
-  const expiresAtDate = new Date(task.expires_at);
-  if (now > expiresAtDate) {
-    return {
-      isAvailable: false,
-      isLocked: false,
-      isExpired: true,
-      reason: 'Tarefa expirada.',
-    };
   }
 
   return { isAvailable: true, isLocked: false, isExpired: false };

@@ -304,7 +304,7 @@ export default function AdminScreen() {
               challenge_id: t.challenge_id,
               title: parsed.title || 'Tarefa Extra',
               description: parsed.description || t.description,
-              type: (parsed.type || 'general') as 'general' | 'presence' | 'punctuality',
+              type: (parsed.type && parsed.type !== 'other' ? parsed.type : (t.type && t.type !== 'other' ? t.type : 'general')) as 'general' | 'presence' | 'punctuality',
               points: t.points || 30,
               expires_at: parsed.expires_at || t.created_at,
               start_time: parsed.start_time,
@@ -997,6 +997,7 @@ export default function AdminScreen() {
             .update({
               description: JSON.stringify(payload),
               points: parseInt(points) || 30,
+              type: type
             })
             .eq('id', editingTaskId);
 
@@ -1047,7 +1048,7 @@ export default function AdminScreen() {
               challenge_id: selectedChallengeId,
               description: JSON.stringify(payload),
               points: parseInt(points) || 30,
-              type: 'other'
+              type: type
             })
             .select()
             .single();
