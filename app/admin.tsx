@@ -915,32 +915,37 @@ export default function AdminScreen() {
 
   const handleCreateTask = async () => {
     if (!selectedChallengeId) {
-      Alert.alert('Erro', 'Nenhum desafio ativo selecionado para publicar a tarefa.');
+      showAdminNotice('Erro', 'Nenhum desafio ativo selecionado para publicar a tarefa.');
       return;
     }
 
     if (!title || !desc || !points) {
-      Alert.alert('Erro', 'Por favor, preencha todos os campos da tarefa.');
+      showAdminNotice('Erro', 'Por favor, preencha todos os campos da tarefa.');
       return;
     }
 
     if (title.length > 100) {
-      Alert.alert('Erro', 'O título da tarefa deve ter no máximo 100 caracteres.');
+      showAdminNotice('Erro', 'O título da tarefa deve ter no máximo 100 caracteres.');
       return;
     }
 
     if (desc.length > 1000) {
-      Alert.alert('Erro', 'A descrição da tarefa deve ter no máximo 1000 caracteres.');
+      showAdminNotice('Erro', 'A descrição da tarefa deve ter no máximo 1000 caracteres.');
       return;
     }
 
     setLoadingAction(true);
     try {
-      let isoExpiresAt = '2026-06-20T23:59:59Z';
+      let isoExpiresAt = new Date().toISOString();
       try {
-        const [day, month, year] = expiryDate.split('/');
-        if (day && month && year) {
-          isoExpiresAt = `${year}-${month}-${day}T23:59:59Z`;
+        const parts = expiryDate.trim().split('/');
+        if (parts.length === 3) {
+          const dStr = String(parts[0].trim()).padStart(2, '0');
+          const mStr = String(parts[1].trim()).padStart(2, '0');
+          const yStr = parts[2].trim();
+          if (dStr && mStr && yStr && yStr.length === 4) {
+            isoExpiresAt = `${yStr}-${mStr}-${dStr}T23:59:59Z`;
+          }
         }
       } catch (err) {
         console.warn('Erro ao formatar data de expiração:', err);
@@ -948,12 +953,12 @@ export default function AdminScreen() {
 
       const isMock = selectedChallengeId.startsWith('chal');
       const payload = {
-        title: title,
-        description: desc,
+        title: title.trim(),
+        description: desc.trim(),
         type: type,
         expires_at: isoExpiresAt,
         active: true,
-        ...(type === 'presence' || type === 'punctuality' ? { start_time: startTime } : {})
+        ...(type === 'presence' || type === 'punctuality' ? { start_time: startTime.trim() } : {})
       };
 
       if (editingTaskId) {
@@ -963,13 +968,13 @@ export default function AdminScreen() {
             if (t.id === editingTaskId) {
               return {
                 ...t,
-                title: title,
-                description: desc,
+                title: title.trim(),
+                description: desc.trim(),
                 type: type,
                 points: parseInt(points) || 30,
                 expires_at: isoExpiresAt,
                 active: true,
-                ...(type === 'presence' || type === 'punctuality' ? { start_time: startTime } : {})
+                ...(type === 'presence' || type === 'punctuality' ? { start_time: startTime.trim() } : {})
               };
             }
             return t;
@@ -979,48 +984,61 @@ export default function AdminScreen() {
             if (t.id === editingTaskId) {
               return {
                 ...t,
-                title: title,
-                description: desc,
+                title: title.trim(),
+                description: desc.trim(),
                 type: type,
                 points: parseInt(points) || 30,
                 expires_at: isoExpiresAt,
                 active: true,
-                ...(type === 'presence' || type === 'punctuality' ? { start_time: startTime } : {})
+                ...(type === 'presence' || type === 'punctuality' ? { start_time: startTime.trim() } : {})
               };
             }
             return t;
           }));
         } else {
           // Gravar no banco de dados do Supabase
+          const updatePayload: any = {
+            description: JSON.stringify(payload),
+            points: parseInt(points) || 30,
+            type: type
+          };
+
           const { error } = await supabase
             .from('tasks')
-            .update({
-              description: JSON.stringify(payload),
-              points: parseInt(points) || 30,
-              type: type
-            })
+            .update(updatePayload)
             .eq('id', editingTaskId);
 
-          if (error) throw error;
+          if (error) {
+            if (error.code === 'PGRST204' || (error.message || '').includes('type')) {
+              delete updatePayload.type;
+              const { error: fallbackErr } = await supabase
+                .from('tasks')
+                .update(updatePayload)
+                .eq('id', editingTaskId);
+              if (fallbackErr) throw fallbackErr;
+            } else {
+              throw error;
+            }
+          }
 
           setTasks(prev => prev.map(t => {
             if (t.id === editingTaskId) {
               return {
                 ...t,
-                title: title,
-                description: desc,
+                title: title.trim(),
+                description: desc.trim(),
                 type: type,
                 points: parseInt(points) || 30,
                 expires_at: isoExpiresAt,
                 active: true,
-                ...(type === 'presence' || type === 'punctuality' ? { start_time: startTime } : {})
+                ...(type === 'presence' || type === 'punctuality' ? { start_time: startTime.trim() } : {})
               };
             }
             return t;
           }));
         }
 
-        Alert.alert('Sucesso', 'A tarefa extra foi atualizada com sucesso!');
+        showAdminNotice('Sucesso', 'A tarefa extra foi atualizada com sucesso!');
         setEditingTaskId(null);
       } else {
         // --- MODO CRIAÇÃO ---
@@ -1028,49 +1046,68 @@ export default function AdminScreen() {
           const newTask: ExtraTask = {
             id: `task_${Date.now()}`,
             challenge_id: selectedChallengeId,
-            title: title,
-            description: desc,
+            title: title.trim(),
+            description: desc.trim(),
             type: type,
             points: parseInt(points) || 30,
             expires_at: isoExpiresAt,
             completed_by: [],
             active: true,
-            ...((type === 'presence' || type === 'punctuality') ? { start_time: startTime } : {})
+            ...((type === 'presence' || type === 'punctuality') ? { start_time: startTime.trim() } : {})
           };
 
           MOCK_EXTRA_TASKS[selectedChallengeId] = [newTask, ...(MOCK_EXTRA_TASKS[selectedChallengeId] || [])];
           setTasks(prev => [newTask, ...prev]);
         } else {
           // Gravar no banco de dados do Supabase
+          const insertPayload: any = {
+            challenge_id: selectedChallengeId,
+            description: JSON.stringify(payload),
+            points: parseInt(points) || 30,
+            type: type
+          };
+
+          let insertedData: any = null;
           const { data, error } = await supabase
             .from('tasks')
-            .insert({
-              challenge_id: selectedChallengeId,
-              description: JSON.stringify(payload),
-              points: parseInt(points) || 30,
-              type: type
-            })
+            .insert(insertPayload)
             .select()
             .single();
 
-          if (error) throw error;
+          if (error) {
+            if (error.code === 'PGRST204' || (error.message || '').includes('type')) {
+              delete insertPayload.type;
+              const { data: fallbackData, error: fallbackError } = await supabase
+                .from('tasks')
+                .insert(insertPayload)
+                .select()
+                .single();
+
+              if (fallbackError) throw fallbackError;
+              insertedData = fallbackData;
+            } else {
+              throw error;
+            }
+          } else {
+            insertedData = data;
+          }
 
           const newTask: ExtraTask = {
-            id: data.id,
+            id: insertedData ? insertedData.id : `task_${Date.now()}`,
             challenge_id: selectedChallengeId,
-            title: title,
-            description: desc,
+            title: title.trim(),
+            description: desc.trim(),
             type: type,
             points: parseInt(points) || 30,
             expires_at: isoExpiresAt,
             completed_by: [],
             active: true,
-            ...(type === 'presence' || type === 'punctuality' ? { start_time: startTime } : {})
+            ...(type === 'presence' || type === 'punctuality' ? { start_time: startTime.trim() } : {})
           };
           setTasks(prev => [newTask, ...prev]);
         }
 
-        Alert.alert('Sucesso', 'Nova tarefa extra foi publicada para os membros!');
+        showAdminNotice('Sucesso', 'Nova tarefa extra foi publicada para os membros!');
       }
       
       // Resetar formulário
@@ -1086,8 +1123,8 @@ export default function AdminScreen() {
       setStartTime('19:30');
       setType('general');
     } catch (e: any) {
-      console.error(e);
-      Alert.alert('Erro', e.message || 'Falha ao salvar tarefa.');
+      console.error('Erro ao salvar tarefa:', e);
+      showAdminNotice('Erro ao Salvar Tarefa', e.message || 'Falha ao salvar a tarefa no banco de dados.');
     } finally {
       setLoadingAction(false);
     }
