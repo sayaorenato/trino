@@ -26,8 +26,10 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
+      "icon": "./assets/icon.png",
       "bundler": "metro",
-      "name": "Trino",
+      "output": "static",
+      "name": "Trino — Fé em Constância",
       "shortName": "Trino",
       "themeColor": "#03192E",
       "backgroundColor": "#F7F5F2",
