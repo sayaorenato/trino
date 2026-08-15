@@ -467,8 +467,9 @@ export const MOCK_RANKINGS: Record<string, RankingMember[]> = {
 const getRelativeDate = (offsetDays: number, hourStr = '23:59:59') => {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
-  const dateStr = d.toISOString().split('T')[0];
-  return `${dateStr}T${hourStr}Z`;
+  const [hStr, mStr, sStr] = hourStr.split(':');
+  d.setHours(parseInt(hStr || '23', 10), parseInt(mStr || '59', 10), parseInt(sStr || '59', 10), 999);
+  return d.toISOString();
 };
 
 export const MOCK_EXTRA_TASKS: Record<string, ExtraTask[]> = {
@@ -632,7 +633,16 @@ export function checkExtraTaskAvailability(
 ): TaskAvailability {
   if (!task) return { isAvailable: false, isLocked: false, isExpired: true, reason: 'Tarefa inválida.' };
 
-  const expiresAtDate = new Date(task.expires_at);
+  let expiresAtDate = new Date(task.expires_at);
+  if (isNaN(expiresAtDate.getTime())) {
+    expiresAtDate = new Date();
+  } else if (typeof task.expires_at === 'string' && !task.expires_at.includes('T')) {
+    const parts = task.expires_at.split('-');
+    if (parts.length === 3) {
+      expiresAtDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
+    }
+  }
+
   // 1. Expiração Global: Se a data limite estipulada já passou, a tarefa expirou
   if (now > expiresAtDate) {
     return {

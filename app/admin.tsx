@@ -99,6 +99,7 @@ export default function AdminScreen() {
   });
   const [startTime, setStartTime] = useState('19:30');
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [visibleTasksLimit, setVisibleTasksLimit] = useState(3);
 
   // 1. Carregar grupos em que o usuário logado é administrador
   useEffect(() => {
@@ -878,6 +879,9 @@ export default function AdminScreen() {
   // Ações de Tarefas Extras
   const handleEditSelect = (task: ExtraTask) => {
     setEditingTaskId(task.id);
+    if (task.challenge_id && challenges.some(c => c.id === task.challenge_id)) {
+      setSelectedChallengeId(task.challenge_id);
+    }
     setTitle(task.title);
     setDesc(task.description);
     setType(task.type);
@@ -911,6 +915,7 @@ export default function AdminScreen() {
     const y = today.getFullYear();
     setExpiryDate(`${d}/${m}/${y}`);
     setStartTime('19:30');
+    setVisibleTasksLimit(3);
   };
 
   const handleCreateTask = async () => {
@@ -940,11 +945,12 @@ export default function AdminScreen() {
       try {
         const parts = expiryDate.trim().split('/');
         if (parts.length === 3) {
-          const dStr = String(parts[0].trim()).padStart(2, '0');
-          const mStr = String(parts[1].trim()).padStart(2, '0');
-          const yStr = parts[2].trim();
-          if (dStr && mStr && yStr && yStr.length === 4) {
-            isoExpiresAt = `${yStr}-${mStr}-${dStr}T23:59:59Z`;
+          const day = parseInt(parts[0].trim(), 10);
+          const month = parseInt(parts[1].trim(), 10);
+          const year = parseInt(parts[2].trim(), 10);
+          if (day && month && year && year > 2000) {
+            const targetDate = new Date(year, month - 1, day, 23, 59, 59, 999);
+            isoExpiresAt = targetDate.toISOString();
           }
         }
       } catch (err) {
@@ -1483,9 +1489,14 @@ export default function AdminScreen() {
                   {/* Seletor de desafios se houver mais de um */}
                   {challenges.length > 0 ? (
                     <>
-                      {challenges.length > 1 && (
-                        <View style={styles.challengeSelectorContainer}>
-                          <Text style={styles.selectorLabel}>Desafio Vinculado:</Text>
+                      {/* FORMULÁRIO DE TAREFA EXTRA */}
+                      <Card variant="default" style={styles.formCard}>
+                        <Text style={styles.cardTitle}>{editingTaskId ? 'Editar Tarefa Extra' : 'Criar Nova Tarefa Extra'}</Text>
+                        <View style={styles.divider} />
+
+                        {/* Seletor de Desafio do Grupo */}
+                        <View style={styles.inputGroup}>
+                          <Text style={styles.label}>Desafio Pertencente (Escolha o Desafio)</Text>
                           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.challengeSelectorScroll}>
                             {challenges.map(c => (
                               <TouchableOpacity
@@ -1496,25 +1507,20 @@ export default function AdminScreen() {
                                 ]}
                                 onPress={() => {
                                   setSelectedChallengeId(c.id);
-                                  handleCancelEdit();
+                                  if (editingTaskId) handleCancelEdit();
+                                  setVisibleTasksLimit(3);
                                 }}
                               >
                                 <Text style={[
                                   styles.challengeSelectBadgeText,
                                   selectedChallengeId === c.id && styles.challengeSelectBadgeTextActive
                                 ]}>
-                                  {c.title}
+                                  {c.title || c.name || 'Desafio'}
                                 </Text>
                               </TouchableOpacity>
                             ))}
                           </ScrollView>
                         </View>
-                      )}
-
-                      {/* FORMULÁRIO DE TAREFA EXTRA */}
-                      <Card variant="default" style={styles.formCard}>
-                        <Text style={styles.cardTitle}>{editingTaskId ? 'Editar Tarefa Extra' : 'Criar Nova Tarefa Extra'}</Text>
-                        <View style={styles.divider} />
 
                         <View style={styles.inputGroup}>
                           <Text style={styles.label}>Título da Tarefa</Text>
@@ -1621,7 +1627,7 @@ export default function AdminScreen() {
                         )}
                       </Card>
 
-                      {/* LISTA DE TAREFAS SEPARADA EM BLOCOS: PENDENTES E PASSADAS */}
+                      {/* LISTA DE TAREFAS SEPARADA EM BLOCOS: PENDENTES E PASSADAS COM LIMITE INCREMENTAL */}
                       {(() => {
                         const activeTasks = tasks.filter(t => t.active !== false);
                         const selectedChallengeObj = challenges.find(c => c.id === selectedChallengeId);
@@ -1636,6 +1642,15 @@ export default function AdminScreen() {
                           const availability = checkExtraTaskAvailability(task, allowLate);
                           return availability.isExpired;
                         });
+
+                        const totalActiveCount = pendingTasks.length + pastTasks.length;
+                        
+                        // Fatiar para exibir no máximo visibleTasksLimit tarefas no total
+                        const visiblePendingTasks = pendingTasks.slice(0, visibleTasksLimit);
+                        const remainingLimitForPast = Math.max(0, visibleTasksLimit - pendingTasks.length);
+                        const visiblePastTasks = pastTasks.slice(0, remainingLimitForPast);
+                        const visibleTotalCount = visiblePendingTasks.length + visiblePastTasks.length;
+                        const hasMoreTasks = totalActiveCount > visibleTotalCount;
 
                         const renderTaskCardItem = (task: ExtraTask, isPast = false) => (
                           <Card key={task.id} variant="default" style={[styles.taskCard, isPast && { opacity: 0.8, backgroundColor: COLORS.surfaceVariant }]}>
@@ -1691,7 +1706,7 @@ export default function AdminScreen() {
                               </Card>
                             ) : (
                               <View style={[styles.tasksList, { marginBottom: SPACING.xl }]}>
-                                {pendingTasks.map(task => renderTaskCardItem(task, false))}
+                                {visiblePendingTasks.map(task => renderTaskCardItem(task, false))}
                               </View>
                             )}
 
@@ -1708,8 +1723,33 @@ export default function AdminScreen() {
                               </Card>
                             ) : (
                               <View style={styles.tasksList}>
-                                {pastTasks.map(task => renderTaskCardItem(task, true))}
+                                {visiblePastTasks.map(task => renderTaskCardItem(task, true))}
                               </View>
+                            )}
+
+                            {/* BOTÃO VER MAIS TAREFAS (+5) */}
+                            {hasMoreTasks && (
+                              <TouchableOpacity
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  paddingVertical: SPACING.md,
+                                  paddingHorizontal: SPACING.lg,
+                                  backgroundColor: COLORS.surface,
+                                  borderRadius: BORDER_RADIUS.md,
+                                  borderWidth: 1,
+                                  borderColor: COLORS.primary,
+                                  marginTop: SPACING.md,
+                                  gap: 6
+                                }}
+                                onPress={() => setVisibleTasksLimit(prev => prev + 5)}
+                              >
+                                <MaterialCommunityIcons name="chevron-down" size={20} color={COLORS.primary} />
+                                <Text style={{ fontSize: FONTS.size.sm, fontWeight: '600', color: COLORS.primary }}>
+                                  Ver mais tarefas ({totalActiveCount - visibleTotalCount} restantes)
+                                </Text>
+                              </TouchableOpacity>
                             )}
                           </View>
                         );
