@@ -900,6 +900,8 @@ export default function AdminScreen() {
     if (task.start_time) {
       setStartTime(task.start_time);
     }
+
+    showAdminNotice('Modo Edição', `Os dados da tarefa "${task.title}" foram carregados no formulário acima para alteração.`);
   };
 
   const handleCancelEdit = () => {
@@ -1137,65 +1139,62 @@ export default function AdminScreen() {
   };
 
   const handleDeleteTask = (taskId: string) => {
-    Alert.alert(
-      'Desativar Tarefa',
-      'Deseja mesmo desativar esta tarefa extra? Ela sumirá da tela de check-in dos membros.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Desativar', 
-          style: 'destructive', 
-          onPress: async () => {
-            if (!selectedChallengeId) return;
-            const isMock = selectedChallengeId.startsWith('chal');
-            setLoadingAction(true);
-            try {
-              if (isMock) {
-                MOCK_EXTRA_TASKS[selectedChallengeId] = (MOCK_EXTRA_TASKS[selectedChallengeId] || []).map(t => {
-                  if (t.id === taskId) return { ...t, active: false };
-                  return t;
-                });
-                setTasks(prev => prev.map(t => {
-                  if (t.id === taskId) return { ...t, active: false };
-                  return t;
-                }));
-              } else {
-                const taskToDisable = tasks.find(t => t.id === taskId);
-                if (taskToDisable) {
-                  const payload = {
-                    title: taskToDisable.title,
-                    description: taskToDisable.description,
-                    type: taskToDisable.type,
-                    expires_at: taskToDisable.expires_at,
-                    start_time: taskToDisable.start_time,
-                    active: false
-                  };
+    const performDelete = async () => {
+      if (!selectedChallengeId) return;
+      const isMock = selectedChallengeId.startsWith('chal');
+      setLoadingAction(true);
+      try {
+        if (isMock) {
+          MOCK_EXTRA_TASKS[selectedChallengeId] = (MOCK_EXTRA_TASKS[selectedChallengeId] || []).filter(t => t.id !== taskId);
+          setTasks(prev => prev.filter(t => t.id !== taskId));
+        } else {
+          const { error } = await supabase
+            .from('tasks')
+            .delete()
+            .eq('id', taskId);
 
-                  const { error } = await supabase
-                    .from('tasks')
-                    .update({
-                      description: JSON.stringify(payload)
-                    })
-                    .eq('id', taskId);
-
-                  if (error) throw error;
-                  setTasks(prev => prev.map(t => {
-                    if (t.id === taskId) return { ...t, active: false };
-                    return t;
-                  }));
-                }
-              }
-              Alert.alert('Sucesso', 'Tarefa desativada com sucesso.');
-            } catch (e: any) {
-              console.error(e);
-              Alert.alert('Erro', 'Não foi possível desativar a tarefa.');
-            } finally {
-              setLoadingAction(false);
+          if (error) {
+            const taskToDisable = tasks.find(t => t.id === taskId);
+            if (taskToDisable) {
+              const payload = {
+                title: taskToDisable.title,
+                description: taskToDisable.description,
+                type: taskToDisable.type,
+                expires_at: taskToDisable.expires_at,
+                start_time: taskToDisable.start_time,
+                active: false
+              };
+              await supabase
+                .from('tasks')
+                .update({ description: JSON.stringify(payload) })
+                .eq('id', taskId);
             }
-          } 
+          }
+          setTasks(prev => prev.filter(t => t.id !== taskId));
         }
-      ]
-    );
+        showAdminNotice('Sucesso', 'Tarefa extra removida com sucesso!');
+      } catch (e: any) {
+        console.error(e);
+        showAdminNotice('Erro', e.message || 'Não foi possível desativar a tarefa.');
+      } finally {
+        setLoadingAction(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Deseja mesmo excluir/desativar esta tarefa extra? Ela sumirá da tela de check-in dos membros.')) {
+        performDelete();
+      }
+    } else {
+      Alert.alert(
+        'Excluir Tarefa Extra',
+        'Deseja mesmo desativar esta tarefa extra? Ela sumirá da tela de check-in dos membros.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Excluir', style: 'destructive', onPress: performDelete }
+        ]
+      );
+    }
   };
 
   if (loading) {
@@ -1629,19 +1628,20 @@ export default function AdminScreen() {
 
                       {/* LISTA DE TAREFAS SEPARADA EM BLOCOS: PENDENTES E PASSADAS COM LIMITE INCREMENTAL */}
                       {(() => {
-                        const activeTasks = tasks.filter(t => t.active !== false);
+                        const activeTasks = tasks
+                          .filter(t => t.active !== false)
+                          .sort((a, b) => new Date(b.expires_at || 0).getTime() - new Date(a.expires_at || 0).getTime());
+
                         const selectedChallengeObj = challenges.find(c => c.id === selectedChallengeId);
                         const allowLate = selectedChallengeObj?.allow_late_checkins ?? true;
 
-                        const pendingTasks = activeTasks.filter(task => {
-                          const availability = checkExtraTaskAvailability(task, allowLate);
-                          return !availability.isExpired;
-                        });
+                        const pendingTasks = activeTasks
+                          .filter(task => !checkExtraTaskAvailability(task, allowLate).isExpired)
+                          .sort((a, b) => new Date(b.expires_at || 0).getTime() - new Date(a.expires_at || 0).getTime());
 
-                        const pastTasks = activeTasks.filter(task => {
-                          const availability = checkExtraTaskAvailability(task, allowLate);
-                          return availability.isExpired;
-                        });
+                        const pastTasks = activeTasks
+                          .filter(task => checkExtraTaskAvailability(task, allowLate).isExpired)
+                          .sort((a, b) => new Date(b.expires_at || 0).getTime() - new Date(a.expires_at || 0).getTime());
 
                         const totalActiveCount = pendingTasks.length + pastTasks.length;
                         
