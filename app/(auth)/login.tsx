@@ -360,6 +360,26 @@ export default function LoginScreen() {
                   </Text>
                 </Text>
               </TouchableOpacity>
+
+              <View style={styles.termsContainer}>
+                <Text style={styles.termsNoticeText}>
+                  Ao continuar, você concorda com nossos{' '}
+                  <Text
+                    style={styles.termsNoticeLink}
+                    onPress={() => router.push('/(auth)/terms')}
+                  >
+                    Termos de Uso
+                  </Text>
+                  {' '}e{' '}
+                  <Text
+                    style={styles.termsNoticeLink}
+                    onPress={() => router.push('/(auth)/terms')}
+                  >
+                    Política de Privacidade
+                  </Text>
+                  .
+                </Text>
+              </View>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -537,5 +557,21 @@ const styles = StyleSheet.create({
   footerTextBold: {
     color: COLORS.secondary,
     fontFamily: FONTS.family.bodySemibold,
+  },
+  termsContainer: {
+    marginTop: SPACING.lg,
+    paddingHorizontal: SPACING.md,
+  },
+  termsNoticeText: {
+    fontSize: FONTS.size.xs,
+    fontFamily: FONTS.family.body,
+    color: COLORS.textLight,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  termsNoticeLink: {
+    color: COLORS.textSecondary,
+    fontFamily: FONTS.family.bodySemibold,
+    textDecorationLine: 'underline',
   },
 });
