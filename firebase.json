@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "trino-app-br",
     "public": "dist",
     "ignore": [
       "firebase.json",
@@ -18,5 +19,14 @@
   },
   "storage": {
     "rules": "storage.rules"
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Trino",
+        "supportEmail": "rbasayao@gmail.com"
+      }
+    }
   }
 }
