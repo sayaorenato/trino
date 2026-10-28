@@ -106,7 +106,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchProfile]);
 
   useEffect(() => {
+    let timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 2000);
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      clearTimeout(timer);
       setIsLoading(true);
       if (firebaseUser) {
         const mappedUser: AuthUser = {
@@ -126,7 +131,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
   }, [fetchProfile]);
 
   const signOut = async () => {

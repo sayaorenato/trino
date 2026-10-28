@@ -90,8 +90,16 @@ export default function RootLayout() {
     Outfit_600SemiBold,
     Outfit_700Bold,
   });
+  const [fontsTimedOut, setFontsTimedOut] = React.useState(false);
 
-  if (!fontsLoaded) {
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setFontsTimedOut(true);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!fontsLoaded && !fontsTimedOut) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.secondary} />
