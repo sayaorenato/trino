@@ -1,6 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
-import { Session, User } from '@supabase/supabase-js';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { 
+  onAuthStateChanged, 
+  signOut as firebaseSignOut, 
+  User as FirebaseUser 
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
 import { clearMockSession } from '../constants/mock-data';
 
 export interface Profile {
@@ -13,9 +18,17 @@ export interface Profile {
   created_at: string;
 }
 
+export interface AuthUser {
+  id: string;
+  uid: string;
+  email: string | null;
+  displayName?: string | null;
+  photoURL?: string | null;
+}
+
 interface AuthContextType {
-  session: Session | null;
-  user: User | null;
+  session: any | null;
+  user: AuthUser | null;
   profile: Profile | null;
   isLoading: boolean;
   signOut: () => Promise<void>;
@@ -34,121 +47,103 @@ export function setPendingInviteCode(code: string | null) {
   pendingInviteCode = code;
 }
 
-
-const MAX_PROFILE_RETRIES = 6;
-const RETRY_DELAY = 1000;
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const retryCountRef = useRef(0);
-  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+  const fetchProfile = useCallback(async (firebaseUser: FirebaseUser): Promise<Profile | null> => {
+    try {
+      const userRef = doc(db, 'users', firebaseUser.uid);
+      const userSnap = await getDoc(userRef);
 
-    if (data && !error) {
-      return data as Profile;
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        return {
+          id: firebaseUser.uid,
+          email: data.email || firebaseUser.email || '',
+          username: data.username || null,
+          full_name: data.full_name || firebaseUser.displayName || null,
+          avatar_url: data.avatar_url || firebaseUser.photoURL || null,
+          streak_count: data.streak_count || 0,
+          created_at: data.created_at || new Date().toISOString()
+        };
+      }
+
+      // Se perfil ainda não existe no Firestore, cria automaticamente
+      const newProfile: Profile = {
+        id: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        username: firebaseUser.email?.split('@')[0] || null,
+        full_name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || null,
+        avatar_url: firebaseUser.photoURL || null,
+        streak_count: 0,
+        created_at: new Date().toISOString()
+      };
+
+      await setDoc(userRef, newProfile);
+      return newProfile;
+    } catch (err) {
+      console.warn('Erro ao carregar perfil do usuário no Firestore:', err);
+      // Retorna perfil temporário em memória para não travar a UI
+      return {
+        id: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        username: firebaseUser.email?.split('@')[0] || null,
+        full_name: firebaseUser.displayName || 'Usuário',
+        avatar_url: firebaseUser.photoURL || null,
+        streak_count: 0,
+        created_at: new Date().toISOString()
+      };
     }
-    return null;
   }, []);
 
-  const retryFetchProfile = useCallback(async (userId: string) => {
-    const profile = await fetchProfile(userId);
-    if (profile) {
-      setProfile(profile);
-      setIsLoading(false);
-      return;
-    }
-
-    if (retryCountRef.current < MAX_PROFILE_RETRIES) {
-      retryCountRef.current += 1;
-      retryTimerRef.current = setTimeout(() => {
-        retryFetchProfile(userId);
-      }, RETRY_DELAY);
-    } else {
-      console.error('Profile not found after retries');
-      setIsLoading(false);
+  const refreshProfile = useCallback(async () => {
+    if (auth.currentUser) {
+      const p = await fetchProfile(auth.currentUser);
+      if (p) setProfile(p);
     }
   }, [fetchProfile]);
 
-  const refreshProfile = useCallback(async () => {
-    const currentUser = user;
-    if (currentUser?.id) {
-      const profile = await fetchProfile(currentUser.id);
-      if (profile) {
-        setProfile(profile);
-      }
-    }
-  }, [user, fetchProfile]);
-
   useEffect(() => {
-    return () => {
-      if (retryTimerRef.current) {
-        clearTimeout(retryTimerRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        retryFetchProfile(session.user.id);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setIsLoading(true);
+      if (firebaseUser) {
+        const mappedUser: AuthUser = {
+          id: firebaseUser.uid,
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          photoURL: firebaseUser.photoURL
+        };
+        setUser(mappedUser);
+        const p = await fetchProfile(firebaseUser);
+        setProfile(p);
       } else {
-        setIsLoading(false);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!mounted) return;
-      retryCountRef.current = 0;
-      
-      // Limpar memória de mocks locais se trocar de conta
-      if (session?.user?.id !== user?.id) {
-        clearMockSession();
-      }
-
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (event === 'PASSWORD_RECOVERY') {
-        setIsLoading(false);
-      } else if (session?.user) {
-        retryFetchProfile(session.user.id);
-      } else {
+        setUser(null);
         setProfile(null);
-        setIsLoading(false);
       }
+      setIsLoading(false);
     });
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, [retryFetchProfile]);
+    return () => unsubscribe();
+  }, [fetchProfile]);
 
   const signOut = async () => {
     setIsLoading(true);
-    retryCountRef.current = 0;
     try {
-      await supabase.auth.signOut();
+      await firebaseSignOut(auth);
       clearMockSession();
+      setUser(null);
+      setProfile(null);
     } catch (e) {
-      console.error(e);
+      console.error('Erro ao sair:', e);
     } finally {
       setIsLoading(false);
     }
   };
+
+  const session = user ? { user, access_token: 'firebase_token' } : null;
 
   return (
     <AuthContext.Provider value={{ session, user, profile, isLoading, signOut, refreshProfile }}>
@@ -159,7 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useAuth deve ser usado dentro de um AuthProvider');
   }
   return context;

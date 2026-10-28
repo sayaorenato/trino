@@ -16,7 +16,16 @@ import {
 import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { supabase } from '../../lib/supabase';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  updateProfile, 
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup
+} from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../../lib/firebase';
 import { Button } from '../../components/ui/Button';
 import { WebContainer } from '../../components/ui/WebContainer';
 import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS, ANIMATION } from '../../constants/theme';
@@ -62,48 +71,45 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       if (isSignUp) {
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        if (name && userCredential.user) {
+          try {
+            await updateProfile(userCredential.user, { displayName: name });
+            await setDoc(doc(db, 'users', userCredential.user.uid), {
+              id: userCredential.user.uid,
+              email,
               full_name: name,
-            }
-          }
-        });
-        if (signUpError) throw signUpError;
-
-        if (data?.user && !data?.session) {
-          setSuccess('Conta criada! Verifique seu email para confirmar o cadastro.');
-          return;
+              username: email.split('@')[0],
+              streak_count: 0,
+              created_at: new Date().toISOString()
+            });
+          } catch {}
         }
+        setSuccess('Conta criada com sucesso! Entrando...');
       } else {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password
-        });
-        if (signInError) throw signInError;
+        await signInWithEmailAndPassword(auth, email, password);
       }
     } catch (err: any) {
+      const code = err.code || '';
       const msg = err.message || '';
       if (isSignUp && (
+        code === 'auth/email-already-in-use' ||
         msg.toLowerCase().includes('already registered') ||
-        msg.toLowerCase().includes('already exists') ||
-        msg.toLowerCase().includes('email_exists')
+        msg.toLowerCase().includes('already in use')
       )) {
         setError('Este email já está cadastrado. Use o formulário abaixo para fazer login.');
         setIsSignUp(false);
       } else if (!isSignUp && (
+        code === 'auth/wrong-password' ||
+        code === 'auth/user-not-found' ||
+        code === 'auth/invalid-credential' ||
         msg.toLowerCase().includes('invalid login credentials') ||
-        msg.toLowerCase().includes('invalid_credentials') ||
-        msg.toLowerCase().includes('wrong password') ||
-        msg.toLowerCase().includes('user not found') ||
-        msg.toLowerCase().includes('user_not_found')
+        msg.toLowerCase().includes('wrong password')
       )) {
         setError('E-mail ou senha inválidos. Corrija os dados ou crie uma nova conta.');
         if (Platform.OS === 'web') {
           const opt = window.confirm(
-            'Usuário não encontrado ou senha incorreta.\n\nDeseja criar uma conta com esse e-mail? (Pressione OK para criar uma conta ou Cancelar para tentar novamente/redefinir).'
+            'Usuário não encontrado ou senha incorreta.\n\nDeseja criar uma conta com esse e-mail?'
           );
           if (opt) {
             setIsSignUp(true);
@@ -134,10 +140,7 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: Linking.createURL('/reset-password'),
-      });
-      if (error) throw error;
+      await sendPasswordResetEmail(auth, email);
       Alert.alert(
         'Email Enviado',
         'Verifique sua caixa de entrada e siga as instruções para redefinir sua senha.',
@@ -154,25 +157,11 @@ export default function LoginScreen() {
     setSuccess('');
     setLoading(true);
     try {
-      const redirectTo = Platform.OS === 'web'
-        ? window.location.origin
-        : Linking.createURL('/');
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        },
-      });
-
-      if (error) throw error;
-
-      if (Platform.OS === 'web' && data?.url) {
-        window.location.href = data.url;
+      if (Platform.OS === 'web') {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+      } else {
+        Alert.alert('Google Sign-In', 'O login social no mobile requer configuração de bundle ID nativo no Firebase.');
       }
     } catch (err: any) {
       console.error('Erro no login com Google:', err);
@@ -183,32 +172,7 @@ export default function LoginScreen() {
   };
 
   const handleAppleSignIn = async () => {
-    setError('');
-    setSuccess('');
-    setLoading(true);
-    try {
-      const redirectTo = Platform.OS === 'web'
-        ? window.location.origin
-        : Linking.createURL('/');
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'apple',
-        options: {
-          redirectTo,
-        },
-      });
-
-      if (error) throw error;
-
-      if (Platform.OS === 'web' && data?.url) {
-        window.location.href = data.url;
-      }
-    } catch (err: any) {
-      console.error('Erro no login com Apple:', err);
-      setError(err.message || 'Falha ao conectar com a conta da Apple.');
-    } finally {
-      setLoading(false);
-    }
+    Alert.alert('Em breve', 'Login com Apple estará disponível na versão final da App Store.');
   };
 
   return (

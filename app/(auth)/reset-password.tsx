@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { supabase } from '../../lib/supabase';
+import { updatePassword, onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { COLORS, SPACING, FONTS } from '../../constants/theme';
@@ -28,16 +29,15 @@ export default function ResetPasswordScreen() {
   const [verifying, setVerifying] = useState(true);
 
   useEffect(() => {
-    // Verificar se veio do link de recuperação (type=recovery)
-    supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setVerifying(false);
-      }
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setVerifying(false);
     });
 
-    // Timeout de segurança
-    const timer = setTimeout(() => setVerifying(false), 5000);
-    return () => clearTimeout(timer);
+    const timer = setTimeout(() => setVerifying(false), 3000);
+    return () => {
+      unsub();
+      clearTimeout(timer);
+    };
   }, []);
 
   const handleReset = async () => {
@@ -52,10 +52,13 @@ export default function ResetPasswordScreen() {
     setError('');
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) throw error;
-      setSuccess('Senha redefinida com sucesso!');
-      setTimeout(() => router.replace('/(tabs)'), 2000);
+      if (auth.currentUser) {
+        await updatePassword(auth.currentUser, newPassword);
+        setSuccess('Senha redefinida com sucesso!');
+        setTimeout(() => router.replace('/(tabs)'), 2000);
+      } else {
+        setError('Sessão expirada. Solicite novamente o link de recuperação.');
+      }
     } catch (err: any) {
       setError(err.message || 'Erro ao redefinir senha.');
     } finally {
