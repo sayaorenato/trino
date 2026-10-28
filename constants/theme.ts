@@ -1,62 +1,62 @@
-// Design System — Trino
-// Filosofia: "Acolhedor, moderno, limpo, espiritual (sem exageros), motivador, premium porém simples."
-// Cores: Navy quente + Verde vida + Ouro fé. Geometria: extremos (sharp OU soft, nunca meio-termo).
+// Design System — Trino (Fé em Constância)
+// Filosofia Stitch: "Sanctuary & Habit — Acolhedor, moderno, sereno, espiritual, motivador e premium."
+// Cores oficiais do Stitch: Navy sagrado (#03192E) + Verde vida (#4A654A) + Ouro fé (#C4963C) + Fundo (#FBF9FB).
 
 export const COLORS = {
-  // Primário: Navy Profundo Quente — espiritual, confiável, premium
-  primary: '#0A1628',
-  primaryLight: '#162A4A',
-  primaryDark: '#050D18',
-  primaryMuted: 'rgba(10, 22, 40, 0.08)',
+  // Primário: Navy Profundo Sagrado — serenidade, constância, fé
+  primary: '#03192E',
+  primaryLight: '#1A2E44',
+  primaryDark: '#02101E',
+  primaryMuted: 'rgba(3, 25, 46, 0.08)',
 
-  // Secundário: Verde Vida — saúde, crescimento, natureza
-  secondary: '#3D7B54',
-  secondaryLight: '#4E9B6A',
-  secondaryDark: '#2D5E3F',
-  secondaryMuted: 'rgba(61, 123, 84, 0.10)',
+  // Secundário: Verde Vida — saúde, crescimento, natureza espiritual
+  secondary: '#4A654A',
+  secondaryLight: '#5C7E5C',
+  secondaryDark: '#364B36',
+  secondaryMuted: 'rgba(74, 101, 74, 0.12)',
 
-  // Terciário: Ouro Fé — streak, vitória, espiritualidade, fogo
+  // Terciário: Ouro Fé — streak, vitória, espiritualidade, centelha divina
   gold: '#C4963C',
-  goldLight: '#D4AD5C',
+  goldLight: '#E3C193',
   goldDark: '#9A7630',
-  goldMuted: 'rgba(196, 150, 60, 0.12)',
+  goldMuted: 'rgba(196, 150, 60, 0.14)',
 
   // Status
   success: '#2D8A3E',
   warning: '#E67E22',
-  error: '#C0392B',
+  error: '#BA1A1A',
   info: '#2980B9',
 
-  // Neutros — off-white quente (levemente creme, sem azulado)
-  background: '#F7F5F2',
+  // Neutros — Sanctuary Off-White do Stitch
+  background: '#FBF9FB',
   surface: '#FFFFFF',
   surfaceCard: '#FFFFFF',
-  surfaceVariant: '#EDEBE8',
-  surfaceElevated: '#FAFAF8',
+  surfaceVariant: '#EFEDEF',
+  surfaceElevated: '#F5F3F5',
 
   // Texto — hierarquia clara
-  text: '#1A1A1F',
-  textSecondary: '#5C5C66',
-  textLight: '#9494A0',
+  text: '#1B1C1D',
+  textSecondary: '#43474D',
+  textLight: '#74777D',
   textOnPrimary: '#FFFFFF',
   textOnSecondary: '#FFFFFF',
-  textOnGold: '#1A1A1F',
+  textOnGold: '#1B1C1D',
 
-  // Bordas
-  border: '#E2DED8',
-  borderLight: 'rgba(226, 222, 216, 0.5)',
-  borderDark: '#C8C2BA',
+  // Bordas — Outline do Stitch
+  border: '#E4E2E4',
+  borderLight: 'rgba(228, 226, 228, 0.6)',
+  borderDark: '#C4C6CD',
 
   // Gradientes
   gradients: {
-    primary: ['#0A1628', '#162A4A'] as const,
-    primaryWarm: ['#0A1628', '#1B3456'] as const,
-    sage: ['#3D7B54', '#4E9B6A'] as const,
-    gold: ['#C4963C', '#D4AD5C'] as const,
+    primary: ['#03192E', '#1A2E44'] as const,
+    primaryWarm: ['#03192E', '#1B3456'] as const,
+    sage: ['#4A654A', '#5C7E5C'] as const,
+    gold: ['#C4963C', '#E3C193'] as const,
     fire: ['#E74C3C', '#F39C12'] as const,
-    warmBg: ['#F7F5F2', '#F0ECE6'] as const,
-    card: ['#FFFFFF', '#FAFAF8'] as const,
-    checkinSuccess: ['#2D8A3E', '#3D7B54'] as const,
+    warmBg: ['#FBF9FB', '#F5F3F5'] as const,
+    card: ['#FFFFFF', '#FBF9FB'] as const,
+    checkinSuccess: ['#2D8A3E', '#4A654A'] as const,
   },
 };
 
@@ -84,16 +84,20 @@ export const BORDER_RADIUS = {
   full: 9999,   // Pílulas, avatares
 };
 
-// Tipografia — Inter (corpo) + Outfit (headings)
+// Tipografia — Plus Jakarta Sans (headings) + Manrope (corpo/labels) [Design Google Stitch]
 export const FONTS = {
   family: {
-    heading: 'Outfit_700Bold',
-    headingSemibold: 'Outfit_600SemiBold',
-    headingMedium: 'Outfit_500Medium',
-    body: 'Inter_400Regular',
-    bodyMedium: 'Inter_500Medium',
-    bodySemibold: 'Inter_600SemiBold',
-    bodyBold: 'Inter_700Bold',
+    heading: 'PlusJakartaSans_700Bold',
+    headingSemibold: 'PlusJakartaSans_600SemiBold',
+    headingMedium: 'PlusJakartaSans_600SemiBold',
+    headingExtraBold: 'PlusJakartaSans_800ExtraBold',
+    body: 'Manrope_400Regular',
+    bodyMedium: 'Manrope_500Medium',
+    bodySemibold: 'Manrope_600SemiBold',
+    bodyBold: 'Manrope_700Bold',
+    // Fallbacks retrocompatíveis
+    outfitHeading: 'Outfit_700Bold',
+    interBody: 'Inter_400Regular',
   },
   size: {
     xs: 11,
