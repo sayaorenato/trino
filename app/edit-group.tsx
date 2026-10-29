@@ -17,7 +17,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { WebContainer } from '../components/ui/WebContainer';
 import { COLORS, SPACING, FONTS, BORDER_RADIUS, SHADOWS } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
 
 export default function EditGroupScreen() {
@@ -40,14 +40,9 @@ export default function EditGroupScreen() {
         setLoading(true);
 
         // 1. Verificar se o usuário logado é admin do grupo
-        const { data: memberData, error: memberError } = await supabase
-          .from('group_members')
-          .select('role')
-          .eq('group_id', groupId)
-          .eq('user_id', user.id)
-          .maybeSingle();
+        const role = await api.getUserGroupRole(groupId, user.id);
 
-        if (memberError || !memberData || memberData.role !== 'admin') {
+        if (role !== 'admin') {
           Alert.alert('Acesso Negado', 'Apenas administradores podem gerenciar as configurações deste grupo.');
           router.back();
           return;
@@ -56,16 +51,10 @@ export default function EditGroupScreen() {
         setIsAdmin(true);
 
         // 2. Carregar dados do grupo
-        const { data: groupData, error: groupError } = await supabase
-          .from('groups')
-          .select('*')
-          .eq('id', groupId)
-          .single();
-
-        if (groupError) throw groupError;
+        const groupData = await api.getGroupById(groupId);
 
         if (groupData) {
-          setName(groupData.name);
+          setName(groupData.name || '');
           setDescription(groupData.description || '');
         }
       } catch (e: any) {
@@ -98,39 +87,14 @@ export default function EditGroupScreen() {
 
     setSaving(true);
     try {
-      // 1. Verificar se o nome alterado já existe em outro grupo (case-insensitive)
-      const { data: existingGroup } = await supabase
-        .from('groups')
-        .select('id')
-        .ilike('name', name.trim())
-        .neq('id', groupId)
-        .maybeSingle();
-
-      if (existingGroup) {
-        showNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
-        setSaving(false);
-        return;
-      }
-
-      // 2. Atualizar o Grupo
-      const { error: updateError } = await supabase
-        .from('groups')
-        .update({ name: name.trim(), description: description.trim() })
-        .eq('id', groupId);
-
-      if (updateError) throw updateError;
+      await api.updateGroup(groupId, { name: name.trim(), description: description.trim() });
 
       showNotice('Sucesso', 'Configurações do grupo atualizadas!', () => {
         router.back();
       });
     } catch (e: any) {
       console.error('Erro ao atualizar grupo:', e);
-      const isDuplicate = e?.code === '23505' || (e?.message || '').toLowerCase().includes('duplicate') || (e?.message || '').toLowerCase().includes('unique');
-      if (isDuplicate) {
-        showNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
-      } else {
-        showNotice('Erro', e.message || 'Erro ao salvar alterações.');
-      }
+      showNotice('Erro', e.message || 'Erro ao salvar alterações.');
     } finally {
       setSaving(false);
     }
@@ -142,12 +106,7 @@ export default function EditGroupScreen() {
     const performDelete = async () => {
       setDeleting(true);
       try {
-        const { error: deleteError } = await supabase
-          .from('groups')
-          .delete()
-          .eq('id', groupId);
-
-        if (deleteError) throw deleteError;
+        await api.deleteGroup(groupId);
 
         if (Platform.OS === 'web') {
           window.alert('Grupo excluído com sucesso!');

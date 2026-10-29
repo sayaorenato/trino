@@ -17,7 +17,6 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
-import { supabase } from '../lib/supabase';
 import { MOCK_RANKINGS, saveMockRankings, removeRankingMember } from '../constants/mock-data';
 
 interface MemberItem {
@@ -116,17 +115,7 @@ export default function GroupMembersScreen() {
                 const challengeId = groupId === 'group_1' ? 'chal_1' : 'chal_2';
                 await removeRankingMember(challengeId, member.user_id);
               } else {
-                const { data: deleted, error } = await supabase
-                  .from('group_members')
-                  .delete()
-                  .eq('group_id', groupId)
-                  .eq('user_id', member.user_id)
-                  .select();
-
-                if (error) throw error;
-                if (!deleted || deleted.length === 0) {
-                  throw new Error('Ação não autorizada no banco de dados. Verifique se você é o administrador principal do grupo.');
-                }
+                await api.removeMemberFromGroup(groupId, member.user_id);
               }
 
               showAlertMessage('Sucesso', 'Participante removido com sucesso!');

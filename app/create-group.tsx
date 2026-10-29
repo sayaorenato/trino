@@ -16,15 +16,8 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { WebContainer } from '../components/ui/WebContainer';
 import { COLORS, SPACING, FONTS } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
-
-function generateInviteCode(groupName: string): string {
-  const cleanName = groupName.replace(/[^A-Za-z]/g, '').toUpperCase();
-  const prefix = cleanName.substring(0, 3).padEnd(3, 'T');
-  const randomNum = Math.floor(100 + Math.random() * 900);
-  return `TRI-${prefix}-${randomNum}`;
-}
 
 export default function CreateGroupScreen() {
   const router = useRouter();
@@ -49,54 +42,25 @@ export default function CreateGroupScreen() {
       return;
     }
     
-    if (!user) return;
+    if (!user) {
+      showNotice('Erro', 'Você precisa estar logado para criar um grupo.');
+      return;
+    }
 
     setLoading(true);
     try {
-      // 1. Verificar se o grupo com o mesmo nome já existe (case-insensitive)
-      const { data: existingGroup } = await supabase
-        .from('groups')
-        .select('id')
-        .ilike('name', name.trim())
-        .maybeSingle();
-
-      if (existingGroup) {
-        showNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
-        setLoading(false);
-        return;
-      }
-
-      // 2. Criar o Grupo com invite_code
-      const inviteCode = generateInviteCode(name);
-      const { data: group, error: groupError } = await supabase
-        .from('groups')
-        .insert({ name: name.trim(), description: description.trim(), invite_code: inviteCode })
-        .select()
-        .single();
-
-      if (groupError) throw groupError;
-
-      // 3. Adicionar o usuário como Admin do grupo
-      const { error: memberError } = await supabase
-        .from('group_members')
-        .insert({
-          user_id: user.id,
-          group_id: group.id,
-          role: 'admin'
-        });
-
-      if (memberError) throw memberError;
+      const group = await api.createGroup(name.trim(), description.trim(), user.id);
 
       showNotice('Sucesso', 'Grupo criado com sucesso!', () => {
         router.replace({ pathname: '/group-dashboard', params: { groupId: group.id } });
       });
     } catch (e: any) {
       console.error('Erro ao criar grupo:', e);
-      const isDuplicate = e?.code === '23505' || (e?.message || '').toLowerCase().includes('duplicate') || (e?.message || '').toLowerCase().includes('unique');
-      if (isDuplicate) {
-        showNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
+      const msg = e?.message || '';
+      if (msg.includes('Já existe um grupo')) {
+        showNotice('Nome Indisponível', msg);
       } else {
-        showNotice('Erro', e.message || 'Ocorreu um erro ao criar o grupo.');
+        showNotice('Erro', msg || 'Ocorreu um erro ao criar o grupo.');
       }
     } finally {
       setLoading(false);

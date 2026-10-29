@@ -18,7 +18,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { WebContainer } from '../components/ui/WebContainer';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
 import { MOCK_GROUPS, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, MOCK_EXTRA_TASKS } from '../constants/mock-data';
 
@@ -56,7 +56,6 @@ export default function CreateChallengeScreen() {
       // Se não houver groupId e nem challengeId (novo desafio geral), buscar grupos onde o usuário é admin
       if (!currentGroupId && !challengeId) {
         try {
-          const { api } = require('../lib/api');
           const userGroups = await api.getUserGroups(user.id);
           const admins = userGroups.filter((g: any) => g.role === 'admin');
           setAdminGroups(admins);
@@ -79,11 +78,7 @@ export default function CreateChallengeScreen() {
             currentGroupId = mockChal.group_id;
           }
         } else {
-          const { data: chalData } = await supabase
-            .from('challenges')
-            .select('group_id')
-            .eq('id', challengeId)
-            .maybeSingle();
+          const chalData = await api.getChallengeById(challengeId);
           if (chalData) {
             currentGroupId = chalData.group_id;
           }
@@ -101,12 +96,8 @@ export default function CreateChallengeScreen() {
         setGroup(mockGroup);
         setSelectedGroupId(mockGroup.id);
       } else {
-        const { data, error } = await supabase
-          .from('groups')
-          .select('*')
-          .eq('id', currentGroupId)
-          .single();
-        if (data && !error) {
+        const data = await api.getGroupById(currentGroupId);
+        if (data) {
           setGroup(data);
           setSelectedGroupId(data.id);
         }
@@ -124,11 +115,7 @@ export default function CreateChallengeScreen() {
             setHasRounds((MOCK_ROUNDS[challengeId]?.length || 0) > 1);
           }
         } else {
-          const { data: chalData } = await supabase
-            .from('challenges')
-            .select('*, rounds(*)')
-            .eq('id', challengeId)
-            .maybeSingle();
+          const chalData = await api.getChallengeById(challengeId);
           if (chalData) {
             setChallengeName(chalData.title || chalData.name || '');
             setStartDate(formatDateForInput(chalData.start_date));
@@ -300,35 +287,10 @@ export default function CreateChallengeScreen() {
           return;
         }
 
-        // Supabase Edição
-        const { error: challengeError } = await supabase
-          .from('challenges')
-          .update({
-            title: challengeName,
-            rules: rules,
-            start_date: start.toISOString().split('T')[0],
-            end_date: end.toISOString().split('T')[0],
-          })
-          .eq('id', challengeId);
-
-        if (challengeError) throw challengeError;
-
+        // Firestore Edição
+        const rounds = [];
         if (hasRounds) {
-          // Deleta rounds anteriores e check-ins vinculados
-          const { data: roundsData } = await supabase
-            .from('rounds')
-            .select('id')
-            .eq('challenge_id', challengeId);
-          
-          const roundIds = (roundsData || []).map(r => r.id);
-          if (roundIds.length > 0) {
-            await supabase.from('checkins').delete().in('round_id', roundIds);
-          }
-          await supabase.from('rounds').delete().eq('challenge_id', challengeId);
-
-          // Recria os rounds
           const roundDays = roundDuration === '1_week' ? 7 : 30;
-          const rounds = [];
           let roundStart = new Date(start);
           let roundNumber = 1;
           while (roundStart < end) {
@@ -353,12 +315,16 @@ export default function CreateChallengeScreen() {
             roundStart.setDate(roundStart.getDate() + 1);
             roundNumber++;
           }
-
-          const { error: roundsError } = await supabase
-            .from('rounds')
-            .insert(rounds);
-          if (roundsError) throw roundsError;
         }
+
+        await api.updateChallenge(challengeId, {
+          title: challengeName,
+          name: challengeName,
+          rules: rules,
+          start_date: start.toISOString().split('T')[0],
+          end_date: end.toISOString().split('T')[0],
+          rounds,
+        });
 
         if (Platform.OS === 'web') {
           window.alert(`Sucesso: O desafio "${challengeName}" foi atualizado com sucesso.`);
@@ -464,20 +430,6 @@ export default function CreateChallengeScreen() {
         return;
       }
 
-      const { data: challenge, error: challengeError } = await supabase
-        .from('challenges')
-        .insert({
-          group_id: currentGroupId,
-          title: challengeName,
-          rules: rules,
-          start_date: start.toISOString().split('T')[0],
-          end_date: end.toISOString().split('T')[0],
-        })
-        .select()
-        .single();
-
-      if (challengeError) throw challengeError;
-
       const rounds = [];
       if (hasRounds) {
         const roundDays = roundDuration === '1_week' ? 7 : 30;
@@ -488,7 +440,6 @@ export default function CreateChallengeScreen() {
           roundEnd.setDate(roundEnd.getDate() + roundDays - 1);
           if (roundEnd > end) {
             rounds.push({
-              challenge_id: challenge.id,
               round_number: roundNumber,
               start_date: roundStart.toISOString().split('T')[0],
               end_date: end.toISOString().split('T')[0],
@@ -496,7 +447,6 @@ export default function CreateChallengeScreen() {
             break;
           }
           rounds.push({
-            challenge_id: challenge.id,
             round_number: roundNumber,
             start_date: roundStart.toISOString().split('T')[0],
             end_date: roundEnd.toISOString().split('T')[0],
@@ -508,17 +458,20 @@ export default function CreateChallengeScreen() {
       } else {
         // Criar um round padrão único cobrindo todo o período do desafio
         rounds.push({
-          challenge_id: challenge.id,
           round_number: 1,
           start_date: start.toISOString().split('T')[0],
           end_date: end.toISOString().split('T')[0],
         });
       }
 
-      const { error: roundsError } = await supabase
-        .from('rounds')
-        .insert(rounds);
-      if (roundsError) throw roundsError;
+      const challenge = await api.createChallenge({
+        groupId: currentGroupId,
+        title: challengeName,
+        rules: rules,
+        startDate: start.toISOString().split('T')[0],
+        endDate: end.toISOString().split('T')[0],
+        rounds,
+      });
 
       MOCK_RANKINGS[challenge.id] = [
         {
@@ -611,36 +564,8 @@ export default function CreateChallengeScreen() {
         return;
       }
 
-      // Excluir no Supabase
-      const { data: roundsData } = await supabase
-        .from('rounds')
-        .select('id')
-        .eq('challenge_id', challengeId);
-      
-      const roundIds = (roundsData || []).map(r => r.id);
-      if (roundIds.length > 0) {
-        // Deletar checkins primeiro devido às chaves estrangeiras
-        await supabase.from('checkins').delete().in('round_id', roundIds);
-      }
-
-      // Deletar rounds
-      await supabase.from('rounds').delete().eq('challenge_id', challengeId);
-      
-      // Deletar tarefas extras (no banco a tabela é tasks)
-      await supabase.from('tasks').delete().eq('challenge_id', challengeId);
-
-      // Deletar o desafio principal
-      const { data: deletedData, error } = await supabase
-        .from('challenges')
-        .delete()
-        .eq('id', challengeId)
-        .select();
-
-      if (error) throw error;
-
-      if (!deletedData || deletedData.length === 0) {
-        throw new Error('Não foi possível excluir o desafio. Verifique se possui permissões.');
-      }
+      // Excluir via Firebase API
+      await api.deleteChallenge(challengeId);
 
       if (Platform.OS === 'web') {
         window.alert('Sucesso: Desafio excluído com sucesso.');

@@ -18,7 +18,6 @@ import { MOCK_RANKINGS, MOCK_GROUPS, MOCK_ROUNDS, RankingMember, getMockRankings
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
-import { supabase } from '../lib/supabase';
 
 export default function RankingScreen() {
   const router = useRouter();
@@ -41,8 +40,7 @@ export default function RankingScreen() {
         if (groupId) {
           list = await api.getGroupChallenges(groupId);
         } else {
-          const { data } = await supabase.from('challenges').select('*');
-          list = data || [];
+          list = await api.getAllChallenges();
         }
 
         const fullList = list;
@@ -83,130 +81,10 @@ export default function RankingScreen() {
       }
 
       try {
-        // A. Buscar dados do desafio e seus rounds no Supabase
-        const { data: chalData } = await supabase
-          .from('challenges')
-          .select('*, rounds(*)')
-          .eq('id', selectedChallengeId)
-          .maybeSingle();
-
-        if (!chalData) {
-          setRankingData([]);
-          setLoadingRanking(false);
-          return;
-        }
-
-        const roundIds = (chalData.rounds || []).map((r: any) => r.id);
-
-        // B. Buscar membros aprovados do desafio + todos os membros do grupo
-        const { data: approvedRequests } = await supabase
-          .from('challenge_requests')
-          .select('user_id, profiles(id, full_name, avatar_url, streak)')
-          .eq('challenge_id', selectedChallengeId)
-          .eq('status', 'approved');
-
-        const { data: challengeMembers } = await supabase
-          .from('challenge_members')
-          .select('user_id, profiles(id, full_name, avatar_url, streak)')
-          .eq('challenge_id', selectedChallengeId);
-
-        const { data: groupMembersData } = await supabase
-          .from('group_members')
-          .select('user_id, role, profiles(id, full_name, avatar_url, streak)')
-          .eq('group_id', chalData.group_id);
-
-        // Mapear participantes únicos (TODOS os membros do grupo + participantes inscritos no desafio)
-        const participantsMap = new Map<string, { user_id: string; name: string; avatar_url: string | null; streak: number }>();
-
-        // 1. Incluir TODOS os membros do grupo proprietário do desafio
-        (groupMembersData || []).forEach((m: any) => {
-          const prof = m.profiles || {};
-          participantsMap.set(m.user_id, {
-            user_id: m.user_id,
-            name: prof.full_name || 'Participante',
-            avatar_url: prof.avatar_url || null,
-            streak: prof.streak || 0,
-          });
-        });
-
-        // 2. Incluir participantes aprovados via solicitação
-        (approvedRequests || []).forEach((r: any) => {
-          const prof = r.profiles || {};
-          if (!participantsMap.has(r.user_id)) {
-            participantsMap.set(r.user_id, {
-              user_id: r.user_id,
-              name: prof.full_name || 'Participante',
-              avatar_url: prof.avatar_url || null,
-              streak: prof.streak || 0,
-            });
-          }
-        });
-
-        // 3. Incluir participantes gravados na tabela challenge_members
-        (challengeMembers || []).forEach((cm: any) => {
-          const prof = cm.profiles || {};
-          if (!participantsMap.has(cm.user_id)) {
-            participantsMap.set(cm.user_id, {
-              user_id: cm.user_id,
-              name: prof.full_name || 'Participante',
-              avatar_url: prof.avatar_url || null,
-              streak: prof.streak || 0,
-            });
-          }
-        });
-
-        // 4. Caso exista no mock local
-        const mockAllowed = MOCK_RANKINGS[selectedChallengeId] || [];
-        mockAllowed.forEach((m: any) => {
-          if (!participantsMap.has(m.user_id)) {
-            participantsMap.set(m.user_id, {
-              user_id: m.user_id,
-              name: m.name,
-              avatar_url: m.avatar_url,
-              streak: m.streak || 0
-            });
-          }
-        });
-
-        // C. Buscar check-ins gravados no banco para esses rounds
-        let dbCheckins: any[] = [];
-        if (roundIds.length > 0) {
-          const { data: cData } = await supabase
-            .from('checkins')
-            .select('user_id, note, round_id')
-            .in('round_id', roundIds);
-          dbCheckins = cData || [];
-        }
-
-        // D. Calcular pontuação real: 10 pts por check-in regular e 30 pts por tarefa extra
-        const calculatedRanking: RankingMember[] = Array.from(participantsMap.values()).map(p => {
-          const userCheckins = dbCheckins.filter(c => c.user_id === p.user_id);
-          
-          let points = 0;
-          userCheckins.forEach(c => {
-            if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
-              points += 30; // 30 pontos por tarefa extra concluída
-            } else {
-              points += 10; // 10 pontos por check-in diário
-            }
-          });
-
-          return {
-            user_id: p.user_id,
-            name: p.name,
-            avatar_url: p.avatar_url || '',
-            points: points,
-            streak: userCheckins.length > 0 ? Math.max(p.streak, userCheckins.length) : p.streak,
-            rounds_won: 0
-          };
-        });
-
-        // Ordenar por pontos decrescentes
-        calculatedRanking.sort((a, b) => b.points - a.points);
+        const calculatedRanking = await api.getChallengeRanking(selectedChallengeId);
         setRankingData(calculatedRanking);
-
       } catch (e) {
-        console.error('Erro ao buscar ranking dinâmico no Supabase:', e);
+        console.error('Erro ao buscar ranking dinâmico:', e);
         setRankingData([]);
       } finally {
         setLoadingRanking(false);

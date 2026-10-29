@@ -18,7 +18,6 @@ import { Button } from '../components/ui/Button';
 import { Avatar } from '../components/ui/Avatar';
 import { WebContainer } from '../components/ui/WebContainer';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
-import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
 import { 
@@ -72,12 +71,8 @@ export default function ChallengeInviteScreen() {
             }));
         }
       } else {
-        // Fluxo real Supabase
-        const { data: chal } = await supabase
-          .from('challenges')
-          .select('*, groups(*)')
-          .eq('id', challengeId)
-          .single();
+        // Fluxo Firestore
+        const chal = await api.getChallengeById(challengeId);
 
         if (chal) {
           chalData = {
@@ -85,7 +80,7 @@ export default function ChallengeInviteScreen() {
             name: chal.title || chal.name,
             group_id: chal.group_id
           };
-          groupData = chal.groups;
+          groupData = await api.getGroupById(chal.group_id);
           const groupMembers = await api.getGroupMembers(chal.group_id);
           // Excluir o próprio criador
           membersList = groupMembers

@@ -24,7 +24,6 @@ import { Avatar } from '../components/ui/Avatar';
 import { WebContainer } from '../components/ui/WebContainer';
 import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
-import { supabase } from '../lib/supabase';
 import { MOCK_EXTRA_TASKS } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
@@ -146,16 +145,15 @@ export default function FeedScreen() {
           const challengeIds = challenges.map((c: any) => c.id);
 
           if (challengeIds.length > 0) {
-            const { data: tasksData } = await supabase
-              .from('tasks')
-              .select('id, description')
-              .in('challenge_id', challengeIds);
+            const tasksData = await api.getTasksForChallenges(challengeIds);
 
             (tasksData || []).forEach((t: any) => {
-              let title = 'Tarefa Extra';
+              let title = t.title || 'Tarefa Extra';
               try {
-                const parsed = JSON.parse(t.description);
-                title = parsed.title || 'Tarefa Extra';
+                if (t.description) {
+                  const parsed = JSON.parse(t.description);
+                  title = parsed.title || title;
+                }
               } catch (e) {
                 // não era JSON
               }

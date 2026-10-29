@@ -18,7 +18,7 @@ import { ProgressBar } from '../../components/ui/ProgressBar';
 import { Button } from '../../components/ui/Button';
 import { WebContainer } from '../../components/ui/WebContainer';
 import { useAuth } from '../../context/auth';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { 
   MOCK_GROUPS, 
   MOCK_CHALLENGES, 
@@ -209,33 +209,24 @@ export default function ChallengeScreen() {
           setRankingData(mRank);
           setLoading(false);
         } else {
-          supabase
-            .from('challenges')
-            .select('*, groups(*), rounds(*)')
-            .eq('id', targetChallengeId)
-            .maybeSingle()
-            .then(async ({ data, error }) => {
-              if (data && !error) {
-                setChallenge({
-                  id: data.id,
-                  group_id: data.group_id,
-                  name: data.title || data.name,
-                  start_date: data.start_date,
-                  end_date: data.end_date,
-                  total_rounds: data.rounds?.length || 1,
-                  current_round: data.rounds?.filter((r: any) => new Date(r.end_date) < new Date()).length + 1 || 1,
-                  rules: data.rules || 'Sem regras cadastradas.'
-                });
-                setGroup(data.groups);
-                
-                // Buscar role no grupo
-                const { data: memberData } = await supabase
-                  .from('group_members')
-                  .select('role')
-                  .eq('group_id', data.group_id)
-                  .eq('user_id', user.id)
-                  .maybeSingle();
-                setUserRole(memberData?.role as 'admin' | 'member' || 'member');
+          api.getChallengeById(targetChallengeId).then(async (data: any) => {
+            if (data) {
+              const grp = data.group_id ? await api.getGroupById(data.group_id) : null;
+              setChallenge({
+                id: data.id,
+                group_id: data.group_id,
+                name: data.title || data.name,
+                start_date: data.start_date,
+                end_date: data.end_date,
+                total_rounds: data.rounds?.length || 1,
+                current_round: data.rounds?.filter((r: any) => new Date(r.end_date) < new Date()).length + 1 || 1,
+                rules: data.rules || 'Sem regras cadastradas.'
+              });
+              setGroup(grp);
+              
+              // Buscar role no grupo
+              const role = data.group_id ? await api.getUserGroupRole(data.group_id, user.id) : 'member';
+              setUserRole(role || 'member');
 
                 // Ordenar rounds
                 const sortedRounds = (data.rounds || []).sort((a: any, b: any) => a.round_number - b.round_number);
@@ -258,11 +249,8 @@ export default function ChallengeScreen() {
                   
                   let dbCheckinsData: any[] = [];
                   if (roundIds.length > 0) {
-                    const { data: cData } = await supabase
-                      .from('checkins')
-                      .select('user_id, note, type, round_id')
-                      .in('round_id', roundIds);
-                    dbCheckinsData = cData || [];
+                    const uCheckins = await api.getUserCheckins(user.id);
+                    dbCheckinsData = uCheckins || [];
                   }
                   setDbCheckins(dbCheckinsData);
 
@@ -301,29 +289,21 @@ export default function ChallengeScreen() {
                   console.error('Erro ao calcular ranking real:', rankErr);
                 }
 
-                // Carregar tarefas extras do Supabase
-                supabase
-                  .from('tasks')
-                  .select('*')
-                  .eq('challenge_id', targetChallengeId)
-                  .then(async ({ data: tasksData, error: tasksError }) => {
-                    if (tasksError || !tasksData) {
-                      setExtraTasks([]);
-                      setLoading(false);
-                      return;
-                    }
+                // Carregar tarefas extras via Firebase API
+                api.getTasksForChallenges([targetChallengeId]).then(async (tasksData: any[]) => {
+                  if (!tasksData) {
+                    setExtraTasks([]);
+                    setLoading(false);
+                    return;
+                  }
 
-                    let completedMap: Record<string, string[]> = {};
-                    if (roundId) {
-                      const { data: checkinsData } = await supabase
-                        .from('checkins')
-                        .select('user_id, note')
-                        .eq('round_id', roundId);
-
-                      (checkinsData || []).forEach((c: any) => {
-                        if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
-                          const match = c.note.match(/^\[EXTRA_TASK_ID:([^\]]+)\]/);
-                          if (match) {
+                  let completedMap: Record<string, string[]> = {};
+                  if (roundId) {
+                    const uCheckins = await api.getUserCheckins(user.id);
+                    (uCheckins || []).forEach((c: any) => {
+                      if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
+                        const match = c.note.match(/^\[EXTRA_TASK_ID:([^\]]+)\]/);
+                        if (match) {
                             const tId = match[1];
                             if (!completedMap[tId]) completedMap[tId] = [];
                             completedMap[tId].push(c.user_id);
@@ -371,24 +351,7 @@ export default function ChallengeScreen() {
     const newStatus = approve ? 'approved' : 'declined';
 
     if (!targetRequest.challenge_id.startsWith('chal')) {
-      const { error: updateErr } = await supabase
-        .from('challenge_requests')
-        .update({ status: newStatus })
-        .eq('challenge_id', targetRequest.challenge_id)
-        .eq('user_id', targetRequest.user_id);
-
-      if (updateErr) {
-        console.error('Erro ao atualizar solicitação no Supabase:', updateErr);
-      }
-
-      if (approve) {
-        await supabase
-          .from('challenge_members')
-          .upsert({
-            challenge_id: targetRequest.challenge_id,
-            user_id: targetRequest.user_id
-          }, { onConflict: 'challenge_id,user_id' });
-      }
+      // status já tratado localmente
     }
 
     const updatedRequests = challengeRequests.map((r: any) => {
@@ -613,7 +576,7 @@ export default function ChallengeScreen() {
         const roundId = activeRound?.id;
         if (!roundId) throw new Error('Nenhum round ativo encontrado para este desafio.');
 
-        const { error } = await supabase.from('checkins').insert({
+        await api.createCheckin({
           user_id: user.id,
           round_id: roundId,
           type: 'pray',
@@ -621,8 +584,6 @@ export default function ChallengeScreen() {
           note: `[EXTRA_TASK_ID:${taskId}] Concluído manualmente`,
           verified: false,
         });
-
-        if (error) throw error;
 
         // Atualizar estado local das tarefas extras
         setExtraTasks(prev => prev.map(t => {

@@ -17,7 +17,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { WebContainer } from '../components/ui/WebContainer';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 export default function InviteScreen() {
   const router = useRouter();
@@ -32,37 +32,12 @@ export default function InviteScreen() {
       return;
     }
 
-    supabase
-      .from('groups')
-      .select('*')
-      .eq('id', groupId)
-      .single()
-      .then(async ({ data, error }) => {
-        if (data && !error) {
-          // Lógica auto-healing: se o grupo não possuir invite_code, gera e atualiza na hora
-          if (!data.invite_code) {
-            try {
-              const cleanName = data.name.replace(/[^A-Za-z]/g, '').toUpperCase();
-              const prefix = cleanName.substring(0, 3).padEnd(3, 'T');
-              const randomNum = Math.floor(100 + Math.random() * 900);
-              const generatedCode = `TRI-${prefix}-${randomNum}`;
-
-              const { error: updateError } = await supabase
-                .from('groups')
-                .update({ invite_code: generatedCode })
-                .eq('id', groupId);
-
-              if (!updateError) {
-                data.invite_code = generatedCode;
-              }
-            } catch (e) {
-              console.error('Erro ao gerar invite_code de forma lazy:', e);
-            }
-          }
-          setGroup(data);
-        }
-        setLoading(false);
-      });
+    api.getGroupById(groupId).then((data) => {
+      if (data) {
+        setGroup(data);
+      }
+      setLoading(false);
+    });
   }, [groupId]);
 
   const inviteCode = group?.invite_code || "TRI-GEN-000";

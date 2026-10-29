@@ -25,7 +25,6 @@ import { Button } from '../../components/ui/Button';
 import { WebContainer } from '../../components/ui/WebContainer';
 import { SupportCard } from '../../components/SupportCard';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
-import { supabase } from '../../lib/supabase';
 import { api } from '../../lib/api';
 
 export default function ProfileScreen() {
@@ -336,15 +335,9 @@ export default function ProfileScreen() {
 
     const checkAdminStatus = async () => {
       try {
-        const { data } = await supabase
-          .from('group_members')
-          .select('role')
-          .eq('user_id', user.id)
-          .eq('role', 'admin')
-          .limit(1)
-          .maybeSingle();
-
-        setHasAdminGroups(!!data);
+        const groups = await api.getUserGroups(user.id);
+        const hasAdmin = groups.some((g: any) => g.role === 'admin');
+        setHasAdminGroups(hasAdmin);
       } catch (err) {
         console.error('Erro ao verificar se possui grupos administrados:', err);
       }
@@ -364,13 +357,8 @@ export default function ProfileScreen() {
       try {
         setLoadingStats(true);
 
-        // 1. Buscar todos os check-ins do usuário no Supabase
-        const { data: allCheckins, error: checkinsError } = await supabase
-          .from('checkins')
-          .select('type, note, created_at')
-          .eq('user_id', user.id);
-
-        if (checkinsError) throw checkinsError;
+        // 1. Buscar todos os check-ins do usuário via Firebase API
+        const allCheckins = await api.getUserCheckins(user.id);
 
         let points = 0;
         const fourWeeksAgo = new Date();

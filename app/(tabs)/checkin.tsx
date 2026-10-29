@@ -20,7 +20,6 @@ import { Button } from '../../components/ui/Button';
 import { WebContainer } from '../../components/ui/WebContainer';
 import { useAuth } from '../../context/auth';
 import { api } from '../../lib/api';
-import { supabase } from '../../lib/supabase';
 import { 
   HABIT_LABELS, 
   HabitType, 
@@ -185,45 +184,29 @@ export default function CheckinScreen() {
         }
       }
     } else {
-      // Buscar tarefas do Supabase
-      supabase
-        .from('tasks')
-        .select('*')
-        .eq('challenge_id', challengeId)
-        .then(async ({ data: tasksData, error: tasksError }) => {
-          if (tasksError) {
-            console.error('Erro ao buscar tarefas do banco:', tasksError);
-            setExtraTasks([]);
-            return;
-          }
-          if (!tasksData || tasksData.length === 0) {
-            setExtraTasks([]);
-            return;
-          }
+      // Buscar tarefas via Firebase API
+      api.getTasksForChallenges([challengeId]).then(async (tasksData) => {
+        if (!tasksData || tasksData.length === 0) {
+          setExtraTasks([]);
+          return;
+        }
 
-          // Buscar quais check-ins desse round ativo já foram concluídos como tarefas extras
-          let completedMap: Record<string, string[]> = {};
-          if (roundId) {
-            const { data: checkinsData, error: checkinsError } = await supabase
-              .from('checkins')
-              .select('user_id, note')
-              .eq('round_id', roundId);
-
-            if (!checkinsError) {
-              (checkinsData || []).forEach((c: any) => {
-                if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
-                  const match = c.note.match(/^\[EXTRA_TASK_ID:([^\]]+)\]/);
-                  if (match) {
-                    const taskId = match[1];
-                    if (!completedMap[taskId]) {
-                      completedMap[taskId] = [];
-                    }
-                    completedMap[taskId].push(c.user_id);
-                  }
+        let completedMap: Record<string, string[]> = {};
+        if (roundId && user) {
+          const userCheckins = await api.getUserCheckins(user.id);
+          (userCheckins || []).forEach((c: any) => {
+            if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
+              const match = c.note.match(/^\[EXTRA_TASK_ID:([^\]]+)\]/);
+              if (match) {
+                const taskId = match[1];
+                if (!completedMap[taskId]) {
+                  completedMap[taskId] = [];
                 }
-              });
+                completedMap[taskId].push(c.user_id);
+              }
             }
-          }
+          });
+        }
 
           // Converter registros de tasks para a interface ExtraTask
           const parsedTasks: ExtraTask[] = tasksData.map((t: any) => {
@@ -475,7 +458,7 @@ export default function CheckinScreen() {
           };
           MOCK_FEED.unshift(newCheckin);
         } else {
-          const { error } = await supabase.from('checkins').insert({
+          await api.createCheckin({
             user_id: user.id,
             round_id: activeRoundId,
             type: 'pray',
@@ -483,7 +466,6 @@ export default function CheckinScreen() {
             note: `[EXTRA_TASK_ID:${selectedTask.id}] ${caption.trim()}`.trim(),
             verified: false,
           });
-          if (error) throw error;
         }
       } else {
         // ── HÁBITO PADRÃO MULTI-GRUPO ──
@@ -532,7 +514,7 @@ export default function CheckinScreen() {
               continue; // pula grupo sem round ativo
             }
 
-            const { error } = await supabase.from('checkins').insert({
+            await api.createCheckin({
               user_id: user.id,
               round_id: roundId,
               type: HABIT_DB_TYPE[selectedHabit!],
@@ -540,10 +522,6 @@ export default function CheckinScreen() {
               note: caption.trim() || null,
               verified: false,
             });
-            if (error) {
-              console.error(`Erro no check-in do grupo ${item.groupName}:`, error);
-              throw error;
-            }
             hasSaved = true;
           }
         }

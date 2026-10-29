@@ -19,7 +19,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, getPendingInviteCode, setPendingInviteCode } from '../../context/auth';
 import { api } from '../../lib/api';
-import { supabase } from '../../lib/supabase';
 import { Card } from '../../components/ui/Card';
 import { Avatar } from '../../components/ui/Avatar';
 import { StreakBadge } from '../../components/ui/StreakBadge';
@@ -224,14 +223,10 @@ export default function DashboardScreen() {
     try {
       setLoading(true);
 
-      // 1. Buscar o grupo pelo código de convite no Supabase
-      const { data: group, error: groupError } = await supabase
-        .from('groups')
-        .select('*')
-        .eq('invite_code', code)
-        .maybeSingle();
+      // 1. Buscar o grupo pelo código de convite
+      const group = await api.getGroupByInviteCode(code);
 
-      if (groupError || !group) {
+      if (!group) {
         Alert.alert('Erro', 'Grupo de convite não encontrado ou código inválido.');
         setLoading(false);
         return;
@@ -360,17 +355,13 @@ export default function DashboardScreen() {
         return;
       }
 
-      // 1. Buscar o grupo pelo código de convite no Supabase
-      const { data: group, error: groupError } = await supabase
-        .from('groups')
-        .select('*')
-        .eq('invite_code', cleanCode)
-        .maybeSingle();
+      // 1. Buscar o grupo pelo código de convite
+      const group = await api.getGroupByInviteCode(cleanCode);
 
-      if (groupError || !group) {
+      if (!group) {
         showAlert(
           'Grupo não encontrado',
-          'Não encontramos nenhum grupo para este código.\n\nSe estiver utilizando o Supabase de produção, certifique-se de que a política RLS (Row Level Security) de SELECT da tabela "groups" permite que usuários autenticados leiam os registros (ou utilize o código mockado MOCK123 para testes locais).'
+          'Não encontramos nenhum grupo para este código.'
         );
         return;
       }
@@ -433,28 +424,7 @@ export default function DashboardScreen() {
           });
         }
       } else {
-        // 1. Inserir na tabela group_members
-        const { error: joinError } = await supabase
-          .from('group_members')
-          .insert({
-            user_id: user.id,
-            group_id: groupId,
-            role: 'member'
-          });
-
-        if (joinError) {
-          // Se já for membro, o insert falhará com primary key violation
-          if (joinError.code === '23505' || joinError.message.includes('duplicate key') || joinError.message.includes('already exists')) {
-            showAlert('Aviso', `Você já faz parte do grupo "${groupName}".`);
-            
-            // Recarregar os dados do dashboard mesmo se já for membro
-            const data = await api.getDashboardData(user.id);
-            setGroups(data.groups);
-            setHabits(data.habits);
-            return;
-          }
-          throw joinError;
-        }
+        await api.joinGroup(groupId, user.id);
       }
 
       showAlert(

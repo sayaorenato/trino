@@ -104,6 +104,263 @@ export const api = {
     });
   },
 
+  async createGroup(name: string, description: string, userId: string) {
+    const trimmedName = name.trim();
+    const lowerName = trimmedName.toLowerCase();
+
+    // 1. Verificar duplicidade de nome
+    try {
+      const q = query(collection(db, 'groups'), where('name_lower', '==', lowerName));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        throw new Error('Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
+      }
+    } catch (err: any) {
+      if (err?.message?.includes('Já existe um grupo')) throw err;
+    }
+
+    // 2. Criar código de convite
+    const cleanName = trimmedName.replace(/[^A-Za-z]/g, '').toUpperCase();
+    const prefix = cleanName.substring(0, 3).padEnd(3, 'T');
+    const randomNum = Math.floor(100 + Math.random() * 900);
+    const inviteCode = `TRI-${prefix}-${randomNum}`;
+
+    // 3. Salvar documento do grupo
+    const groupPayload = {
+      name: trimmedName,
+      name_lower: lowerName,
+      description: description.trim(),
+      invite_code: inviteCode,
+      created_by: userId,
+      created_at: new Date().toISOString()
+    };
+    const groupRef = await addDoc(collection(db, 'groups'), groupPayload);
+
+    // 4. Salvar associação do usuário como admin
+    await addDoc(collection(db, 'group_members'), {
+      user_id: userId,
+      group_id: groupRef.id,
+      role: 'admin',
+      joined_at: new Date().toISOString()
+    });
+
+    return {
+      id: groupRef.id,
+      ...groupPayload
+    };
+  },
+
+  async getGroupById(groupId: string): Promise<any> {
+    if (!groupId) return null;
+    if (groupId.startsWith('group')) {
+      return USER_MOCK_GROUPS.find(g => g.id === groupId) || null;
+    }
+    try {
+      const snap = await getDoc(doc(db, 'groups', groupId));
+      if (snap.exists()) {
+        const data = snap.data();
+        // Lógica auto-healing para invite_code se ausente
+        if (!data.invite_code && data.name) {
+          const cleanName = data.name.replace(/[^A-Za-z]/g, '').toUpperCase();
+          const prefix = cleanName.substring(0, 3).padEnd(3, 'T');
+          const randomNum = Math.floor(100 + Math.random() * 900);
+          const genCode = `TRI-${prefix}-${randomNum}`;
+          try {
+            await updateDoc(doc(db, 'groups', groupId), { invite_code: genCode });
+            data.invite_code = genCode;
+          } catch {}
+        }
+        return { id: snap.id, ...data };
+      }
+    } catch (error) {
+      console.warn('Erro ao buscar grupo:', error);
+    }
+    return null;
+  },
+
+  async getUserGroupRole(groupId: string, userId: string): Promise<'admin' | 'member' | null> {
+    if (!groupId || !userId) return null;
+    if (groupId.startsWith('group')) {
+      const g = USER_MOCK_GROUPS.find(item => item.id === groupId);
+      return (g?.role as 'admin' | 'member') || 'member';
+    }
+    try {
+      const q = query(
+        collection(db, 'group_members'),
+        where('group_id', '==', groupId),
+        where('user_id', '==', userId)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        return (snap.docs[0].data().role as 'admin' | 'member') || 'member';
+      }
+    } catch (error) {
+      console.warn('Erro ao buscar role:', error);
+    }
+    return null;
+  },
+
+  async updateGroup(groupId: string, data: { name?: string; description?: string; invite_code?: string }) {
+    const payload: any = { ...data, updated_at: new Date().toISOString() };
+    if (data.name) {
+      payload.name = data.name.trim();
+      payload.name_lower = data.name.trim().toLowerCase();
+    }
+    await updateDoc(doc(db, 'groups', groupId), payload);
+    return { id: groupId, ...payload };
+  },
+
+  async deleteGroup(groupId: string) {
+    await deleteDoc(doc(db, 'groups', groupId));
+    try {
+      const q = query(collection(db, 'group_members'), where('group_id', '==', groupId));
+      const snap = await getDocs(q);
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    } catch {}
+    return true;
+  },
+
+  async getGroupMembers(groupId: string) {
+    if (!groupId) return [];
+    if (groupId.startsWith('group')) {
+      return [
+        { user_id: 'user_1', full_name: 'Você', role: 'admin', joined_at: new Date().toISOString() },
+        { user_id: 'user_2', full_name: 'Lucas Silva', role: 'member', joined_at: new Date().toISOString() },
+        { user_id: 'user_3', full_name: 'Ana Souza', role: 'member', joined_at: new Date().toISOString() }
+      ];
+    }
+    try {
+      const q = query(collection(db, 'group_members'), where('group_id', '==', groupId));
+      const snap = await getDocs(q);
+      const members: any[] = [];
+      for (const d of snap.docs) {
+        const memData = d.data();
+        let fullName = 'Membro';
+        let avatarUrl = null;
+        try {
+          const uSnap = await getDoc(doc(db, 'users', memData.user_id));
+          if (uSnap.exists()) {
+            const uData = uSnap.data();
+            fullName = uData.full_name || uData.username || 'Membro';
+            avatarUrl = uData.avatar_url || null;
+          }
+        } catch {}
+
+        members.push({
+          id: d.id,
+          user_id: memData.user_id,
+          group_id: groupId,
+          role: memData.role || 'member',
+          joined_at: memData.joined_at || new Date().toISOString(),
+          full_name: fullName,
+          avatar_url: avatarUrl
+        });
+      }
+      return members;
+    } catch (error) {
+      console.warn('Erro ao buscar membros:', error);
+      return [];
+    }
+  },
+
+  async removeMemberFromGroup(groupId: string, userId: string) {
+    const q = query(
+      collection(db, 'group_members'),
+      where('group_id', '==', groupId),
+      where('user_id', '==', userId)
+    );
+    const snap = await getDocs(q);
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+    return true;
+  },
+
+  async promoteToAdmin(groupId: string, userId: string) {
+    const q = query(
+      collection(db, 'group_members'),
+      where('group_id', '==', groupId),
+      where('user_id', '==', userId)
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      await updateDoc(snap.docs[0].ref, { role: 'admin' });
+      return true;
+    }
+    throw new Error('Membro não encontrado no grupo.');
+  },
+
+  async updateMemberRole(groupId: string, userId: string, role: string) {
+    const q = query(
+      collection(db, 'group_members'),
+      where('group_id', '==', groupId),
+      where('user_id', '==', userId)
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      await updateDoc(snap.docs[0].ref, { role });
+      return true;
+    }
+    return false;
+  },
+
+  async getGroupByInviteCode(inviteCode: string): Promise<any> {
+    const cleanCode = inviteCode.trim().toUpperCase();
+    const q = query(collection(db, 'groups'), where('invite_code', '==', cleanCode));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return { id: snap.docs[0].id, ...snap.docs[0].data() };
+    }
+    return null;
+  },
+
+  async joinGroupByCode(inviteCode: string, userId: string) {
+    const group = await this.getGroupByInviteCode(inviteCode);
+    if (!group) {
+      throw new Error('Código de convite inválido ou grupo não encontrado.');
+    }
+
+    const q = query(
+      collection(db, 'group_members'),
+      where('group_id', '==', group.id),
+      where('user_id', '==', userId)
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return group;
+    }
+
+    await addDoc(collection(db, 'group_members'), {
+      group_id: group.id,
+      user_id: userId,
+      role: 'member',
+      joined_at: new Date().toISOString()
+    });
+
+    return group;
+  },
+
+  async joinGroup(groupId: string, userId: string) {
+    if (!groupId || !userId) return;
+    const q = query(
+      collection(db, 'group_members'),
+      where('group_id', '==', groupId),
+      where('user_id', '==', userId)
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      await addDoc(collection(db, 'group_members'), {
+        group_id: groupId,
+        user_id: userId,
+        role: 'member',
+        joined_at: new Date().toISOString()
+      });
+    }
+    return true;
+  },
+
   async getActiveChallenge(groupId: string) {
     if (!groupId || groupId.startsWith('group')) {
       const mockChal = Object.values(MOCK_CHALLENGES).find(c => c.group_id === groupId);
@@ -133,10 +390,85 @@ export const api = {
           rounds: chalData.rounds || []
         };
       }
+    } catch {}
+    return null;
+  },
+
+  async getChallengeById(challengeId: string): Promise<any> {
+    if (!challengeId) return null;
+    if (challengeId.startsWith('chal_') || challengeId.startsWith('chal')) {
+      const mockChal = MOCK_CHALLENGES[challengeId];
+      if (mockChal) {
+        return {
+          ...mockChal,
+          rounds: MOCK_ROUNDS[mockChal.id] || []
+        };
+      }
+    }
+    try {
+      const snap = await getDoc(doc(db, 'challenges', challengeId));
+      if (snap.exists()) {
+        const data = snap.data();
+        return {
+          id: snap.id,
+          name: data.title || data.name,
+          ...data,
+          rounds: data.rounds || []
+        };
+      }
     } catch (error) {
-      console.warn('Erro ao buscar desafio ativo no Firestore:', error);
+      console.warn('Erro ao buscar desafio por ID:', error);
     }
     return null;
+  },
+
+  async createChallenge(data: {
+    groupId: string;
+    title: string;
+    rules: any;
+    startDate: string;
+    endDate: string;
+    rounds?: any[];
+  }) {
+    const payload = {
+      group_id: data.groupId,
+      title: data.title,
+      name: data.title,
+      rules: data.rules,
+      start_date: data.startDate,
+      end_date: data.endDate,
+      rounds: data.rounds || [],
+      created_at: new Date().toISOString()
+    };
+    const ref = await addDoc(collection(db, 'challenges'), payload);
+    return { id: ref.id, ...payload };
+  },
+
+  async updateChallenge(challengeId: string, data: any) {
+    const ref = doc(db, 'challenges', challengeId);
+    await updateDoc(ref, {
+      ...data,
+      updated_at: new Date().toISOString()
+    });
+    return { id: challengeId, ...data };
+  },
+
+  async deleteChallenge(challengeId: string) {
+    if (!challengeId) return true;
+    try {
+      await deleteDoc(doc(db, 'challenges', challengeId));
+      const rQ = query(collection(db, 'rounds'), where('challenge_id', '==', challengeId));
+      const rSnap = await getDocs(rQ);
+      const batch = writeBatch(db);
+      rSnap.docs.forEach(d => batch.delete(d.ref));
+      const tQ = query(collection(db, 'tasks'), where('challenge_id', '==', challengeId));
+      const tSnap = await getDocs(tQ);
+      tSnap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    } catch (e) {
+      console.warn('Erro ao deletar desafio:', e);
+    }
+    return true;
   },
 
   async getGroupChallenges(groupId: string) {
@@ -162,6 +494,75 @@ export const api = {
       }));
     } catch (error) {
       console.warn('Erro ao listar desafios do grupo:', error);
+      return [];
+    }
+  },
+
+  async getAllChallenges() {
+    try {
+      const snap = await getDocs(collection(db, 'challenges'));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch {
+      return Object.values(MOCK_CHALLENGES);
+    }
+  },
+
+  async getChallengeRanking(challengeId: string): Promise<any[]> {
+    if (!challengeId) return [];
+    if (challengeId.startsWith('chal')) {
+      const { MOCK_RANKINGS } = require('../constants/mock-data');
+      return MOCK_RANKINGS[challengeId] || [];
+    }
+
+    try {
+      const chal = await this.getChallengeById(challengeId);
+      if (!chal) return [];
+
+      const members = chal.group_id ? await this.getGroupMembers(chal.group_id) : [];
+      const roundIds = (chal.rounds || []).map((r: any) => r.id);
+      let checkinsList: any[] = [];
+      if (roundIds.length > 0) {
+        try {
+          const cQ = query(
+            collection(db, 'checkins'),
+            where('round_id', 'in', roundIds.slice(0, 10))
+          );
+          const cSnap = await getDocs(cQ);
+          checkinsList = cSnap.docs.map(d => d.data());
+        } catch {}
+      }
+
+      const participantsMap = new Map<string, any>();
+      members.forEach((m: any) => {
+        participantsMap.set(m.user_id, {
+          user_id: m.user_id,
+          name: m.full_name || 'Participante',
+          avatar_url: m.avatar_url || null,
+          streak: 0,
+        });
+      });
+
+      const ranking = Array.from(participantsMap.values()).map(p => {
+        const uCheckins = checkinsList.filter(c => c.user_id === p.user_id);
+        let points = 0;
+        uCheckins.forEach((c: any) => {
+          if (c.note && c.note.startsWith('[TAREFA EXTRA]')) {
+            points += 30;
+          } else {
+            points += 10;
+          }
+        });
+        return {
+          ...p,
+          points,
+          checkin_count: uCheckins.length
+        };
+      });
+
+      ranking.sort((a, b) => b.points - a.points);
+      return ranking.map((item, idx) => ({ ...item, rank: idx + 1 }));
+    } catch (e) {
+      console.warn('Erro ao calcular ranking:', e);
       return [];
     }
   },
@@ -258,6 +659,53 @@ export const api = {
       tasks: dbTasks,
       streakCount
     };
+  },
+
+  async getTasksForChallenges(challengeIds: string[]): Promise<any[]> {
+    if (!challengeIds || challengeIds.length === 0) return [];
+    try {
+      const tQ = query(
+        collection(db, 'tasks'),
+        where('challenge_id', 'in', challengeIds.slice(0, 10))
+      );
+      const tSnap = await getDocs(tQ);
+      return tSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch {
+      return [];
+    }
+  },
+
+  async saveExtraTask(challengeId: string, task: any, taskId?: string) {
+    if (taskId) {
+      await updateDoc(doc(db, 'tasks', taskId), {
+        ...task,
+        updated_at: new Date().toISOString()
+      });
+      return { id: taskId, ...task };
+    } else {
+      const ref = await addDoc(collection(db, 'tasks'), {
+        challenge_id: challengeId,
+        ...task,
+        created_at: new Date().toISOString()
+      });
+      return { id: ref.id, challenge_id: challengeId, ...task };
+    }
+  },
+
+  async deleteExtraTask(taskId: string) {
+    await deleteDoc(doc(db, 'tasks', taskId));
+    return true;
+  },
+
+  async getUserCheckins(userId: string) {
+    if (!userId) return [];
+    try {
+      const q = query(collection(db, 'checkins'), where('user_id', '==', userId));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch {
+      return [];
+    }
   },
 
   async calculateUserStreak(userId: string): Promise<number> {
@@ -463,70 +911,6 @@ export const api = {
     }
   },
 
-  async getGroupMembers(groupId: string) {
-    if (!groupId || groupId.startsWith('group')) {
-      await getMockRankings();
-      const challengeId = groupId === 'group_1' ? 'chal_1' : 'chal_2';
-      const ranking = MOCK_RANKINGS[challengeId] || [];
-      return ranking.map((member: any, index: number) => ({
-        user_id: member.user_id,
-        role: member.user_id === 'user_1' ? 'admin' : 'member',
-        joined_at: new Date(Date.now() - index * 24 * 60 * 60 * 1000).toISOString(),
-        full_name: member.name,
-        avatar_url: member.avatar_url,
-        email: `${member.user_id}@exemplo.com`,
-      }));
-    }
-
-    try {
-      const q = query(
-        collection(db, 'group_members'),
-        where('group_id', '==', groupId)
-      );
-      const snap = await getDocs(q);
-
-      const members: any[] = [];
-      for (const mDoc of snap.docs) {
-        const mData = mDoc.data();
-        let profileData: any = {};
-        if (mData.user_id) {
-          const pSnap = await getDoc(doc(db, 'users', mData.user_id));
-          if (pSnap.exists()) {
-            profileData = pSnap.data();
-          }
-        }
-        members.push({
-          user_id: mData.user_id,
-          role: mData.role || 'member',
-          joined_at: mData.joined_at || new Date().toISOString(),
-          full_name: profileData.full_name || 'Sem nome',
-          avatar_url: profileData.avatar_url || null,
-          email: profileData.email || '',
-        });
-      }
-
-      return members.sort((a, b) => {
-        if (a.role === 'admin' && b.role !== 'admin') return -1;
-        if (a.role !== 'admin' && b.role === 'admin') return 1;
-        return 0;
-      });
-    } catch (err) {
-      console.warn('Erro ao buscar membros do grupo:', err);
-      return [];
-    }
-  },
-
-  async promoteToAdmin(groupId: string, userId: string) {
-    const q = query(
-      collection(db, 'group_members'),
-      where('group_id', '==', groupId),
-      where('user_id', '==', userId)
-    );
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      await updateDoc(snap.docs[0].ref, { role: 'admin' });
-    }
-  },
 
   async getComments(checkinId: string) {
     try {
@@ -633,11 +1017,6 @@ export const api = {
     return { id: taskId, ...taskData };
   },
 
-  async deleteExtraTask(taskId: string) {
-    const taskRef = doc(db, 'tasks', taskId);
-    await deleteDoc(taskRef);
-    return true;
-  },
 
   async getWeeklyTheme(): Promise<WeeklyTheme> {
     try {

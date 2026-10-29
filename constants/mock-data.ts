@@ -21,7 +21,6 @@ export interface Group {
 export let USER_MOCK_GROUPS: any[] = [];
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../lib/supabase';
 
 export interface ChallengeRequest {
   id: string;
@@ -41,54 +40,8 @@ export async function getMockRankings(): Promise<Record<string, RankingMember[]>
     const data = await AsyncStorage.getItem('TRINO_MOCK_RANKINGS');
     if (data) {
       const parsed = JSON.parse(data);
-      console.log('[MOCK_DATA] Rankings carregados do AsyncStorage para emulação:', Object.keys(parsed));
       Object.assign(MOCK_RANKINGS, parsed);
     }
-
-    // Sincronizar participantes reais do Supabase (challenge_members)
-    const { data: dbMembers, error } = await supabase
-      .from('challenge_members')
-      .select(`
-        challenge_id,
-        user_id,
-        profiles (
-          id,
-          full_name,
-          avatar_url
-        )
-      `);
-
-    if (!error && dbMembers) {
-      console.log('[MOCK_DATA] Sincronizando', dbMembers.length, 'membros de desafios do Supabase.');
-      
-      // Limpar chaves reais (que não começam com 'chal') para recarregar do banco
-      Object.keys(MOCK_RANKINGS).forEach(key => {
-        if (!key.startsWith('chal')) {
-          delete MOCK_RANKINGS[key];
-        }
-      });
-
-      dbMembers.forEach((m: any) => {
-        const cId = m.challenge_id;
-        if (!MOCK_RANKINGS[cId]) {
-          MOCK_RANKINGS[cId] = [];
-        }
-        const alreadyIn = MOCK_RANKINGS[cId].some(x => x.user_id === m.user_id);
-        if (!alreadyIn) {
-          MOCK_RANKINGS[cId].push({
-            user_id: m.user_id,
-            name: m.profiles?.full_name || 'Participante',
-            avatar_url: m.profiles?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-            points: 0,
-            streak: 0,
-            rounds_won: 0
-          });
-        }
-      });
-    } else if (error) {
-      console.error('[MOCK_DATA] Erro ao buscar membros de desafios no Supabase:', error);
-    }
-
     return MOCK_RANKINGS;
   } catch (e) {
     console.error('Erro ao ler mock rankings:', e);
@@ -108,22 +61,7 @@ export async function saveMockRankings(): Promise<void> {
 export async function removeRankingMember(challengeId: string, userId: string): Promise<void> {
   if (MOCK_RANKINGS[challengeId]) {
     MOCK_RANKINGS[challengeId] = MOCK_RANKINGS[challengeId].filter(m => m.user_id !== userId);
-    console.log('[MOCK_DATA] removeRankingMember de fato filtrou o membro:', userId, 'do desafio:', challengeId);
     await saveMockRankings();
-
-    // Se for desafio real do Supabase, remover do banco
-    if (!challengeId.startsWith('chal')) {
-      const { error } = await supabase
-        .from('challenge_members')
-        .delete()
-        .eq('challenge_id', challengeId)
-        .eq('user_id', userId);
-      if (error) {
-        console.error('[MOCK_DATA] Erro ao remover membro do desafio no Supabase:', error);
-      } else {
-        console.log('[MOCK_DATA] Membro do desafio removido do Supabase:', challengeId, userId);
-      }
-    }
   }
 }
 
@@ -131,52 +69,8 @@ export async function getChallengeRequests(): Promise<ChallengeRequest[]> {
   try {
     const data = await AsyncStorage.getItem('TRINO_CHALLENGE_REQUESTS');
     const reqs = data ? JSON.parse(data) : [];
-
-    // Juntar com dados reais do Supabase
-    const { data: dbRequests, error } = await supabase
-      .from('challenge_requests')
-      .select(`
-        id,
-        challenge_id,
-        group_id,
-        user_id,
-        status,
-        created_at,
-        profiles (
-          id,
-          full_name,
-          avatar_url
-        ),
-        challenges (
-          id,
-          title,
-          group_id
-        )
-      `);
-
-    let parsedDbRequests: ChallengeRequest[] = [];
-    if (!error && dbRequests) {
-      parsedDbRequests = dbRequests.map((r: any) => ({
-        id: r.id,
-        challenge_id: r.challenge_id,
-        challenge_name: r.challenges?.title || 'Desafio',
-        group_id: r.group_id || r.challenges?.group_id,
-        user_id: r.user_id,
-        user_name: r.profiles?.full_name || 'Participante',
-        user_avatar: r.profiles?.avatar_url || null,
-        status: r.status as 'pending' | 'approved' | 'declined'
-      }));
-      console.log('[MOCK_DATA] getChallengeRequests do Supabase carregado:', parsedDbRequests.length, 'solicitações.');
-    } else if (error) {
-      console.error('[MOCK_DATA] Erro ao ler solicitações do Supabase:', error);
-    }
-
-    // Filtrar somente as solicitações de desafios mockados da lista local do AsyncStorage
-    const mockRequests = reqs.filter((r: any) => r.challenge_id.startsWith('chal'));
-
-    const combined = [...mockRequests, ...parsedDbRequests];
-    CHALLENGE_REQUESTS = combined;
-    return combined;
+    CHALLENGE_REQUESTS = reqs;
+    return reqs;
   } catch (e) {
     console.error('Erro ao ler mock data do AsyncStorage:', e);
     return [];
@@ -186,58 +80,7 @@ export async function getChallengeRequests(): Promise<ChallengeRequest[]> {
 export async function saveChallengeRequests(requests: ChallengeRequest[]): Promise<void> {
   try {
     CHALLENGE_REQUESTS = requests;
-    console.log('[MOCK_DATA] saveChallengeRequests salvando:', requests.length, 'solicitações no AsyncStorage.');
     await AsyncStorage.setItem('TRINO_CHALLENGE_REQUESTS', JSON.stringify(requests));
-
-    // Sincronizar com o Supabase para solicitações em desafios reais
-    for (const r of requests) {
-      const isMockChallenge = r.challenge_id.startsWith('chal');
-      if (!isMockChallenge) {
-        // Tentar primeiro atualizar a solicitação existente no banco
-        const { data: updated, error: updateError } = await supabase
-          .from('challenge_requests')
-          .update({ status: r.status })
-          .eq('challenge_id', r.challenge_id)
-          .eq('user_id', r.user_id)
-          .select();
-
-        if (updateError) {
-          console.error('[MOCK_DATA] Erro ao atualizar solicitação no Supabase:', updateError);
-        } else if (!updated || updated.length === 0) {
-          // Se não encontrou nenhuma linha para atualizar e é uma solicitação pendente nova
-          if (r.status === 'pending') {
-            const { error: insertError } = await supabase
-              .from('challenge_requests')
-              .insert({
-                challenge_id: r.challenge_id,
-                group_id: r.group_id,
-                user_id: r.user_id,
-                status: 'pending'
-              });
-            if (insertError) {
-              console.error('[MOCK_DATA] Erro ao criar nova solicitação no Supabase:', insertError);
-            }
-          }
-        } else {
-          console.log('[MOCK_DATA] Status da solicitação sincronizado com sucesso no Supabase:', r.challenge_id, r.user_id, r.status);
-        }
-
-        // Se foi aprovada, garantir a inserção na tabela challenge_members
-        if (r.status === 'approved') {
-          const { error: memberError } = await supabase
-            .from('challenge_members')
-            .upsert({
-              challenge_id: r.challenge_id,
-              user_id: r.user_id
-            }, { onConflict: 'challenge_id,user_id' });
-          if (memberError) {
-            console.error('[MOCK_DATA] Erro ao inserir membro no desafio no Supabase:', memberError);
-          } else {
-            console.log('[MOCK_DATA] Membro inserido com sucesso no desafio no Supabase:', r.challenge_id, r.user_id);
-          }
-        }
-      }
-    }
   } catch (e) {
     console.error('Erro ao salvar mock data no AsyncStorage:', e);
   }

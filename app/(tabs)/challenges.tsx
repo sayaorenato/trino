@@ -16,7 +16,6 @@ import { Button } from '../../components/ui/Button';
 import { WebContainer } from '../../components/ui/WebContainer';
 import { useAuth } from '../../context/auth';
 import { api } from '../../lib/api';
-import { supabase } from '../../lib/supabase';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
 import { SupportCard } from '../../components/SupportCard';
 

@@ -19,7 +19,6 @@ import { ProgressBar } from '../components/ui/ProgressBar';
 import { WebContainer } from '../components/ui/WebContainer';
 import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
-import { supabase } from '../lib/supabase';
 import { MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest, getMockRankings } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
@@ -65,16 +64,16 @@ export default function GroupDashboardScreen() {
 
         Promise.all([
           // Buscar grupo
-          supabase.from('groups').select('*').eq('id', groupId).single(),
+          api.getGroupById(groupId),
           // Buscar role do usuário
-          supabase.from('group_members').select('role').eq('group_id', groupId).eq('user_id', user.id).single(),
+          api.getUserGroupRole(groupId, user.id),
           // Buscar desafios
           api.getGroupChallenges(groupId),
           // Buscar membros (só para contagem)
           api.getGroupMembers(groupId),
-        ]).then(([groupRes, roleRes, challengesData, membersData]) => {
-          if (groupRes.data) setGroup(groupRes.data);
-          if (roleRes.data) setUserRole(roleRes.data.role as 'admin' | 'member');
+        ]).then(([groupData, userRoleData, challengesData, membersData]) => {
+          if (groupData) setGroup(groupData);
+          if (userRoleData) setUserRole(userRoleData);
           setChallenges(challengesData);
           setMemberCount(membersData.length);
           setLoading(false);

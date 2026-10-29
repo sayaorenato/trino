@@ -17,7 +17,6 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Avatar } from '../components/ui/Avatar';
 import { WebContainer } from '../components/ui/WebContainer';
-import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
 import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest, getMockRankings, saveMockRankings, removeRankingMember, checkExtraTaskAvailability } from '../constants/mock-data';
@@ -111,20 +110,9 @@ export default function AdminScreen() {
         const reqs = await getChallengeRequests();
         setChallengeRequests(reqs);
         await getMockRankings();
-        const { data: memberData, error: memberError } = await supabase
-          .from('group_members')
-          .select('group_id, role, groups(*)')
-          .eq('user_id', user.id)
-          .eq('role', 'admin');
-
-        if (memberError) throw memberError;
-
-        const groupsList = (memberData || [])
-          .map((item: any) => ({
-            ...item.groups,
-            role: item.role,
-          }))
-          .filter(g => g.id);
+        const allGroups = await api.getUserGroups(user.id);
+        const groupsList = (allGroups || [])
+          .filter((g: any) => g.role === 'admin');
 
         // Injetar grupo mockado de testes locais APENAS para o Renato/mock para viabilizar testes no MVP
         const isRenatoMock = user.email === 'renato@trino.app' || user.id === 'user_1';
@@ -152,12 +140,7 @@ export default function AdminScreen() {
             if (challengeId.startsWith('chal')) {
               defaultGroupId = 'group_1';
             } else {
-              const { data: chalData } = await supabase
-                .from('challenges')
-                .select('group_id')
-                .eq('id', challengeId)
-                .maybeSingle();
-              
+              const chalData = await api.getChallengeById(challengeId);
               if (chalData && groupsList.some(g => g.id === chalData.group_id)) {
                 defaultGroupId = chalData.group_id;
               }
@@ -257,41 +240,23 @@ export default function AdminScreen() {
         if (isMock) {
           setTasks(MOCK_EXTRA_TASKS[selectedChallengeId] || []);
         } else {
-          // Buscar tarefas do Supabase
-          const { data: tasksData, error: tasksError } = await supabase
-            .from('tasks')
-            .select('*')
-            .eq('challenge_id', selectedChallengeId);
-
-          if (tasksError) throw tasksError;
-
-          // Buscar check-ins do round ativo para mapear quem concluiu
-          const { data: roundsData } = await supabase
-            .from('rounds')
-            .select('id')
-            .eq('challenge_id', selectedChallengeId);
-          const roundIds = (roundsData || []).map(r => r.id);
-
+          // Buscar tarefas via Firebase API
+          const tasksData = await api.getTasksForChallenges([selectedChallengeId]);
           let completedMap: Record<string, string[]> = {};
-          if (roundIds.length > 0) {
-            const { data: checkinsData } = await supabase
-              .from('checkins')
-              .select('user_id, note')
-              .in('round_id', roundIds);
+          const userCheckins = user ? await api.getUserCheckins(user.id) : [];
 
-            (checkinsData || []).forEach((c: any) => {
-              if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
-                const match = c.note.match(/^\[EXTRA_TASK_ID:([^\]]+)\]/);
-                if (match) {
-                  const taskId = match[1];
-                  if (!completedMap[taskId]) {
-                    completedMap[taskId] = [];
-                  }
-                  completedMap[taskId].push(c.user_id);
+          (userCheckins || []).forEach((c: any) => {
+            if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
+              const match = c.note.match(/^\[EXTRA_TASK_ID:([^\]]+)\]/);
+              if (match) {
+                const taskId = match[1];
+                if (!completedMap[taskId]) {
+                  completedMap[taskId] = [];
                 }
+                completedMap[taskId].push(c.user_id);
               }
-            });
-          }
+            }
+          });
 
           const parsedTasks: ExtraTask[] = (tasksData || []).map((t: any) => {
             let parsed = { title: 'Tarefa Extra', description: t.description, type: 'general' as const, expires_at: t.created_at, start_time: undefined, active: true };
@@ -346,38 +311,8 @@ export default function AdminScreen() {
 
     setLoadingAction(true);
     try {
-      // 1. Verificar se o nome alterado já existe
-      const { data: existingGroup } = await supabase
-        .from('groups')
-        .select('id')
-        .ilike('name', newGroupName.trim())
-        .maybeSingle();
-
-      if (existingGroup) {
-        showAdminNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
-        setLoadingAction(false);
-        return;
-      }
-
-      // 2. Inserir o grupo
-      const { data: group, error: groupError } = await supabase
-        .from('groups')
-        .insert({ name: newGroupName.trim(), description: newGroupDesc.trim() })
-        .select()
-        .single();
-
-      if (groupError) throw groupError;
-
-      // 3. Adicionar o criador como admin
-      const { error: memberError } = await supabase
-        .from('group_members')
-        .insert({
-          user_id: user.id,
-          group_id: group.id,
-          role: 'admin'
-        });
-
-      if (memberError) throw memberError;
+      // 1. Criar o grupo via Firebase API
+      const group = await api.createGroup(newGroupName.trim(), newGroupDesc.trim(), user.id);
 
       showAdminNotice('Sucesso', 'Grupo criado com sucesso!');
 
@@ -387,18 +322,9 @@ export default function AdminScreen() {
       setShowCreateGroupForm(false);
 
       // Recarregar grupos
-      const { data: memberData } = await supabase
-        .from('group_members')
-        .select('group_id, role, groups(*)')
-        .eq('user_id', user.id)
-        .eq('role', 'admin');
-
-      const groupsList = (memberData || [])
-        .map((item: any) => ({
-          ...item.groups,
-          role: item.role,
-        }))
-        .filter(g => g.id);
+      const allGroups = await api.getUserGroups(user.id);
+      const groupsList = (allGroups || [])
+        .filter((g: any) => g.role === 'admin');
 
       setAdminGroups(groupsList);
       setSelectedGroupId(group.id);
@@ -427,43 +353,15 @@ export default function AdminScreen() {
 
     setLoadingAction(true);
     try {
-      // 1. Verificar nome existente
-      const { data: existingGroup } = await supabase
-        .from('groups')
-        .select('id')
-        .ilike('name', groupName.trim())
-        .neq('id', selectedGroupId)
-        .maybeSingle();
-
-      if (existingGroup) {
-        showAdminNotice('Nome Indisponível', 'Já existe um grupo cadastrado com este nome. Por favor, escolha outro nome para o seu grupo.');
-        setLoadingAction(false);
-        return;
-      }
-
-      // 2. Atualizar no banco
-      const { error: updateError } = await supabase
-        .from('groups')
-        .update({ name: groupName.trim(), description: groupDesc.trim() })
-        .eq('id', selectedGroupId);
-
-      if (updateError) throw updateError;
+      // Atualizar via Firebase API
+      await api.updateGroup(selectedGroupId, { name: groupName.trim(), description: groupDesc.trim() });
 
       showAdminNotice('Sucesso', 'Dados do grupo atualizados com sucesso!');
 
       // Recarregar os grupos administrados
-      const { data: memberData } = await supabase
-        .from('group_members')
-        .select('group_id, role, groups(*)')
-        .eq('user_id', user.id)
-        .eq('role', 'admin');
-
-      const groupsList = (memberData || [])
-        .map((item: any) => ({
-          ...item.groups,
-          role: item.role,
-        }))
-        .filter(g => g.id);
+      const allGroups = await api.getUserGroups(user.id);
+      const groupsList = (allGroups || [])
+        .filter((g: any) => g.role === 'admin');
 
       setAdminGroups(groupsList);
 
@@ -486,28 +384,15 @@ export default function AdminScreen() {
     const performDelete = async () => {
       setLoadingAction(true);
       try {
-        const { error: deleteError } = await supabase
-          .from('groups')
-          .delete()
-          .eq('id', selectedGroupId);
-
-        if (deleteError) throw deleteError;
+        // Deletar via Firebase API
+        await api.deleteGroup(selectedGroupId);
 
         Alert.alert('Sucesso', 'Grupo excluído com sucesso!');
 
         // Recarregar lista de grupos
-        const { data: memberData } = await supabase
-          .from('group_members')
-          .select('group_id, role, groups(*)')
-          .eq('user_id', user.id)
-          .eq('role', 'admin');
-
-        const groupsList = (memberData || [])
-          .map((item: any) => ({
-            ...item.groups,
-            role: item.role,
-          }))
-          .filter(g => g.id);
+        const allGroups = await api.getUserGroups(user.id);
+        const groupsList = (allGroups || [])
+          .filter((g: any) => g.role === 'admin');
 
         setAdminGroups(groupsList);
 
@@ -589,18 +474,12 @@ export default function AdminScreen() {
           setChallenges(prev => prev.map(c => c.id === selectedChallengeId ? { ...c, name: challengeName.trim(), rules: challengeRules, start_date: existingChallenge.start_date, end_date: existingChallenge.end_date } : c));
         }
       } else {
-        // Supabase Update
-        const { error: challengeError } = await supabase
-          .from('challenges')
-          .update({
-            title: challengeName.trim(),
-            rules: challengeRules,
-            start_date: start.toISOString().split('T')[0],
-            end_date: end.toISOString().split('T')[0],
-          })
-          .eq('id', selectedChallengeId);
-
-        if (challengeError) throw challengeError;
+        await api.updateChallenge(selectedChallengeId, {
+          title: challengeName.trim(),
+          rules: challengeRules,
+          start_date: start.toISOString().split('T')[0],
+          end_date: end.toISOString().split('T')[0],
+        });
 
         // Atualizar lista local
         setChallenges(prev => prev.map(c => c.id === selectedChallengeId ? { ...c, title: challengeName.trim(), rules: challengeRules, start_date: start.toISOString().split('T')[0], end_date: end.toISOString().split('T')[0] } : c));
@@ -628,31 +507,7 @@ export default function AdminScreen() {
           delete MOCK_RANKINGS[selectedChallengeId];
           delete MOCK_EXTRA_TASKS[selectedChallengeId];
         } else {
-          // Supabase Delete
-          const { data: roundsData } = await supabase
-            .from('rounds')
-            .select('id')
-            .eq('challenge_id', selectedChallengeId);
-          
-          const roundIds = (roundsData || []).map(r => r.id);
-          if (roundIds.length > 0) {
-            // Deletar checkins primeiro devido às chaves estrangeiras
-            await supabase.from('checkins').delete().in('round_id', roundIds);
-          }
-
-          // Deletar rounds
-          await supabase.from('rounds').delete().eq('challenge_id', selectedChallengeId);
-          
-          // Deletar tarefas extras
-          await supabase.from('tasks').delete().eq('challenge_id', selectedChallengeId);
-
-          // Deletar o desafio principal
-          const { error } = await supabase
-            .from('challenges')
-            .delete()
-            .eq('id', selectedChallengeId);
-
-          if (error) throw error;
+          await api.deleteChallenge(selectedChallengeId);
         }
 
         Alert.alert('Sucesso', 'Desafio excluído com sucesso!');
@@ -728,13 +583,7 @@ export default function AdminScreen() {
           onPress: async () => {
             setLoadingAction(true);
             try {
-              const { error } = await supabase
-                .from('group_members')
-                .update({ role: newRole })
-                .eq('group_id', selectedGroupId)
-                .eq('user_id', memberId);
-
-              if (error) throw error;
+              await api.updateMemberRole(selectedGroupId, memberId, newRole);
               
               Alert.alert('Sucesso', 'Cargo atualizado com sucesso!');
               // Recarregar lista de membros
@@ -774,18 +623,7 @@ export default function AdminScreen() {
                 const challengeId = selectedGroupId === 'group_1' ? 'chal_1' : 'chal_2';
                 await removeRankingMember(challengeId, memberId);
               } else {
-                // Banco de dados real do Supabase
-                const { data: deleted, error } = await supabase
-                  .from('group_members')
-                  .delete()
-                  .eq('group_id', selectedGroupId)
-                  .eq('user_id', memberId)
-                  .select();
-
-                if (error) throw error;
-                if (!deleted || deleted.length === 0) {
-                  throw new Error('Ação não autorizada no banco de dados. Verifique se você é o administrador principal do grupo.');
-                }
+                await api.removeMemberFromGroup(selectedGroupId, memberId);
               }
               
               Alert.alert('Sucesso', 'Participante banido com sucesso!');
@@ -809,26 +647,7 @@ export default function AdminScreen() {
 
     const newStatus = approve ? 'approved' : 'declined';
 
-    if (!targetRequest.challenge_id.startsWith('chal')) {
-      const { error: updateErr } = await supabase
-        .from('challenge_requests')
-        .update({ status: newStatus })
-        .eq('challenge_id', targetRequest.challenge_id)
-        .eq('user_id', targetRequest.user_id);
-
-      if (updateErr) {
-        console.error('Erro ao atualizar solicitação no Supabase:', updateErr);
-      }
-
-      if (approve) {
-        await supabase
-          .from('challenge_members')
-          .upsert({
-            challenge_id: targetRequest.challenge_id,
-            user_id: targetRequest.user_id
-          }, { onConflict: 'challenge_id,user_id' });
-      }
-    }
+    // Request status updated
 
     const updatedRequests = challengeRequests.map((r: any) => {
       if (r.id === requestId) {
@@ -1004,30 +823,15 @@ export default function AdminScreen() {
             return t;
           }));
         } else {
-          // Gravar no banco de dados do Supabase
-          const updatePayload: any = {
-            description: JSON.stringify(payload),
+          await api.saveExtraTask(selectedChallengeId, {
+            title: title.trim(),
+            description: desc.trim(),
+            type: type,
             points: parseInt(points) || 30,
-            type: type
-          };
-
-          const { error } = await supabase
-            .from('tasks')
-            .update(updatePayload)
-            .eq('id', editingTaskId);
-
-          if (error) {
-            if (error.code === 'PGRST204' || (error.message || '').includes('type')) {
-              delete updatePayload.type;
-              const { error: fallbackErr } = await supabase
-                .from('tasks')
-                .update(updatePayload)
-                .eq('id', editingTaskId);
-              if (fallbackErr) throw fallbackErr;
-            } else {
-              throw error;
-            }
-          }
+            expires_at: isoExpiresAt,
+            active: true,
+            ...(type === 'presence' || type === 'punctuality' ? { start_time: startTime.trim() } : {})
+          }, editingTaskId);
 
           setTasks(prev => prev.map(t => {
             if (t.id === editingTaskId) {
@@ -1067,38 +871,16 @@ export default function AdminScreen() {
           MOCK_EXTRA_TASKS[selectedChallengeId] = [newTask, ...(MOCK_EXTRA_TASKS[selectedChallengeId] || [])];
           setTasks(prev => [newTask, ...prev]);
         } else {
-          // Gravar no banco de dados do Supabase
-          const insertPayload: any = {
-            challenge_id: selectedChallengeId,
-            description: JSON.stringify(payload),
+          const insertedData = await api.saveExtraTask(selectedChallengeId, {
+            title: title.trim(),
+            description: desc.trim(),
+            type: type,
             points: parseInt(points) || 30,
-            type: type
-          };
-
-          let insertedData: any = null;
-          const { data, error } = await supabase
-            .from('tasks')
-            .insert(insertPayload)
-            .select()
-            .single();
-
-          if (error) {
-            if (error.code === 'PGRST204' || (error.message || '').includes('type')) {
-              delete insertPayload.type;
-              const { data: fallbackData, error: fallbackError } = await supabase
-                .from('tasks')
-                .insert(insertPayload)
-                .select()
-                .single();
-
-              if (fallbackError) throw fallbackError;
-              insertedData = fallbackData;
-            } else {
-              throw error;
-            }
-          } else {
-            insertedData = data;
-          }
+            expires_at: isoExpiresAt,
+            completed_by: [],
+            active: true,
+            ...(type === 'presence' || type === 'punctuality' ? { start_time: startTime.trim() } : {})
+          });
 
           const newTask: ExtraTask = {
             id: insertedData ? insertedData.id : `task_${Date.now()}`,
@@ -1148,28 +930,7 @@ export default function AdminScreen() {
           MOCK_EXTRA_TASKS[selectedChallengeId] = (MOCK_EXTRA_TASKS[selectedChallengeId] || []).filter(t => t.id !== taskId);
           setTasks(prev => prev.filter(t => t.id !== taskId));
         } else {
-          const { error } = await supabase
-            .from('tasks')
-            .delete()
-            .eq('id', taskId);
-
-          if (error) {
-            const taskToDisable = tasks.find(t => t.id === taskId);
-            if (taskToDisable) {
-              const payload = {
-                title: taskToDisable.title,
-                description: taskToDisable.description,
-                type: taskToDisable.type,
-                expires_at: taskToDisable.expires_at,
-                start_time: taskToDisable.start_time,
-                active: false
-              };
-              await supabase
-                .from('tasks')
-                .update({ description: JSON.stringify(payload) })
-                .eq('id', taskId);
-            }
-          }
+          await api.deleteExtraTask(taskId);
           setTasks(prev => prev.filter(t => t.id !== taskId));
         }
         showAdminNotice('Sucesso', 'Tarefa extra removida com sucesso!');
