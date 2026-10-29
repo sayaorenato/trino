@@ -105,25 +105,39 @@ export default function GroupDashboardScreen() {
 
   const isAdmin = userRole === 'admin';
   const now = new Date();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  // Filtrar os desafios ativos gerais do grupo (end_date >= agora)
-  const activeGroupChallenges = challenges.filter(c => new Date(c.end_date) >= now);
+  const isChallengeActive = (endDateStr: string) => {
+    if (!endDateStr) return true;
+    const parts = endDateStr.split('T')[0].split('-');
+    if (parts.length === 3) {
+      const end = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
+      return end >= today;
+    }
+    const end = new Date(endDateStr);
+    end.setHours(23, 59, 59, 999);
+    return end >= today;
+  };
 
-  // Desafios ativos nos quais o usuário já participa do ranking (ou se for o admin do grupo)
+  // Filtrar os desafios ativos gerais do grupo (end_date >= hoje)
+  const activeGroupChallenges = challenges.filter(c => isChallengeActive(c.end_date));
+
+  // Desafios ativos nos quais o usuário já participa do ranking (ou se for o admin do grupo ou criador)
   const activeChallenges = activeGroupChallenges.filter(c => {
-    if (isAdmin) return true;
+    if (isAdmin || c.created_by === user?.id) return true;
     const ranking = MOCK_RANKINGS[c.id] || [];
     return ranking.some((m: any) => m.user_id === user?.id);
   });
 
   // Desafios disponíveis nos quais o usuário ainda não participa do ranking (admins nunca veem disponíveis)
   const availableChallenges = activeGroupChallenges.filter(c => {
-    if (isAdmin) return false;
+    if (isAdmin || c.created_by === user?.id) return false;
     const ranking = MOCK_RANKINGS[c.id] || [];
     return !ranking.some((m: any) => m.user_id === user?.id);
   });
 
-  const pastChallenges = challenges.filter(c => new Date(c.end_date) < now);
+  const pastChallenges = challenges.filter(c => !isChallengeActive(c.end_date));
 
   const handleRequestJoinChallenge = async (challengeId: string, challengeName: string) => {
     if (!user || !groupId) return;

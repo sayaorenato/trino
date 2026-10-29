@@ -89,11 +89,15 @@ export async function saveChallengeRequests(requests: ChallengeRequest[]): Promi
 export async function loadPersistedMockData() {
   await getChallengeRequests();
   await getMockRankings();
+  await getMockChallenges();
+  await getMockRounds();
 }
 
 export async function savePersistedMockData() {
   await saveChallengeRequests(CHALLENGE_REQUESTS);
   await saveMockRankings();
+  await saveMockChallenges();
+  await saveMockRounds();
 }
 
 export function clearMockSession() {
@@ -292,6 +296,48 @@ export const MOCK_ROUNDS: Record<string, Round[]> = {
     { id: 'round_2_2', challenge_id: 'chal_2', round_number: 2, start_date: ROUND_CURR_START, end_date: ROUND_CURR_END, status: 'active' },
   ],
 };
+
+export async function getMockChallenges(): Promise<Record<string, Challenge>> {
+  try {
+    const data = await AsyncStorage.getItem('TRINO_MOCK_CHALLENGES');
+    if (data) {
+      const parsed = JSON.parse(data);
+      Object.assign(MOCK_CHALLENGES, parsed);
+    }
+    return MOCK_CHALLENGES;
+  } catch (e) {
+    return MOCK_CHALLENGES;
+  }
+}
+
+export async function saveMockChallenges(): Promise<void> {
+  try {
+    await AsyncStorage.setItem('TRINO_MOCK_CHALLENGES', JSON.stringify(MOCK_CHALLENGES));
+  } catch (e) {
+    console.error('Erro ao salvar mock challenges:', e);
+  }
+}
+
+export async function getMockRounds(): Promise<Record<string, Round[]>> {
+  try {
+    const data = await AsyncStorage.getItem('TRINO_MOCK_ROUNDS');
+    if (data) {
+      const parsed = JSON.parse(data);
+      Object.assign(MOCK_ROUNDS, parsed);
+    }
+    return MOCK_ROUNDS;
+  } catch (e) {
+    return MOCK_ROUNDS;
+  }
+}
+
+export async function saveMockRounds(): Promise<void> {
+  try {
+    await AsyncStorage.setItem('TRINO_MOCK_ROUNDS', JSON.stringify(MOCK_ROUNDS));
+  } catch (e) {
+    console.error('Erro ao salvar mock rounds:', e);
+  }
+}
 
 export const MOCK_RANKINGS: Record<string, RankingMember[]> = {
   'chal_1': [

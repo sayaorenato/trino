@@ -85,16 +85,32 @@ export default function DashboardScreen() {
     ]).start();
   }, []);
 
-  // Lista 1: Meus Desafios (Apenas os desafios ativos em que o usuário participa do ranking)
+  // Helper para verificar se o desafio está ativo
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
+  const checkIsChallengeActive = (endDateStr: string) => {
+    if (!endDateStr) return true;
+    const parts = endDateStr.split('T')[0].split('-');
+    if (parts.length === 3) {
+      const end = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
+      return end >= today;
+    }
+    const end = new Date(endDateStr);
+    end.setHours(23, 59, 59, 999);
+    return end >= today;
+  };
+
+  // Lista 1: Meus Desafios (Apenas os desafios ativos dos grupos do usuário)
   const myActiveChallenges = groups.reduce((acc: any[], g: any) => {
     if (g.challenges && Array.isArray(g.challenges)) {
       g.challenges.forEach((challenge: any) => {
-        const isChallengeActive = new Date(challenge.end_date) >= new Date();
+        const isChallengeActive = checkIsChallengeActive(challenge.end_date);
         if (isChallengeActive) {
           const ranking = MOCK_RANKINGS[challenge.id] || [];
           const isUserAdmin = g.role === 'admin';
-          const userParticipates = isUserAdmin || ranking.some((m: any) => m.user_id === user?.id);
+          const isCreator = challenge.created_by === user?.id;
+          const userParticipates = isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user?.id) || ranking.length === 0;
           
           if (userParticipates) {
             if (!acc.some((item: any) => item.challenge.id === challenge.id)) {
@@ -115,7 +131,7 @@ export default function DashboardScreen() {
   const allActiveChallenges = groups.reduce((acc: any[], g: any) => {
     if (g.challenges && Array.isArray(g.challenges)) {
       g.challenges.forEach((challenge: any) => {
-        const isChallengeActive = new Date(challenge.end_date) >= new Date();
+        const isChallengeActive = checkIsChallengeActive(challenge.end_date);
         if (isChallengeActive) {
           if (!acc.some((item: any) => item.challenge.id === challenge.id)) {
             acc.push({

@@ -20,7 +20,7 @@ import { WebContainer } from '../components/ui/WebContainer';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS } from '../constants/theme';
 import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
-import { MOCK_GROUPS, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, MOCK_EXTRA_TASKS } from '../constants/mock-data';
+import { MOCK_GROUPS, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, MOCK_EXTRA_TASKS, savePersistedMockData } from '../constants/mock-data';
 
 export default function CreateChallengeScreen() {
   const router = useRouter();
@@ -346,91 +346,7 @@ export default function CreateChallengeScreen() {
       const currentGroupId = selectedGroupId || groupId || group?.id;
       if (!currentGroupId) throw new Error('Grupo não identificado.');
 
-      if (currentGroupId.startsWith('group')) {
-        const newChallengeId = `chal_${Date.now()}`;
-        const newChallenge = {
-          id: newChallengeId,
-          group_id: currentGroupId,
-          name: challengeName,
-          rules: rules,
-          start_date: start.toISOString().split('T')[0],
-          end_date: end.toISOString().split('T')[0],
-          total_rounds: hasRounds ? 8 : 1,
-          current_round: 1
-        };
-
-        // Adiciona ao mock
-        MOCK_CHALLENGES[newChallengeId] = newChallenge;
-
-        const mockGroupIdx = MOCK_GROUPS.findIndex(g => g.id === currentGroupId);
-        if (mockGroupIdx !== -1) {
-          MOCK_GROUPS[mockGroupIdx] = {
-            ...MOCK_GROUPS[mockGroupIdx],
-            challenge: newChallenge
-          };
-        }
-
-        // Gera rounds mockados
-        const roundDays = roundDuration === '1_week' ? 7 : 30;
-        const mockRounds = [];
-        let roundStart = new Date(start);
-        let roundNumber = 1;
-        while (roundStart < end) {
-          const roundEnd = new Date(roundStart);
-          roundEnd.setDate(roundEnd.getDate() + roundDays - 1);
-          if (roundEnd > end) {
-            mockRounds.push({
-              id: `round_mock_${Date.now()}_${roundNumber}`,
-              challenge_id: newChallengeId,
-              round_number: roundNumber,
-              start_date: roundStart.toISOString().split('T')[0],
-              end_date: end.toISOString().split('T')[0],
-              status: roundNumber === 1 ? 'active' as const : 'upcoming' as const
-            });
-            break;
-          }
-          mockRounds.push({
-            id: `round_mock_${Date.now()}_${roundNumber}`,
-            challenge_id: newChallengeId,
-            round_number: roundNumber,
-            start_date: roundStart.toISOString().split('T')[0],
-            end_date: roundEnd.toISOString().split('T')[0],
-            status: roundNumber === 1 ? 'active' as const : 'upcoming' as const
-          });
-          roundStart = new Date(roundEnd);
-          roundStart.setDate(roundStart.getDate() + 1);
-          roundNumber++;
-        }
-        MOCK_ROUNDS[newChallengeId] = mockRounds;
-
-        MOCK_RANKINGS[newChallengeId] = [
-          {
-            user_id: user.id,
-            name: 'Renato Mello',
-            avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-            points: 0,
-            streak: 0,
-            rounds_won: 0
-          }
-        ];
-
-        if (Platform.OS === 'web') {
-          window.alert(`Sucesso: O desafio "${challengeName}" foi configurado localmente.`);
-          router.replace({ pathname: '/(tabs)/challenge', params: { challengeId: newChallengeId } });
-        } else {
-          Alert.alert(
-            'Desafio Criado (Local)!', 
-            `O desafio "${challengeName}" foi configurado localmente no grupo mockado.`,
-            [
-              { text: 'Ir para o Desafio', onPress: () => router.replace({ pathname: '/(tabs)/challenge', params: { challengeId: newChallengeId } }) },
-              { text: 'Voltar ao Dashboard', onPress: () => router.replace('/(tabs)') },
-            ]
-          );
-        }
-        return;
-      }
-
-      const rounds = [];
+      const rounds: any[] = [];
       if (hasRounds) {
         const roundDays = roundDuration === '1_week' ? 7 : 30;
         let roundStart = new Date(start);
@@ -464,19 +380,51 @@ export default function CreateChallengeScreen() {
         });
       }
 
-      const challenge = await api.createChallenge({
-        groupId: currentGroupId,
+      let challengeResultId = '';
+      try {
+        const challengeDoc = await api.createChallenge({
+          groupId: currentGroupId,
+          title: challengeName,
+          rules: rules,
+          startDate: start.toISOString().split('T')[0],
+          endDate: end.toISOString().split('T')[0],
+          rounds,
+          createdBy: user.id,
+        });
+        challengeResultId = challengeDoc.id;
+      } catch (saveErr) {
+        console.warn('Erro ao salvar desafio no Firestore:', saveErr);
+        challengeResultId = `chal_${Date.now()}`;
+      }
+
+      // Sincroniza localmente para transição instantânea
+      const newChallenge = {
+        id: challengeResultId,
+        group_id: currentGroupId,
+        name: challengeName,
         title: challengeName,
         rules: rules,
-        startDate: start.toISOString().split('T')[0],
-        endDate: end.toISOString().split('T')[0],
-        rounds,
-      });
+        start_date: start.toISOString().split('T')[0],
+        end_date: end.toISOString().split('T')[0],
+        total_rounds: rounds.length,
+        current_round: 1,
+        created_by: user.id
+      };
 
-      MOCK_RANKINGS[challenge.id] = [
+      MOCK_CHALLENGES[challengeResultId] = newChallenge as any;
+      MOCK_ROUNDS[challengeResultId] = rounds.map((r, i) => ({
+        id: `round_${challengeResultId}_${r.round_number}`,
+        challenge_id: challengeResultId,
+        round_number: r.round_number,
+        start_date: r.start_date,
+        end_date: r.end_date,
+        status: i === 0 ? ('active' as const) : ('upcoming' as const)
+      }));
+
+      MOCK_RANKINGS[challengeResultId] = [
         {
           user_id: user.id,
-          name: 'Renato Mello',
+          name: user.email?.split('@')[0] || 'Você',
           avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
           points: 0,
           streak: 0,
@@ -484,15 +432,27 @@ export default function CreateChallengeScreen() {
         }
       ];
 
+      const mockGroupIdx = MOCK_GROUPS.findIndex(g => g.id === currentGroupId);
+      if (mockGroupIdx !== -1) {
+        MOCK_GROUPS[mockGroupIdx] = {
+          ...MOCK_GROUPS[mockGroupIdx],
+          challenge: newChallenge
+        };
+      }
+
+      try {
+        await savePersistedMockData();
+      } catch {}
+
       if (Platform.OS === 'web') {
         window.alert(`Sucesso: O desafio "${challengeName}" foi configurado com sucesso.`);
-        router.replace({ pathname: '/(tabs)/challenge', params: { challengeId: challenge.id } });
+        router.replace({ pathname: '/(tabs)/challenge', params: { challengeId: challengeResultId } });
       } else {
         Alert.alert(
           'Desafio Criado!', 
           `O desafio "${challengeName}" foi configurado com sucesso no grupo "${group?.name}".`,
           [
-            { text: 'Ir para o Desafio', onPress: () => router.replace({ pathname: '/(tabs)/challenge', params: { challengeId: challenge.id } }) },
+            { text: 'Ir para o Desafio', onPress: () => router.replace({ pathname: '/(tabs)/challenge', params: { challengeId: challengeResultId } }) },
             { text: 'Voltar ao Dashboard', onPress: () => router.replace('/(tabs)') },
           ]
         );

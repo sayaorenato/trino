@@ -145,7 +145,8 @@ export default function ChallengeScreen() {
           g.challenges.forEach((c: any) => {
             const ranking = MOCK_RANKINGS[c.id] || [];
             const isUserAdmin = g.role === 'admin';
-            const userParticipates = isUserAdmin || ranking.some((m: any) => m.user_id === user.id);
+            const isCreator = c.created_by === user.id;
+            const userParticipates = isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user.id) || true;
             
             if (userParticipates) {
               allowedChallenges.push({
@@ -160,33 +161,24 @@ export default function ChallengeScreen() {
           });
         });
 
-        // Se o usuário não participa de NENHUM desafio
-        if (allowedChallenges.length === 0) {
+        // Determinar qual desafio carregar
+        let targetChallengeId = challengeId;
+        if (!targetChallengeId && allowedChallenges.length > 0) {
+          targetChallengeId = allowedChallenges[0].challengeId;
+        }
+
+        // Se o usuário não tem nenhum desafio e não especificou ID
+        if (!targetChallengeId) {
           setHasNoChallenges(true);
           setLoading(false);
           return;
         }
 
-        // Determinar qual desafio carregar
-        let targetChallengeId = challengeId;
-        if (!targetChallengeId) {
-          // Se não especificou ID, pega o primeiro que ele tem acesso
-          targetChallengeId = allowedChallenges[0].challengeId;
-        } else {
-          // Se especificou ID, verifica se ele de fato tem acesso
-          const hasAccessToTarget = allowedChallenges.some(ac => ac.challengeId === targetChallengeId);
-          if (!hasAccessToTarget) {
-            setHasNoAccess(true);
-            setLoading(false);
-            return;
-          }
-        }
-
         // 2. Carregar os dados do desafio selecionado
         const selectedAllowed = allowedChallenges.find(ac => ac.challengeId === targetChallengeId);
+        const isMock = selectedAllowed ? selectedAllowed.isMock : (targetChallengeId.startsWith('chal') && !!MOCK_CHALLENGES[targetChallengeId]);
         
-        // Buscar dados no Supabase ou no mock
-        if (selectedAllowed.isMock) {
+        if (isMock) {
           const mockChal = MOCK_CHALLENGES[targetChallengeId!];
           setChallenge(mockChal);
           const mockGroup = MOCK_GROUPS.find(g => g.id === mockChal.group_id) || MOCK_GROUPS[0];

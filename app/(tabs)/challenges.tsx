@@ -62,9 +62,46 @@ export default function ChallengesDashboardScreen() {
     );
   }
 
-  const now = new Date();
-  const activeChallenges = challenges.filter(c => new Date(c.end_date) >= now);
-  const finishedChallenges = challenges.filter(c => new Date(c.end_date) < now);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const isChallengeActive = (endDateStr: string) => {
+    if (!endDateStr) return true;
+    const parts = endDateStr.split('T')[0].split('-');
+    if (parts.length === 3) {
+      const end = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
+      return end >= today;
+    }
+    const end = new Date(endDateStr);
+    end.setHours(23, 59, 59, 999);
+    return end >= today;
+  };
+
+  const formatDateDisplay = (dateStr: string) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('T')[0].split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return new Date(dateStr).toLocaleDateString('pt-BR');
+  };
+
+  const getDaysLeft = (endDateStr: string) => {
+    if (!endDateStr) return 0;
+    const parts = endDateStr.split('T')[0].split('-');
+    let end: Date;
+    if (parts.length === 3) {
+      end = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
+    } else {
+      end = new Date(endDateStr);
+      end.setHours(23, 59, 59, 999);
+    }
+    const diffMs = end.getTime() - Date.now();
+    return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+  };
+
+  const activeChallenges = challenges.filter(c => isChallengeActive(c.end_date));
+  const finishedChallenges = challenges.filter(c => !isChallengeActive(c.end_date));
 
   return (
     <WebContainer>
@@ -89,7 +126,7 @@ export default function ChallengesDashboardScreen() {
             ) : (
               <View style={styles.list}>
                 {activeChallenges.map(chal => {
-                  const daysLeft = Math.max(0, Math.ceil((new Date(chal.end_date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+                  const daysLeft = getDaysLeft(chal.end_date);
                   return (
                     <TouchableOpacity
                       key={chal.id}
@@ -110,7 +147,7 @@ export default function ChallengesDashboardScreen() {
                           </View>
                         </View>
                         <Text style={styles.dates}>
-                          Período: {new Date(chal.start_date).toLocaleDateString('pt-BR')} até {new Date(chal.end_date).toLocaleDateString('pt-BR')}
+                          Período: {formatDateDisplay(chal.start_date)} até {formatDateDisplay(chal.end_date)}
                         </Text>
                         <View style={styles.footer}>
                           <Text style={styles.daysLeft}>{daysLeft > 0 ? `${daysLeft} dias restantes` : 'Encerra hoje!'}</Text>
@@ -153,7 +190,7 @@ export default function ChallengesDashboardScreen() {
                         </View>
                       </View>
                       <Text style={styles.dates}>
-                        Período: {new Date(chal.start_date).toLocaleDateString('pt-BR')} — {new Date(chal.end_date).toLocaleDateString('pt-BR')}
+                        Período: {formatDateDisplay(chal.start_date)} — {formatDateDisplay(chal.end_date)}
                       </Text>
                     </Card>
                   </TouchableOpacity>

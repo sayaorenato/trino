@@ -362,7 +362,32 @@ export const api = {
   },
 
   async getActiveChallenge(groupId: string) {
-    if (!groupId || groupId.startsWith('group')) {
+    if (!groupId) return null;
+
+    try {
+      const challenges = await this.getGroupChallenges(groupId);
+      if (challenges.length > 0) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const active = challenges.find((c: any) => {
+          if (!c.end_date) return true;
+          const parts = c.end_date.split('-');
+          if (parts.length === 3) {
+            const end = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
+            return end >= today;
+          }
+          const end = new Date(c.end_date);
+          end.setHours(23, 59, 59, 999);
+          return end >= today;
+        });
+        return active || challenges[0];
+      }
+    } catch (e) {
+      console.warn('Erro em getActiveChallenge:', e);
+    }
+
+    if (groupId.startsWith('group')) {
       const mockChal = Object.values(MOCK_CHALLENGES).find(c => c.group_id === groupId);
       if (mockChal) {
         return {
@@ -370,41 +395,14 @@ export const api = {
           rounds: MOCK_ROUNDS[mockChal.id] || []
         };
       }
-      return null;
     }
 
-    try {
-      const q = query(
-        collection(db, 'challenges'),
-        where('group_id', '==', groupId),
-        orderBy('created_at', 'desc'),
-        limit(1)
-      );
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const chalDoc = snap.docs[0];
-        const chalData = chalDoc.data();
-        return {
-          id: chalDoc.id,
-          ...chalData,
-          rounds: chalData.rounds || []
-        };
-      }
-    } catch {}
     return null;
   },
 
   async getChallengeById(challengeId: string): Promise<any> {
     if (!challengeId) return null;
-    if (challengeId.startsWith('chal_') || challengeId.startsWith('chal')) {
-      const mockChal = MOCK_CHALLENGES[challengeId];
-      if (mockChal) {
-        return {
-          ...mockChal,
-          rounds: MOCK_ROUNDS[mockChal.id] || []
-        };
-      }
-    }
+
     try {
       const snap = await getDoc(doc(db, 'challenges', challengeId));
       if (snap.exists()) {
@@ -417,7 +415,17 @@ export const api = {
         };
       }
     } catch (error) {
-      console.warn('Erro ao buscar desafio por ID:', error);
+      console.warn('Erro ao buscar desafio por ID no Firestore:', error);
+    }
+
+    if (challengeId.startsWith('chal')) {
+      const mockChal = MOCK_CHALLENGES[challengeId];
+      if (mockChal) {
+        return {
+          ...mockChal,
+          rounds: MOCK_ROUNDS[mockChal.id] || []
+        };
+      }
     }
     return null;
   },
@@ -429,6 +437,7 @@ export const api = {
     startDate: string;
     endDate: string;
     rounds?: any[];
+    createdBy?: string;
   }) {
     const payload = {
       group_id: data.groupId,
@@ -438,6 +447,7 @@ export const api = {
       start_date: data.startDate,
       end_date: data.endDate,
       rounds: data.rounds || [],
+      created_by: data.createdBy || null,
       created_at: new Date().toISOString()
     };
     const ref = await addDoc(collection(db, 'challenges'), payload);
@@ -472,7 +482,31 @@ export const api = {
   },
 
   async getGroupChallenges(groupId: string) {
-    if (!groupId || groupId.startsWith('group')) {
+    if (!groupId) return [];
+
+    let dbChallenges: any[] = [];
+    try {
+      const q = query(
+        collection(db, 'challenges'),
+        where('group_id', '==', groupId)
+      );
+      const snap = await getDocs(q);
+      dbChallenges = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        rounds: d.data().rounds || []
+      }));
+    } catch (error) {
+      console.warn('Erro ao listar desafios do grupo no Firestore:', error);
+    }
+
+    if (dbChallenges.length > 0) {
+      return dbChallenges.sort((a: any, b: any) => 
+        new Date(b.created_at || b.start_date || 0).getTime() - new Date(a.created_at || a.start_date || 0).getTime()
+      );
+    }
+
+    if (groupId.startsWith('group')) {
       const mockChal = Object.values(MOCK_CHALLENGES).filter(c => c.group_id === groupId);
       return mockChal.map(c => ({
         ...c,
@@ -480,31 +514,20 @@ export const api = {
       }));
     }
 
-    try {
-      const q = query(
-        collection(db, 'challenges'),
-        where('group_id', '==', groupId),
-        orderBy('created_at', 'desc')
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-        rounds: d.data().rounds || []
-      }));
-    } catch (error) {
-      console.warn('Erro ao listar desafios do grupo:', error);
-      return [];
-    }
+    return [];
   },
 
   async getAllChallenges() {
     try {
       const snap = await getDocs(collection(db, 'challenges'));
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } catch {
-      return Object.values(MOCK_CHALLENGES);
-    }
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data(), rounds: d.data().rounds || [] }));
+      if (list.length > 0) {
+        return list.sort((a: any, b: any) => 
+          new Date(b.created_at || b.start_date || 0).getTime() - new Date(a.created_at || a.start_date || 0).getTime()
+        );
+      }
+    } catch {}
+    return Object.values(MOCK_CHALLENGES);
   },
 
   async getChallengeRanking(challengeId: string): Promise<any[]> {
@@ -584,10 +607,19 @@ export const api = {
           }
         } catch {}
 
-        const now = new Date();
-        const activeChallengesCount = challenges.filter(
-          (c: any) => new Date(c.end_date) >= now
-        ).length;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const activeChallengesCount = challenges.filter((c: any) => {
+          if (!c.end_date) return true;
+          const parts = c.end_date.split('-');
+          if (parts.length === 3) {
+            const end = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
+            return end >= today;
+          }
+          const end = new Date(c.end_date);
+          end.setHours(23, 59, 59, 999);
+          return end >= today;
+        }).length;
 
         return {
           ...group,
@@ -785,19 +817,21 @@ export const api = {
     try {
       const q = query(
         collection(db, 'users'),
-        where('current_challenge_id', '==', challengeId),
-        orderBy('total_points', 'desc'),
-        limit(50)
+        where('current_challenge_id', '==', challengeId)
       );
       const snap = await getDocs(q);
       if (!snap.empty) {
-        return snap.docs.map((d, index) => ({
-          rank: index + 1,
+        const list = snap.docs.map(d => ({
           id: d.id,
           name: d.data().full_name || d.data().username || 'Usuário',
           avatar: d.data().avatar_url,
           points: d.data().total_points || 0,
           streak: d.data().streak_count || 0,
+        }));
+        list.sort((a, b) => b.points - a.points);
+        return list.slice(0, 50).map((u, index) => ({
+          rank: index + 1,
+          ...u
         }));
       }
     } catch {}
@@ -811,24 +845,23 @@ export const api = {
 
   async getGroupFeed(groupId: string, limitCount = 20, offset = 0) {
     try {
-      let q;
+      let snap;
       if (groupId && !groupId.startsWith('group')) {
-        q = query(
+        const q = query(
           collection(db, 'checkins'),
-          where('group_id', '==', groupId),
-          orderBy('created_at', 'desc'),
-          limit(limitCount)
+          where('group_id', '==', groupId)
         );
+        snap = await getDocs(q);
       } else {
-        q = query(
+        const q = query(
           collection(db, 'checkins'),
           orderBy('created_at', 'desc'),
           limit(limitCount)
         );
+        snap = await getDocs(q);
       }
-      const snap = await getDocs(q);
       if (!snap.empty) {
-        return snap.docs.map(d => ({
+        const list = snap.docs.map(d => ({
           id: d.id,
           ...d.data(),
           profiles: {
@@ -839,6 +872,8 @@ export const api = {
           reactions: d.data().reactions || [],
           comments_count: d.data().comments_count || 0
         }));
+        list.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+        return list.slice(offset, offset + limitCount);
       }
     } catch {}
 
@@ -916,11 +951,10 @@ export const api = {
     try {
       const q = query(
         collection(db, 'comments'),
-        where('checkin_id', '==', checkinId),
-        orderBy('created_at', 'asc')
+        where('checkin_id', '==', checkinId)
       );
       const snap = await getDocs(q);
-      return snap.docs.map(d => {
+      const comments = snap.docs.map(d => {
         const data = d.data();
         return {
           id: d.id,
@@ -934,6 +968,7 @@ export const api = {
           }
         };
       });
+      return comments.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     } catch {
       return [];
     }
