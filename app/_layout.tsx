@@ -72,7 +72,7 @@ function InitialLayout() {
       <StatusBar style="dark" />
       {Platform.OS === 'web' && (
         <style type="text/css">{`
-          @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap');
+          @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
           /* Ícones Oficiais do @expo/vector-icons para React Native Web */
           @font-face {
@@ -96,110 +96,66 @@ function InitialLayout() {
             font-display: swap;
           }
 
-          /* Tipografia do Google Stitch: Fé em Constância (Plus Jakarta Sans) */
+          /* Aliases para compatibilidade total com React Native Web */
           @font-face {
             font-family: 'PlusJakartaSans_800ExtraBold';
-            src: local('Plus Jakarta Sans ExtraBold'), url('https://fonts.gstatic.com/s/plusjakartasans/v8/LDIbaomQNQcsA88MACc2WPK33C2z.woff2') format('woff2');
+            src: local('Plus Jakarta Sans ExtraBold'), local('Plus Jakarta Sans');
             font-weight: 800;
             font-display: swap;
           }
           @font-face {
             font-family: 'PlusJakartaSans_700Bold';
-            src: local('Plus Jakarta Sans Bold'), url('https://fonts.gstatic.com/s/plusjakartasans/v8/LDIbaomQNQcsA88MACc2WPK33C2z.woff2') format('woff2');
+            src: local('Plus Jakarta Sans Bold'), local('Plus Jakarta Sans');
             font-weight: 700;
             font-display: swap;
           }
           @font-face {
             font-family: 'PlusJakartaSans_600SemiBold';
-            src: local('Plus Jakarta Sans SemiBold'), url('https://fonts.gstatic.com/s/plusjakartasans/v8/LDIbaomQNQcsA88MACc2WPK33C2z.woff2') format('woff2');
+            src: local('Plus Jakarta Sans SemiBold'), local('Plus Jakarta Sans');
             font-weight: 600;
             font-display: swap;
           }
           @font-face {
             font-family: 'PlusJakartaSans_500Medium';
-            src: local('Plus Jakarta Sans Medium'), url('https://fonts.gstatic.com/s/plusjakartasans/v8/LDIbaomQNQcsA88MACc2WPK33C2z.woff2') format('woff2');
+            src: local('Plus Jakarta Sans Medium'), local('Plus Jakarta Sans');
             font-weight: 500;
             font-display: swap;
           }
           @font-face {
             font-family: 'PlusJakartaSans_400Regular';
-            src: local('Plus Jakarta Sans Regular'), url('https://fonts.gstatic.com/s/plusjakartasans/v8/LDIbaomQNQcsA88MACc2WPK33C2z.woff2') format('woff2');
+            src: local('Plus Jakarta Sans Regular'), local('Plus Jakarta Sans');
             font-weight: 400;
             font-display: swap;
           }
 
-          /* Tipografia do Google Stitch: Fé em Constância (Manrope) */
+          /* Aliases para compatibilidade total com Manrope */
           @font-face {
             font-family: 'Manrope_700Bold';
-            src: local('Manrope Bold'), url('https://fonts.gstatic.com/s/manrope/v15/xn7_YHE41ni1AdIRqAuZuw1Bx9mbZk79FN_C-b0.woff2') format('woff2');
+            src: local('Manrope Bold'), local('Manrope');
             font-weight: 700;
             font-display: swap;
           }
           @font-face {
             font-family: 'Manrope_600SemiBold';
-            src: local('Manrope SemiBold'), url('https://fonts.gstatic.com/s/manrope/v15/xn7_YHE41ni1AdIRqAuZuw1Bx9mbZk79FN_C-b0.woff2') format('woff2');
+            src: local('Manrope SemiBold'), local('Manrope');
             font-weight: 600;
             font-display: swap;
           }
           @font-face {
             font-family: 'Manrope_500Medium';
-            src: local('Manrope Medium'), url('https://fonts.gstatic.com/s/manrope/v15/xn7_YHE41ni1AdIRqAuZuw1Bx9mbZk79FN_C-b0.woff2') format('woff2');
+            src: local('Manrope Medium'), local('Manrope');
             font-weight: 500;
             font-display: swap;
           }
           @font-face {
             font-family: 'Manrope_400Regular';
-            src: local('Manrope Regular'), url('https://fonts.gstatic.com/s/manrope/v15/xn7_YHE41ni1AdIRqAuZuw1Bx9mbZk79FN_C-b0.woff2') format('woff2');
-            font-weight: 400;
-            font-display: swap;
-          }
-
-          /* Retrocompatibilidade com Outfit & Inter */
-          @font-face {
-            font-family: 'Outfit_700Bold';
-            src: local('Outfit Bold'), local('Outfit-Bold'), url('https://fonts.gstatic.com/s/outfit/v11/QxbgTeY83dFLTWqj2PYnvnEKbzg.woff2') format('woff2');
-            font-weight: 700;
-            font-display: swap;
-          }
-          @font-face {
-            font-family: 'Outfit_600SemiBold';
-            src: local('Outfit SemiBold'), local('Outfit-SemiBold'), url('https://fonts.gstatic.com/s/outfit/v11/QxbgTeY83dFLTWqj2PYnvnEKbzg.woff2') format('woff2');
-            font-weight: 600;
-            font-display: swap;
-          }
-          @font-face {
-            font-family: 'Outfit_500Medium';
-            src: local('Outfit Medium'), local('Outfit-Medium'), url('https://fonts.gstatic.com/s/outfit/v11/QxbgTeY83dFLTWqj2PYnvnEKbzg.woff2') format('woff2');
-            font-weight: 500;
-            font-display: swap;
-          }
-          @font-face {
-            font-family: 'Inter_700Bold';
-            src: local('Inter Bold'), local('Inter-Bold'), url('https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuFuYAZ9hiA.woff2') format('woff2');
-            font-weight: 700;
-            font-display: swap;
-          }
-          @font-face {
-            font-family: 'Inter_600SemiBold';
-            src: local('Inter SemiBold'), local('Inter-SemiBold'), url('https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuGKYAZ9hiA.woff2') format('woff2');
-            font-weight: 600;
-            font-display: swap;
-          }
-          @font-face {
-            font-family: 'Inter_500Medium';
-            src: local('Inter Medium'), local('Inter-Medium'), url('https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuI6fAZ9hiA.woff2') format('woff2');
-            font-weight: 500;
-            font-display: swap;
-          }
-          @font-face {
-            font-family: 'Inter_400Regular';
-            src: local('Inter Regular'), local('Inter-Regular'), url('https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyfAZ9hiA.woff2') format('woff2');
+            src: local('Manrope Regular'), local('Manrope');
             font-weight: 400;
             font-display: swap;
           }
 
           body, html, #root {
-            font-family: 'Manrope', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
           }

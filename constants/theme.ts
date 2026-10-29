@@ -84,20 +84,56 @@ export const BORDER_RADIUS = {
   full: 9999,   // Pílulas, avatares
 };
 
-// Tipografia — Plus Jakarta Sans (headings) + Manrope (corpo/labels) [Design Google Stitch]
+import { Platform } from 'react-native';
+
+// Tipografia — Plus Jakarta Sans (Headlines) + Manrope (Body / Labels) [Design System Stitch]
 export const FONTS = {
   family: {
-    heading: 'PlusJakartaSans_700Bold',
-    headingSemibold: 'PlusJakartaSans_600SemiBold',
-    headingMedium: 'PlusJakartaSans_600SemiBold',
-    headingExtraBold: 'PlusJakartaSans_800ExtraBold',
-    body: 'Manrope_400Regular',
-    bodyMedium: 'Manrope_500Medium',
-    bodySemibold: 'Manrope_600SemiBold',
-    bodyBold: 'Manrope_700Bold',
-    // Fallbacks retrocompatíveis
-    outfitHeading: 'Outfit_700Bold',
-    interBody: 'Inter_400Regular',
+    heading: Platform.select({
+      web: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      default: 'PlusJakartaSans_700Bold',
+    }) as string,
+    headingSemibold: Platform.select({
+      web: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      default: 'PlusJakartaSans_600SemiBold',
+    }) as string,
+    headingMedium: Platform.select({
+      web: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      default: 'PlusJakartaSans_500Medium',
+    }) as string,
+    headingExtraBold: Platform.select({
+      web: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      default: 'PlusJakartaSans_800ExtraBold',
+    }) as string,
+    body: Platform.select({
+      web: "'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      default: 'Manrope_400Regular',
+    }) as string,
+    bodyMedium: Platform.select({
+      web: "'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      default: 'Manrope_500Medium',
+    }) as string,
+    bodySemibold: Platform.select({
+      web: "'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      default: 'Manrope_600SemiBold',
+    }) as string,
+    bodyBold: Platform.select({
+      web: "'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      default: 'Manrope_700Bold',
+    }) as string,
+    label: Platform.select({
+      web: "'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      default: 'Manrope_500Medium',
+    }) as string,
+    // Retrocompatíveis mapeados para a nova especificação
+    outfitHeading: Platform.select({
+      web: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      default: 'PlusJakartaSans_700Bold',
+    }) as string,
+    interBody: Platform.select({
+      web: "'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      default: 'Manrope_400Regular',
+    }) as string,
   },
   size: {
     xs: 11,
