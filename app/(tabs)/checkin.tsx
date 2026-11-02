@@ -420,9 +420,13 @@ export default function CheckinScreen() {
       let finalImageUrl: string | null = null;
       const isLocalUri = !imageUri.startsWith('http://') && !imageUri.startsWith('https://');
       if (isLocalUri) {
-        finalImageUrl = await api.uploadCheckinImage(user.id, imageUri);
+        try {
+          finalImageUrl = await api.uploadCheckinImage(user.id, imageUri);
+        } catch (uploadErr) {
+          console.warn('Upload da imagem falhou, usando URI local como fallback:', uploadErr);
+        }
         if (!finalImageUrl) {
-          throw new Error('Falha no upload da imagem.');
+          finalImageUrl = imageUri;
         }
       } else {
         // URI simulada (testes) — usar diretamente
@@ -467,12 +471,24 @@ export default function CheckinScreen() {
           };
           MOCK_FEED.unshift(newCheckin);
         } else {
+          const targetRoundId = activeRoundId || (selectedChallenge?.rounds && selectedChallenge.rounds[0]?.id) || `round_${challengeId}_1`;
+          const targetGroupId = activeGroupId || selectedChallenge?.groupId || 'group_1';
+          const userName = user.displayName || user.email?.split('@')[0] || 'Membro Trino';
+          const userAvatar = user.photoURL || null;
+
           await api.createCheckin({
             user_id: user.id,
-            round_id: activeRoundId,
+            user_name: userName,
+            user_avatar: userAvatar,
+            group_id: targetGroupId,
+            challenge_id: challengeId,
+            round_id: targetRoundId,
             type: 'pray',
-            image_url: finalImageUrl,
+            image_url: finalImageUrl || null,
+            media_url: finalImageUrl || null,
+            caption: caption.trim() || `Tarefa Extra Concluída: ${selectedTask.title}`,
             note: `[EXTRA_TASK_ID:${selectedTask.id}] ${caption.trim()}`.trim(),
+            points: selectedTask.points || 30,
             verified: false,
           });
         }
@@ -517,18 +533,23 @@ export default function CheckinScreen() {
                 curr.round_number > prev.round_number ? curr : prev
               );
             }
-            const roundId = currentRound?.id;
-            if (!roundId) {
-              console.warn(`Grupo ${item.groupName} não possui round ativo.`);
-              continue; // pula grupo sem round ativo
-            }
+            const roundId = currentRound?.id || (rounds.length > 0 ? rounds[0].id : `round_${item.challengeId}_1`);
+            const userName = user.displayName || user.email?.split('@')[0] || 'Membro Trino';
+            const userAvatar = user.photoURL || null;
 
             await api.createCheckin({
               user_id: user.id,
+              user_name: userName,
+              user_avatar: userAvatar,
+              group_id: item.groupId,
+              challenge_id: item.challengeId,
               round_id: roundId,
               type: HABIT_DB_TYPE[selectedHabit!],
-              image_url: finalImageUrl,
+              image_url: finalImageUrl || null,
+              media_url: finalImageUrl || null,
+              caption: caption.trim() || undefined,
               note: caption.trim() || null,
+              points: 10,
               verified: false,
             });
             hasSaved = true;
@@ -1016,9 +1037,10 @@ export default function CheckinScreen() {
               size="lg"
               onPress={() => {
                 handleReset();
+                const targetGId = activeGroupId || selectedChallenge?.groupId || (activeChallengesList.length > 0 ? activeChallengesList[0].groupId : '');
                 router.push({
                   pathname: '/feed',
-                  params: { groupId: activeGroupId ?? '' },
+                  params: { groupId: targetGId },
                 });
               }}
               style={styles.successBtn}

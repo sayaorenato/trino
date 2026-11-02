@@ -157,7 +157,12 @@ export default function DashboardScreen() {
     }
     
     const roundIds = (challenge.rounds || []).map((r: any) => r.id);
-    return todayCheckins.some((c: any) => c.type === dbType && roundIds.includes(c.round_id));
+    return todayCheckins.some((c: any) => {
+      const typeMatches = c.type === dbType || c.habit_type === type;
+      if (!typeMatches) return false;
+      const challengeMatches = c.challenge_id === challenge.id || c.group_id === item.groupId || (roundIds.length > 0 && roundIds.includes(c.round_id));
+      return challengeMatches;
+    });
   };
 
   // Helper para obter tarefas extras ativas de um desafio

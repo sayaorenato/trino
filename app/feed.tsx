@@ -42,8 +42,11 @@ interface RealCheckin {
   user_id: string;
   round_id: string;
   type: HabitType;
+  habit_type?: string;
   image_url: string | null;
+  media_url?: string | null;
   note: string | null;
+  caption?: string | null;
   verified: boolean;
   created_at: string;
   profiles: Profile | null;
@@ -73,10 +76,12 @@ interface CommentItem {
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
-const HABIT_META: Record<HabitType, { title: string; icon: string; color: string }> = {
-  bible:   { title: 'Bíblia',    icon: 'book-open-variant', color: COLORS.primaryLight },
-  pray:    { title: 'Oração',    icon: 'hands-pray',        color: COLORS.gold },
-  workout: { title: 'Exercício', icon: 'dumbbell',          color: COLORS.secondary },
+const HABIT_META: Record<string, { title: string; icon: string; color: string }> = {
+  bible:    { title: 'Bíblia',    icon: 'book-open-variant', color: COLORS.primaryLight },
+  pray:     { title: 'Oração',    icon: 'hands-pray',        color: COLORS.gold },
+  prayer:   { title: 'Oração',    icon: 'hands-pray',        color: COLORS.gold },
+  workout:  { title: 'Exercício', icon: 'dumbbell',          color: COLORS.secondary },
+  exercise: { title: 'Exercício', icon: 'dumbbell',          color: COLORS.secondary },
 };
 
 const FB_REACTIONS = [
@@ -119,8 +124,20 @@ export default function FeedScreen() {
 
   // ── Busca inicial / refresh ──
   const fetchFeed = useCallback(async (isRefresh = false) => {
-    if (!groupId) {
-      setError('Nenhum grupo selecionado.');
+    let targetGroupId = groupId;
+    if (!targetGroupId && user) {
+      try {
+        const userGroups = await api.getUserGroups(user.id);
+        if (userGroups && userGroups.length > 0) {
+          targetGroupId = userGroups[0].id;
+        }
+      } catch (err) {
+        console.warn('Erro ao buscar grupos do usuário no feed:', err);
+      }
+    }
+
+    if (!targetGroupId) {
+      setError('Nenhum grupo encontrado.');
       setLoading(false);
       return;
     }
@@ -130,7 +147,7 @@ export default function FeedScreen() {
     setError(null);
 
     try {
-      const isMock = groupId.startsWith('group');
+      const isMock = targetGroupId.startsWith('group');
       
       // Buscar tarefas extras do grupo para mapear seus títulos
       const tempTasksMap: Record<string, string> = {};
@@ -141,7 +158,7 @@ export default function FeedScreen() {
         });
       } else {
         try {
-          const challenges = await api.getGroupChallenges(groupId);
+          const challenges = await api.getGroupChallenges(targetGroupId);
           const challengeIds = challenges.map((c: any) => c.id);
 
           if (challengeIds.length > 0) {
@@ -166,7 +183,7 @@ export default function FeedScreen() {
       }
       setExtraTasksMap(tempTasksMap);
 
-      const data = await api.getGroupFeed(groupId, PAGE_SIZE, 0);
+      const data = await api.getGroupFeed(targetGroupId, PAGE_SIZE, 0);
 
       const mapped: FeedItem[] = data.map((item: any) => ({
         ...item,
@@ -322,7 +339,8 @@ export default function FeedScreen() {
       };
     }
 
-    const habit = HABIT_META[item.type] ?? HABIT_META.bible;
+    const habitKey = item.type || item.habit_type || 'bible';
+    const habit = HABIT_META[habitKey] ?? HABIT_META.bible;
     return {
       title: habit.title,
       icon: habit.icon,
@@ -648,16 +666,17 @@ export default function FeedScreen() {
 
         {/* Nota / Legenda */}
         {(() => {
-          const cleanNote = getCleanNote(item.note);
+          const rawText = item.caption || item.note;
+          const cleanNote = getCleanNote(rawText);
           return cleanNote ? (
             <Text style={styles.postCaption}>{cleanNote}</Text>
           ) : null;
         })()}
 
         {/* Imagem do Check-in */}
-        {item.image_url ? (
+        {(item.media_url || item.image_url) ? (
           <View style={styles.postImageContainer}>
-            <Image source={{ uri: item.image_url }} style={styles.postImage} />
+            <Image source={{ uri: (item.media_url || item.image_url) as string }} style={styles.postImage} />
           </View>
         ) : null}
 

@@ -662,12 +662,26 @@ export const api = {
     try {
       const cQ = query(
         collection(db, 'checkins'),
-        where('user_id', '==', userId),
-        where('created_at', '>=', today.toISOString())
+        where('user_id', '==', userId)
       );
       const cSnap = await getDocs(cQ);
-      todayCheckins = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } catch {}
+      const allCheckins = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const todayIso = today.toISOString();
+      const todayDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+      todayCheckins = allCheckins.filter((c: any) => {
+        if (!c.created_at) return false;
+        try {
+          const d = new Date(c.created_at);
+          const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          return dStr === todayDateStr || c.created_at >= todayIso;
+        } catch {
+          return c.created_at >= todayIso;
+        }
+      });
+    } catch (err) {
+      console.warn('Erro ao buscar checkins de hoje:', err);
+    }
 
     let dbTasks: any[] = [];
     if (allChallengeIds.length > 0) {
@@ -809,11 +823,23 @@ export const api = {
     try {
       const q = query(
         collection(db, 'checkins'),
-        where('user_id', '==', userId),
-        where('created_at', '>=', today.toISOString())
+        where('user_id', '==', userId)
       );
       const snap = await getDocs(q);
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const todayIso = today.toISOString();
+      const todayDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+      return all.filter((c: any) => {
+        if (!c.created_at) return false;
+        try {
+          const d = new Date(c.created_at);
+          const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          return dStr === todayDateStr || c.created_at >= todayIso;
+        } catch {
+          return c.created_at >= todayIso;
+        }
+      });
     } catch {
       return [];
     }
@@ -858,40 +884,90 @@ export const api = {
           where('group_id', '==', groupId)
         );
         snap = await getDocs(q);
+
+        // Se ainda não encontrou por group_id, tenta também pelos IDs de desafio do grupo
+        if (snap.empty) {
+          const challenges = await this.getGroupChallenges(groupId);
+          const cIds = challenges.map((c: any) => c.id).filter(Boolean);
+          if (cIds.length > 0) {
+            const cq = query(
+              collection(db, 'checkins'),
+              where('challenge_id', 'in', cIds.slice(0, 10))
+            );
+            snap = await getDocs(cq);
+          }
+        }
+
+        if (!snap.empty) {
+          const list = snap.docs.map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              ...data,
+              media_url: data.media_url || data.image_url || null,
+              caption: data.caption || data.note || null,
+              habit_type: data.type === 'pray' ? 'prayer' : (data.type === 'workout' ? 'exercise' : (data.type || 'bible')),
+              profiles: {
+                id: data.user_id,
+                full_name: data.user_name || 'Membro Trino',
+                avatar_url: data.user_avatar || null
+              },
+              reactions: data.reactions || [],
+              comments_count: data.comments_count || 0
+            };
+          });
+          list.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+          return list.slice(offset, offset + limitCount);
+        } else {
+          return [];
+        }
       } else {
         const q = query(
           collection(db, 'checkins'),
-          orderBy('created_at', 'desc'),
           limit(limitCount)
         );
         snap = await getDocs(q);
+        if (!snap.empty) {
+          const list = snap.docs.map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              ...data,
+              media_url: data.media_url || data.image_url || null,
+              caption: data.caption || data.note || null,
+              habit_type: data.type === 'pray' ? 'prayer' : (data.type === 'workout' ? 'exercise' : (data.type || 'bible')),
+              profiles: {
+                id: data.user_id,
+                full_name: data.user_name || 'Membro Trino',
+                avatar_url: data.user_avatar || null
+              },
+              reactions: data.reactions || [],
+              comments_count: data.comments_count || 0
+            };
+          });
+          list.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+          return list.slice(offset, offset + limitCount);
+        }
       }
-      if (!snap.empty) {
-        const list = snap.docs.map(d => ({
-          id: d.id,
-          ...d.data(),
-          profiles: {
-            id: d.data().user_id,
-            full_name: d.data().user_name || 'Membro Trino',
-            avatar_url: d.data().user_avatar || null
-          },
-          reactions: d.data().reactions || [],
-          comments_count: d.data().comments_count || 0
-        }));
-        list.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-        return list.slice(offset, offset + limitCount);
-      }
-    } catch {}
+    } catch (err) {
+      console.warn('Erro ao buscar feed do grupo:', err);
+    }
 
     const { MOCK_FEED } = require('../constants/mock-data');
     return MOCK_FEED || [];
   },
 
   async createCheckin(checkinData: any) {
-    const payload = {
-      ...checkinData,
-      created_at: new Date().toISOString()
+    const payload: any = {
+      created_at: new Date().toISOString(),
+      reactions: [],
+      comments_count: 0
     };
+    Object.keys(checkinData).forEach(key => {
+      if (checkinData[key] !== undefined) {
+        payload[key] = checkinData[key];
+      }
+    });
     const docRef = await addDoc(collection(db, 'checkins'), payload);
     return { id: docRef.id, ...payload };
   },

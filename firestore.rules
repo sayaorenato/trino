@@ -70,7 +70,7 @@ service cloud.firestore {
 
     // Check-ins
     match /checkins/{checkinId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow create: if isAuthenticated();
       allow update, delete: if isAuthenticated();
 

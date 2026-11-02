@@ -341,7 +341,7 @@ export default function ChallengeScreen() {
                   }
 
                   let completedMap: Record<string, string[]> = {};
-                  if (roundId) {
+                  if (user) {
                     const uCheckins = await api.getUserCheckins(user.id);
                     (uCheckins || []).forEach((c: any) => {
                       if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
