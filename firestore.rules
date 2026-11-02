@@ -29,6 +29,16 @@ service cloud.firestore {
       allow write: if isAuthenticated();
     }
 
+    // Solicitações de participação em desafios
+    match /challenge_requests/{requestId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Participantes de desafios (ranking/acesso)
+    match /challenge_participants/{participantId} {
+      allow read, write: if isAuthenticated();
+    }
+
     // Grupos
     match /groups/{groupId} {
       allow read: if isAuthenticated();

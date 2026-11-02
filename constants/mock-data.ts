@@ -21,6 +21,15 @@ export interface Group {
 export let USER_MOCK_GROUPS: any[] = [];
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { 
+  collection, 
+  getDocs, 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  writeBatch 
+} from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 export interface ChallengeRequest {
   id: string;
@@ -36,6 +45,34 @@ export interface ChallengeRequest {
 export let CHALLENGE_REQUESTS: ChallengeRequest[] = [];
 
 export async function getMockRankings(): Promise<Record<string, RankingMember[]>> {
+  try {
+    // 1. Sincronizar com Firestore se houver participantes salvos
+    const snap = await getDocs(collection(db, 'challenge_participants'));
+    if (!snap.empty) {
+      snap.docs.forEach(d => {
+        const p = d.data();
+        if (p.challenge_id && p.user_id) {
+          if (!MOCK_RANKINGS[p.challenge_id]) {
+            MOCK_RANKINGS[p.challenge_id] = [];
+          }
+          const already = MOCK_RANKINGS[p.challenge_id].some(m => m.user_id === p.user_id);
+          if (!already) {
+            MOCK_RANKINGS[p.challenge_id].push({
+              user_id: p.user_id,
+              name: p.user_name || p.name || 'Participante',
+              avatar_url: p.user_avatar || p.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+              points: p.points || 0,
+              streak: p.streak || 0,
+              rounds_won: p.rounds_won || 0
+            });
+          }
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('Erro ao ler challenge_participants no Firestore:', e);
+  }
+
   try {
     const data = await AsyncStorage.getItem('TRINO_MOCK_RANKINGS');
     if (data) {
@@ -56,6 +93,33 @@ export async function saveMockRankings(): Promise<void> {
   } catch (e) {
     console.error('Erro ao salvar mock rankings:', e);
   }
+
+  try {
+    const batch = writeBatch(db);
+    for (const [challengeId, members] of Object.entries(MOCK_RANKINGS)) {
+      if (Array.isArray(members)) {
+        for (const m of members) {
+          const docId = `${challengeId}_${m.user_id}`;
+          const docRef = doc(db, 'challenge_participants', docId);
+          batch.set(docRef, {
+            id: docId,
+            challenge_id: challengeId,
+            user_id: m.user_id,
+            user_name: m.name,
+            user_avatar: m.avatar_url || null,
+            points: m.points || 0,
+            streak: m.streak || 0,
+            rounds_won: m.rounds_won || 0,
+            role: 'member',
+            updated_at: new Date().toISOString()
+          }, { merge: true });
+        }
+      }
+    }
+    await batch.commit();
+  } catch (fsErr) {
+    console.warn('Erro ao salvar challenge_participants no Firestore:', fsErr);
+  }
 }
 
 export async function removeRankingMember(challengeId: string, userId: string): Promise<void> {
@@ -63,9 +127,30 @@ export async function removeRankingMember(challengeId: string, userId: string): 
     MOCK_RANKINGS[challengeId] = MOCK_RANKINGS[challengeId].filter(m => m.user_id !== userId);
     await saveMockRankings();
   }
+  try {
+    await deleteDoc(doc(db, 'challenge_participants', `${challengeId}_${userId}`));
+  } catch {}
 }
 
 export async function getChallengeRequests(): Promise<ChallengeRequest[]> {
+  try {
+    // 1. Tentar ler do Firestore primeiro (banco compartilhado em nuvem)
+    const snap = await getDocs(collection(db, 'challenge_requests'));
+    if (!snap.empty) {
+      const fsReqs = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      })) as ChallengeRequest[];
+      
+      CHALLENGE_REQUESTS = fsReqs;
+      await AsyncStorage.setItem('TRINO_CHALLENGE_REQUESTS', JSON.stringify(fsReqs));
+      return fsReqs;
+    }
+  } catch (err) {
+    console.warn('Erro ao ler challenge_requests do Firestore:', err);
+  }
+
+  // Fallback para AsyncStorage / local
   try {
     const data = await AsyncStorage.getItem('TRINO_CHALLENGE_REQUESTS');
     const reqs = data ? JSON.parse(data) : [];
@@ -73,16 +158,38 @@ export async function getChallengeRequests(): Promise<ChallengeRequest[]> {
     return reqs;
   } catch (e) {
     console.error('Erro ao ler mock data do AsyncStorage:', e);
-    return [];
+    return CHALLENGE_REQUESTS || [];
   }
 }
 
 export async function saveChallengeRequests(requests: ChallengeRequest[]): Promise<void> {
+  CHALLENGE_REQUESTS = requests;
   try {
-    CHALLENGE_REQUESTS = requests;
     await AsyncStorage.setItem('TRINO_CHALLENGE_REQUESTS', JSON.stringify(requests));
   } catch (e) {
     console.error('Erro ao salvar mock data no AsyncStorage:', e);
+  }
+
+  // Sincronizar no Firestore
+  try {
+    const batch = writeBatch(db);
+    for (const req of requests) {
+      const docRef = doc(db, 'challenge_requests', req.id);
+      batch.set(docRef, {
+        id: req.id,
+        challenge_id: req.challenge_id,
+        challenge_name: req.challenge_name || 'Desafio',
+        group_id: req.group_id,
+        user_id: req.user_id,
+        user_name: req.user_name || 'Membro',
+        user_avatar: req.user_avatar || null,
+        status: req.status || 'pending',
+        updated_at: new Date().toISOString()
+      }, { merge: true });
+    }
+    await batch.commit();
+  } catch (fsErr) {
+    console.warn('Erro ao persistir challenge_requests no Firestore:', fsErr);
   }
 }
 

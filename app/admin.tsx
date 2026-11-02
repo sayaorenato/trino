@@ -1142,7 +1142,7 @@ export default function AdminScreen() {
                   key: 'approvals', 
                   label: 'Aprovações', 
                   icon: 'clipboard-check-outline',
-                  badgeCount: challengeRequests.filter((r: any) => r.group_id === selectedGroupId && r.status === 'pending').length
+                  badgeCount: challengeRequests.filter((r: any) => (r.group_id === selectedGroupId || challenges.some(c => c.id === r.challenge_id)) && r.status === 'pending').length
                 },
               ].map(item => {
                 const isActive = activeTab === item.key;
@@ -1538,7 +1538,7 @@ export default function AdminScreen() {
               {/* ABA: GERENCIAR SOLICITAÇÕES DE LIBERAÇÃO (APROVAÇÕES) */}
               {activeTab === 'approvals' && (() => {
                 const pendingRequests = challengeRequests.filter(
-                  r => r.group_id === selectedGroupId && r.status === 'pending'
+                  r => (r.group_id === selectedGroupId || challenges.some(c => c.id === r.challenge_id)) && r.status === 'pending'
                 );
                 return (
                   <View style={styles.listSection}>

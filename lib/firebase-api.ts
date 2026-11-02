@@ -1096,5 +1096,95 @@ export const api = {
     } catch (err) {
       console.warn('Erro ao salvar tema no Firestore:', err);
     }
+  },
+
+  async getChallengeRequests(groupId?: string): Promise<any[]> {
+    try {
+      let q = query(collection(db, 'challenge_requests'));
+      if (groupId) {
+        q = query(collection(db, 'challenge_requests'), where('group_id', '==', groupId));
+      }
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      console.warn('Erro ao buscar challenge_requests:', e);
+      return [];
+    }
+  },
+
+  async createChallengeRequest(data: {
+    challenge_id: string;
+    challenge_name: string;
+    group_id: string;
+    user_id: string;
+    user_name: string;
+    user_avatar?: string | null;
+  }) {
+    const docId = `req_${Date.now()}`;
+    const payload = {
+      id: docId,
+      challenge_id: data.challenge_id,
+      challenge_name: data.challenge_name,
+      group_id: data.group_id,
+      user_id: data.user_id,
+      user_name: data.user_name,
+      user_avatar: data.user_avatar || null,
+      status: 'pending',
+      created_at: new Date().toISOString()
+    };
+    try {
+      await setDoc(doc(db, 'challenge_requests', docId), payload);
+    } catch (e) {
+      console.warn('Erro ao criar challenge_request:', e);
+    }
+    return payload;
+  },
+
+  async respondToChallengeRequest(requestId: string, approve: boolean) {
+    const newStatus = approve ? 'approved' : 'declined';
+    try {
+      const reqRef = doc(db, 'challenge_requests', requestId);
+      await updateDoc(reqRef, {
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      });
+
+      if (approve) {
+        const snap = await getDoc(reqRef);
+        if (snap.exists()) {
+          const reqData = snap.data();
+          const partId = `${reqData.challenge_id}_${reqData.user_id}`;
+          await setDoc(doc(db, 'challenge_participants', partId), {
+            id: partId,
+            challenge_id: reqData.challenge_id,
+            group_id: reqData.group_id,
+            user_id: reqData.user_id,
+            user_name: reqData.user_name,
+            user_avatar: reqData.user_avatar || null,
+            role: 'member',
+            joined_at: new Date().toISOString(),
+            points: 0,
+            streak: 0
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao responder challenge_request:', e);
+    }
+  },
+
+  async getChallengeParticipants(challengeId: string): Promise<any[]> {
+    if (!challengeId) return [];
+    try {
+      const q = query(
+        collection(db, 'challenge_participants'),
+        where('challenge_id', '==', challengeId)
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch (e) {
+      console.warn('Erro ao buscar challenge_participants:', e);
+      return [];
+    }
   }
 };

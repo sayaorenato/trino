@@ -207,6 +207,20 @@ export default function ChallengeScreen() {
             restrictedTargetGroup = MOCK_GROUPS.find(g => g.id === restrictedTargetChallenge.group_id);
           }
 
+          if (!restrictedTargetChallenge) {
+            try {
+              const realChal = await api.getChallengeById(targetChallengeId);
+              if (realChal) {
+                restrictedTargetChallenge = realChal;
+                if (realChal.group_id) {
+                  restrictedTargetGroup = await api.getGroupById(realChal.group_id);
+                }
+              }
+            } catch (fetchErr) {
+              console.warn('Erro ao carregar desafio restrito:', fetchErr);
+            }
+          }
+
           setRestrictedChallengeInfo({
             challengeId: targetChallengeId,
             challengeTitle: restrictedTargetChallenge?.title || restrictedTargetChallenge?.name || 'Desafio',
