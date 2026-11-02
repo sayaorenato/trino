@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -47,6 +47,15 @@ export default function DashboardScreen() {
   const [streakCount, setStreakCount] = useState<number>(profile?.streak_count || 0);
   const [loading, setLoading] = useState(true);
   const [inviteCode, setInviteCode] = useState('');
+  const [challengeRequests, setChallengeRequests] = useState<any[]>([]);
+
+  // Pedidos pendentes de aprovação para grupos onde o usuário é admin
+  const adminPendingRequests = useMemo(() => {
+    const adminGroups = groups.filter((g: any) => g.role === 'admin');
+    return challengeRequests.filter((r: any) => 
+      r.status === 'pending' && adminGroups.some((g: any) => g.id === r.group_id)
+    );
+  }, [groups, challengeRequests]);
 
 
 
@@ -456,7 +465,8 @@ export default function DashboardScreen() {
 
       const loadAllData = async () => {
         await getMockRankings();
-        await getChallengeRequests();
+        const reqs = await getChallengeRequests();
+        setChallengeRequests(reqs);
 
         api.getDashboardData(user.id).then((data) => {
           setGroups(data.groups);
@@ -541,6 +551,47 @@ export default function DashboardScreen() {
 
 
           <Animated.View style={{ opacity: contentFade, transform: [{ translateY: contentSlide }] }}>
+            {/* Alerta de Pedido Pendente para o Admin */}
+            {adminPendingRequests.length > 0 && (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => router.push({ pathname: '/admin', params: { tab: 'approvals', groupId: adminPendingRequests[0].group_id } })}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: 'rgba(174, 143, 100, 0.12)',
+                  borderWidth: 1.5,
+                  borderColor: COLORS.secondary,
+                  borderRadius: BORDER_RADIUS.md,
+                  padding: SPACING.md,
+                  marginBottom: SPACING.md,
+                }}
+              >
+                <View style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  backgroundColor: COLORS.secondary,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <MaterialCommunityIcons name="clipboard-alert-outline" size={24} color="#fff" />
+                </View>
+                <View style={{ flex: 1, marginLeft: SPACING.sm }}>
+                  <Text style={{ fontFamily: FONTS.family.heading, fontSize: FONTS.size.sm, fontWeight: 'bold', color: COLORS.primary }}>
+                    Aprovação Pendente ({adminPendingRequests.length})
+                  </Text>
+                  <Text style={{ fontFamily: FONTS.family.body, fontSize: FONTS.size.xs, color: COLORS.textSecondary, marginTop: 2 }}>
+                    <Text style={{ fontWeight: 'bold' }}>{adminPendingRequests[0].user_name}</Text> solicitou entrada no desafio "{adminPendingRequests[0].challenge_name}".
+                  </Text>
+                  <Text style={{ fontFamily: FONTS.family.body, fontSize: 11, color: COLORS.secondary, fontWeight: 'bold', marginTop: 2 }}>
+                    Toque para revisar e aprovar →
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={22} color={COLORS.secondary} />
+              </TouchableOpacity>
+            )}
+
             {/* Summary stats */}
             <View style={styles.summaryRow}>
               {[

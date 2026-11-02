@@ -15,11 +15,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { Avatar } from '../components/ui/Avatar';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { WebContainer } from '../components/ui/WebContainer';
 import { useAuth } from '../context/auth';
 import { api } from '../lib/api';
-import { MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest, getMockRankings } from '../constants/mock-data';
+import { MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest, getMockRankings, saveMockRankings } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 interface GroupMember {
@@ -192,6 +193,49 @@ export default function GroupDashboardScreen() {
     setRequestTrigger(prev => prev + 1);
   };
 
+  const handleApproveChallengeRequest = async (requestId: string, approve: boolean) => {
+    const targetRequest = challengeRequests.find((r: any) => r.id === requestId);
+    if (!targetRequest) return;
+
+    const newStatus = approve ? 'approved' : 'declined';
+    const updatedRequests = challengeRequests.map((r: any) => {
+      if (r.id === requestId) {
+        return { ...r, status: newStatus };
+      }
+      return r;
+    });
+
+    if (approve) {
+      if (!MOCK_RANKINGS[targetRequest.challenge_id]) {
+        MOCK_RANKINGS[targetRequest.challenge_id] = [];
+      }
+      const alreadyInRank = MOCK_RANKINGS[targetRequest.challenge_id].some(m => m.user_id === targetRequest.user_id);
+      if (!alreadyInRank) {
+        MOCK_RANKINGS[targetRequest.challenge_id].push({
+          user_id: targetRequest.user_id,
+          name: targetRequest.user_name,
+          avatar_url: targetRequest.user_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+          points: 0,
+          streak: 0,
+          rounds_won: 0
+        });
+      }
+      showAlert('Sucesso', `Solicitação de ${targetRequest.user_name} aprovada! Ele agora participa do desafio.`);
+    } else {
+      showAlert('Sucesso', `Solicitação de ${targetRequest.user_name} recusada.`);
+    }
+
+    setChallengeRequests(updatedRequests);
+    await saveChallengeRequests(updatedRequests);
+    await saveMockRankings();
+    try {
+      await api.respondToChallengeRequest(requestId, approve);
+    } catch (e) {
+      console.warn('Erro ao atualizar respondToChallengeRequest:', e);
+    }
+    setRequestTrigger(prev => prev + 1);
+  };
+
   return (
     <WebContainer>
       <SafeAreaView style={styles.container}>
@@ -223,38 +267,93 @@ export default function GroupDashboardScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Alerta de solicitações pendentes para o Admin */}
           {(() => {
-            const pendingRequestsCount = challengeRequests.filter(
-              (r: any) => r.group_id === group.id && r.status === 'pending'
-            ).length;
-            if (isAdmin && pendingRequestsCount > 0) {
+            const groupPendingRequests = challengeRequests.filter(
+              (r: any) => (r.group_id === group.id || challenges.some(c => c.id === r.challenge_id)) && r.status === 'pending'
+            );
+            if (isAdmin && groupPendingRequests.length > 0) {
               return (
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => router.push({ pathname: '/admin', params: { groupId: group.id, tab: 'members' } })}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: 'rgba(174, 143, 100, 0.1)',
-                    borderWidth: 1,
-                    borderColor: COLORS.secondary,
-                    borderRadius: BORDER_RADIUS.md,
-                    padding: SPACING.md,
-                    marginHorizontal: SPACING.lg,
-                    marginBottom: SPACING.md,
-                    marginTop: SPACING.sm,
-                  }}
-                >
-                  <MaterialCommunityIcons name="alert-circle-outline" size={24} color={COLORS.secondary} style={{ marginRight: SPACING.sm }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: FONTS.family.heading, fontSize: FONTS.size.sm, color: COLORS.text, fontWeight: 'bold' }}>
-                      Solicitações Pendentes!
-                    </Text>
-                    <Text style={{ fontFamily: FONTS.family.body, fontSize: FONTS.size.xs, color: COLORS.textSecondary }}>
-                      Existem {pendingRequestsCount} participantes aguardando liberação no desafio deste grupo.
-                    </Text>
-                  </View>
-                  <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} />
-                </TouchableOpacity>
+                <View style={{ marginHorizontal: SPACING.lg, marginBottom: SPACING.md, marginTop: SPACING.sm }}>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => router.push({ pathname: '/admin', params: { groupId: group.id, tab: 'approvals' } })}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: 'rgba(174, 143, 100, 0.12)',
+                      borderWidth: 1,
+                      borderColor: COLORS.secondary,
+                      borderRadius: BORDER_RADIUS.md,
+                      padding: SPACING.md,
+                      marginBottom: SPACING.xs,
+                    }}
+                  >
+                    <MaterialCommunityIcons name="alert-circle-outline" size={24} color={COLORS.secondary} style={{ marginRight: SPACING.sm }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontFamily: FONTS.family.heading, fontSize: FONTS.size.sm, color: COLORS.text, fontWeight: 'bold' }}>
+                        Solicitações de Participação ({groupPendingRequests.length})
+                      </Text>
+                      <Text style={{ fontFamily: FONTS.family.body, fontSize: FONTS.size.xs, color: COLORS.textSecondary }}>
+                        Existem participantes aguardando liberação no desafio deste grupo.
+                      </Text>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={COLORS.textLight} />
+                  </TouchableOpacity>
+
+                  {/* Cards de Aprovação Rápida */}
+                  {groupPendingRequests.map((req: any) => (
+                    <Card key={req.id} variant="default" style={{ padding: SPACING.md, marginTop: SPACING.xs }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                          <Avatar source={req.user_avatar || undefined} name={req.user_name} size={38} />
+                          <View style={{ marginLeft: SPACING.sm, flex: 1 }}>
+                            <Text style={{ fontFamily: FONTS.family.heading, fontSize: FONTS.size.sm, color: COLORS.text, fontWeight: 'bold' }} numberOfLines={1}>
+                              {req.user_name}
+                            </Text>
+                            <Text style={{ fontFamily: FONTS.family.body, fontSize: FONTS.size.xs, color: COLORS.textSecondary }} numberOfLines={1}>
+                              {req.challenge_name || 'Desafio do Grupo'}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: SPACING.xs }}>
+                          <TouchableOpacity
+                            onPress={() => handleApproveChallengeRequest(req.id, true)}
+                            style={{
+                              backgroundColor: COLORS.secondary,
+                              paddingVertical: 6,
+                              paddingHorizontal: SPACING.sm,
+                              borderRadius: BORDER_RADIUS.sm,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <MaterialCommunityIcons name="check" size={14} color="#fff" style={{ marginRight: 2 }} />
+                            <Text style={{ color: '#fff', fontSize: FONTS.size.xs, fontFamily: FONTS.family.heading, fontWeight: 'bold' }}>
+                              Aprovar
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handleApproveChallengeRequest(req.id, false)}
+                            style={{
+                              backgroundColor: 'rgba(255, 78, 80, 0.1)',
+                              borderWidth: 1,
+                              borderColor: '#ff4e50',
+                              paddingVertical: 6,
+                              paddingHorizontal: SPACING.sm,
+                              borderRadius: BORDER_RADIUS.sm,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <MaterialCommunityIcons name="close" size={14} color="#ff4e50" style={{ marginRight: 2 }} />
+                            <Text style={{ color: '#ff4e50', fontSize: FONTS.size.xs, fontFamily: FONTS.family.heading, fontWeight: 'bold' }}>
+                              Recusar
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </Card>
+                  ))}
+                </View>
               );
             }
             return null;

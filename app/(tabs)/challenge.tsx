@@ -268,7 +268,8 @@ export default function ChallengeScreen() {
               
               // Buscar role no grupo
               const role = data.group_id ? await api.getUserGroupRole(data.group_id, user.id) : 'member';
-              setUserRole(role || 'member');
+              const isAdminUser = role === 'admin' || data.created_by === user.id;
+              setUserRole(isAdminUser ? 'admin' : 'member');
 
                 // Ordenar rounds
                 const sortedRounds = (data.rounds || []).sort((a: any, b: any) => a.round_number - b.round_number);
@@ -436,6 +437,11 @@ export default function ChallengeScreen() {
     setChallengeRequests(updatedRequests);
     await saveChallengeRequests(updatedRequests);
     await saveMockRankings();
+    try {
+      await api.respondToChallengeRequest(requestId, approve);
+    } catch (e) {
+      console.warn('Erro ao atualizar respondToChallengeRequest:', e);
+    }
 
     // Dispara recálculo do ranking e re-render
     setReqTrigger(prev => prev + 1);

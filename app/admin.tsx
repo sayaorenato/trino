@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Platform
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -62,6 +62,15 @@ export default function AdminScreen() {
   // Abas do painel: 'group' | 'tasks' | 'members' | 'challenges' | 'approvals'
   const [activeTab, setActiveTab] = useState<'group' | 'tasks' | 'members' | 'challenges' | 'approvals'>('group');
 
+  // Solicitações pendentes para este administrador (qualquer um dos seus grupos administrados)
+  const pendingRequestsForAdmin = challengeRequests.filter(r => {
+    if (r.status !== 'pending') return false;
+    if (selectedGroupId && r.group_id === selectedGroupId) return true;
+    if (challenges.some(c => c.id === r.challenge_id)) return true;
+    if (adminGroups.some(g => g.id === r.group_id)) return true;
+    return false;
+  });
+
   // Ajusta a aba padrão ao iniciar se for informada na URL
   useEffect(() => {
     if (tab && ['group', 'tasks', 'members', 'challenges', 'approvals'].includes(tab)) {
@@ -101,62 +110,64 @@ export default function AdminScreen() {
   const [visibleTasksLimit, setVisibleTasksLimit] = useState(3);
 
   // 1. Carregar grupos em que o usuário logado é administrador
-  useEffect(() => {
-    if (!user) return;
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
 
-    const loadAdminGroups = async () => {
-      try {
-        setLoading(true);
-        const reqs = await getChallengeRequests();
-        setChallengeRequests(reqs);
-        await getMockRankings();
-        const allGroups = await api.getUserGroups(user.id);
-        const groupsList = (allGroups || [])
-          .filter((g: any) => g.role === 'admin');
+      const loadAdminGroups = async () => {
+        try {
+          setLoading(true);
+          const reqs = await getChallengeRequests();
+          setChallengeRequests(reqs);
+          await getMockRankings();
+          const allGroups = await api.getUserGroups(user.id);
+          const groupsList = (allGroups || [])
+            .filter((g: any) => g.role === 'admin');
 
-        // Injetar grupo mockado de testes locais APENAS para o Renato/mock para viabilizar testes no MVP
-        const isRenatoMock = user.email === 'renato@trino.app' || user.id === 'user_1';
-        if (isRenatoMock) {
-          const alreadyHasMock = groupsList.some(g => g.id === 'group_1');
-          if (!alreadyHasMock) {
-            groupsList.push({
-              id: 'group_1',
-              name: 'Célula Videira (Mock)',
-              description: 'Grupo da nossa célula para crescer espiritualmente e manter o corpo ativo na fé!',
-              role: 'admin',
-            });
-          }
-        }
-
-        setAdminGroups(groupsList);
-
-        // Definir grupo selecionado por padrão
-        if (groupsList.length > 0) {
-          let defaultGroupId = groupsList[0].id;
-          if (groupId && groupsList.some(g => g.id === groupId)) {
-            defaultGroupId = groupId;
-          } else if (challengeId) {
-            // Buscar grupo dono do desafio
-            if (challengeId.startsWith('chal')) {
-              defaultGroupId = 'group_1';
-            } else {
-              const chalData = await api.getChallengeById(challengeId);
-              if (chalData && groupsList.some(g => g.id === chalData.group_id)) {
-                defaultGroupId = chalData.group_id;
-              }
+          // Injetar grupo mockado de testes locais APENAS para o Renato/mock para viabilizar testes no MVP
+          const isRenatoMock = user.email === 'renato@trino.app' || user.id === 'user_1';
+          if (isRenatoMock) {
+            const alreadyHasMock = groupsList.some(g => g.id === 'group_1');
+            if (!alreadyHasMock) {
+              groupsList.push({
+                id: 'group_1',
+                name: 'Célula Videira (Mock)',
+                description: 'Grupo da nossa célula para crescer espiritualmente e manter o corpo ativo na fé!',
+                role: 'admin',
+              });
             }
           }
-          setSelectedGroupId(defaultGroupId);
-        }
-      } catch (err) {
-        console.error('Erro ao buscar grupos do administrador:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
 
-    loadAdminGroups();
-  }, [user, groupId, challengeId]);
+          setAdminGroups(groupsList);
+
+          // Definir grupo selecionado por padrão
+          if (groupsList.length > 0) {
+            let defaultGroupId = groupsList[0].id;
+            if (groupId && groupsList.some(g => g.id === groupId)) {
+              defaultGroupId = groupId;
+            } else if (challengeId) {
+              // Buscar grupo dono do desafio
+              if (challengeId.startsWith('chal')) {
+                defaultGroupId = 'group_1';
+              } else {
+                const chalData = await api.getChallengeById(challengeId);
+                if (chalData && groupsList.some(g => g.id === chalData.group_id)) {
+                  defaultGroupId = chalData.group_id;
+                }
+              }
+            }
+            setSelectedGroupId(prev => (prev && groupsList.some(g => g.id === prev)) ? prev : defaultGroupId);
+          }
+        } catch (err) {
+          console.error('Erro ao buscar grupos do administrador:', err);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      loadAdminGroups();
+    }, [user, groupId, challengeId])
+  );
 
   // 2. Sincronizar campos de edição com o grupo selecionado
   const activeGroup = adminGroups.find(g => g.id === selectedGroupId);
@@ -690,6 +701,11 @@ export default function AdminScreen() {
     setChallengeRequests(updatedRequests);
     await saveChallengeRequests(updatedRequests);
     await saveMockRankings();
+    try {
+      await api.respondToChallengeRequest(requestId, approve);
+    } catch (e) {
+      console.warn('Erro ao atualizar respondToChallengeRequest:', e);
+    }
 
     // Forçar re-render da tela
     setMembers([...members]);
@@ -1126,6 +1142,30 @@ export default function AdminScreen() {
             </ScrollView>
           </View>
 
+          {/* BANNER DE ALERTA DE SOLICITAÇÕES PENDENTES NO ADMIN */}
+          {pendingRequestsForAdmin.length > 0 && activeTab !== 'approvals' && (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.pendingAdminAlertBanner}
+              onPress={() => setActiveTab('approvals')}
+            >
+              <View style={styles.pendingAdminAlertIcon}>
+                <MaterialCommunityIcons name="clipboard-alert-outline" size={22} color="#fff" />
+              </View>
+              <View style={{ flex: 1, marginLeft: SPACING.sm }}>
+                <Text style={styles.pendingAdminAlertTitle}>
+                  {pendingRequestsForAdmin.length} {pendingRequestsForAdmin.length === 1 ? 'Solicitação Pendente' : 'Solicitações Pendentes'}
+                </Text>
+                <Text style={styles.pendingAdminAlertSubtitle}>
+                  {pendingRequestsForAdmin.map(r => r.user_name).join(', ')} aguarda aprovação para entrar no desafio!
+                </Text>
+              </View>
+              <View style={styles.pendingAdminAlertBtn}>
+                <Text style={styles.pendingAdminAlertBtnText}>Aprovar</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
           {/* NAVEGAÇÃO POR BOTÕES DO PAINEL ADMIN */}
           <View style={styles.navButtonsContainer}>
             <ScrollView 
@@ -1135,15 +1175,15 @@ export default function AdminScreen() {
             >
               {[
                 { key: 'group', label: 'Grupo', icon: 'cog-outline' },
-                { key: 'tasks', label: 'Tarefas Extras', icon: 'star-outline' },
-                { key: 'members', label: 'Membros', icon: 'account-group-outline' },
-                { key: 'challenges', label: 'Desafios', icon: 'trophy-outline' },
                 { 
                   key: 'approvals', 
                   label: 'Aprovações', 
                   icon: 'clipboard-check-outline',
-                  badgeCount: challengeRequests.filter((r: any) => (r.group_id === selectedGroupId || challenges.some(c => c.id === r.challenge_id)) && r.status === 'pending').length
+                  badgeCount: pendingRequestsForAdmin.length
                 },
+                { key: 'tasks', label: 'Tarefas Extras', icon: 'star-outline' },
+                { key: 'members', label: 'Membros', icon: 'account-group-outline' },
+                { key: 'challenges', label: 'Desafios', icon: 'trophy-outline' },
               ].map(item => {
                 const isActive = activeTab === item.key;
                 return (
@@ -1537,12 +1577,10 @@ export default function AdminScreen() {
 
               {/* ABA: GERENCIAR SOLICITAÇÕES DE LIBERAÇÃO (APROVAÇÕES) */}
               {activeTab === 'approvals' && (() => {
-                const pendingRequests = challengeRequests.filter(
-                  r => (r.group_id === selectedGroupId || challenges.some(c => c.id === r.challenge_id)) && r.status === 'pending'
-                );
+                const pendingRequests = pendingRequestsForAdmin;
                 return (
                   <View style={styles.listSection}>
-                    <Text style={styles.sectionTitle}>Pedidos de Liberação de Desafios</Text>
+                    <Text style={styles.sectionTitle}>Pedidos de Liberação de Desafios ({pendingRequests.length})</Text>
                     <Text style={styles.emptyTabSubtitle}>
                       Gerencie as solicitações enviadas pelos participantes para ingressar nos desafios deste grupo.
                     </Text>
@@ -1557,16 +1595,20 @@ export default function AdminScreen() {
                       </Card>
                     ) : (
                       <View style={{ gap: SPACING.md }}>
-                        {pendingRequests.map(request => (
-                          <Card key={request.id} variant="default" style={styles.requestCard}>
-                            <View style={styles.requestCardHeader}>
-                              <Avatar source={request.user_avatar || undefined} name={request.user_name} size={36} />
-                              <View style={{ marginLeft: SPACING.sm, flex: 1 }}>
-                                <Text style={styles.requestName} numberOfLines={1}>{request.user_name}</Text>
-                                <Text style={styles.requestHint}>Solicitou entrar no desafio:</Text>
-                                <Text style={styles.requestChallengeName} numberOfLines={1}>{request.challenge_name}</Text>
+                        {pendingRequests.map(request => {
+                          const reqGroup = adminGroups.find(g => g.id === request.group_id);
+                          return (
+                            <Card key={request.id} variant="default" style={styles.requestCard}>
+                              <View style={styles.requestCardHeader}>
+                                <Avatar source={request.user_avatar || undefined} name={request.user_name} size={40} />
+                                <View style={{ marginLeft: SPACING.sm, flex: 1 }}>
+                                  <Text style={styles.requestName} numberOfLines={1}>{request.user_name}</Text>
+                                  <Text style={styles.requestHint}>Solicitou entrar no desafio:</Text>
+                                  <Text style={styles.requestChallengeName} numberOfLines={1}>
+                                    {request.challenge_name || 'Desafio'} {reqGroup ? `• ${reqGroup.name}` : ''}
+                                  </Text>
+                                </View>
                               </View>
-                            </View>
                             <View style={styles.requestCardActions}>
                               <TouchableOpacity
                                 style={[styles.btnActionApprove, { marginRight: SPACING.sm }]}
@@ -1584,7 +1626,8 @@ export default function AdminScreen() {
                               </TouchableOpacity>
                             </View>
                           </Card>
-                        ))}
+                        );
+                      })}
                       </View>
                     )}
                   </View>
@@ -1838,6 +1881,50 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xxl,
   },
   
+  // Banner de Alerta de Solicitação Pendente
+  pendingAdminAlertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(174, 143, 100, 0.12)',
+    borderWidth: 1.5,
+    borderColor: COLORS.secondary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  pendingAdminAlertIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pendingAdminAlertTitle: {
+    fontFamily: FONTS.family.heading,
+    fontSize: FONTS.size.sm,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  pendingAdminAlertSubtitle: {
+    fontFamily: FONTS.family.body,
+    fontSize: FONTS.size.xs,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  pendingAdminAlertBtn: {
+    backgroundColor: COLORS.secondary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  pendingAdminAlertBtnText: {
+    color: '#fff',
+    fontFamily: FONTS.family.heading,
+    fontWeight: 'bold',
+    fontSize: FONTS.size.xs,
+  },
+
   // Seletor de Grupos/Desafios
   groupSelectorContainer: {
     paddingBottom: SPACING.md,
