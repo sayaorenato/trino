@@ -19,7 +19,7 @@ import { Avatar } from '../components/ui/Avatar';
 import { WebContainer } from '../components/ui/WebContainer';
 import { api } from '../lib/api';
 import { useAuth } from '../context/auth';
-import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest, getMockRankings, saveMockRankings, removeRankingMember, checkExtraTaskAvailability } from '../constants/mock-data';
+import { MOCK_EXTRA_TASKS, ExtraTask, MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, CHALLENGE_REQUESTS, loadPersistedMockData, savePersistedMockData, getChallengeRequests, saveChallengeRequests, ChallengeRequest, getMockRankings, saveMockRankings, removeRankingMember, checkExtraTaskAvailability, parseTaskExpiryDate } from '../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../constants/theme';
 
 function formatDateForInput(isoDateStr: string): string {
@@ -271,7 +271,7 @@ export default function AdminScreen() {
           });
 
           const parsedTasks: ExtraTask[] = (tasksData || []).map((t: any) => {
-            let parsed = { title: 'Tarefa Extra', description: t.description, type: 'general' as const, expires_at: t.created_at, start_time: undefined, active: true };
+            let parsed: any = {};
             try {
               parsed = JSON.parse(t.description);
             } catch (e) {
@@ -280,14 +280,14 @@ export default function AdminScreen() {
             return {
               id: t.id,
               challenge_id: t.challenge_id,
-              title: parsed.title || 'Tarefa Extra',
-              description: parsed.description || t.description,
-              type: (parsed.type && (parsed as any).type !== 'other' ? parsed.type : (t.type && (t as any).type !== 'other' ? t.type : 'general')) as 'general' | 'presence' | 'punctuality',
-              points: t.points || 30,
-              expires_at: parsed.expires_at || t.created_at,
-              start_time: parsed.start_time,
+              title: t.title || parsed.title || 'Tarefa Extra',
+              description: (parsed.description !== undefined ? parsed.description : t.description) || '',
+              type: (t.type && (t as any).type !== 'other' ? t.type : (parsed.type && (parsed as any).type !== 'other' ? parsed.type : 'general')) as 'general' | 'presence' | 'punctuality',
+              points: t.points || parsed.points || 30,
+              expires_at: t.expires_at || parsed.expires_at || t.created_at,
+              start_time: t.start_time || parsed.start_time,
               completed_by: completedMap[t.id] || [],
-              active: parsed.active !== false
+              active: t.active !== undefined ? t.active !== false : (parsed.active !== false)
             };
           });
 
@@ -724,7 +724,7 @@ export default function AdminScreen() {
     setPoints(String(task.points));
     
     try {
-      const date = new Date(task.expires_at);
+      const date = parseTaskExpiryDate(task.expires_at);
       const d = String(date.getDate()).padStart(2, '0');
       const m = String(date.getMonth() + 1).padStart(2, '0');
       const y = date.getFullYear();
@@ -779,20 +779,40 @@ export default function AdminScreen() {
 
     setLoadingAction(true);
     try {
-      let isoExpiresAt = new Date().toISOString();
+      let isoExpiresAt = '';
       try {
-        const parts = expiryDate.trim().split('/');
-        if (parts.length === 3) {
-          const day = parseInt(parts[0].trim(), 10);
-          const month = parseInt(parts[1].trim(), 10);
-          const year = parseInt(parts[2].trim(), 10);
-          if (day && month && year && year > 2000) {
-            const targetDate = new Date(year, month - 1, day, 23, 59, 59, 999);
-            isoExpiresAt = targetDate.toISOString();
+        const trimmed = (expiryDate || '').trim();
+        if (trimmed.includes('/')) {
+          const parts = trimmed.split('/');
+          if (parts.length === 3) {
+            const day = parseInt(parts[0].trim(), 10);
+            const month = parseInt(parts[1].trim(), 10);
+            const year = parseInt(parts[2].trim(), 10);
+            if (day && month && year) {
+              const targetDate = new Date(year, month - 1, day, 23, 59, 59, 999);
+              isoExpiresAt = targetDate.toISOString();
+            }
+          }
+        } else if (trimmed.includes('-')) {
+          const parts = trimmed.split('-');
+          if (parts.length === 3) {
+            const year = parseInt(parts[0].trim(), 10);
+            const month = parseInt(parts[1].trim(), 10);
+            const day = parseInt(parts[2].trim(), 10);
+            if (year && month && day) {
+              const targetDate = new Date(year, month - 1, day, 23, 59, 59, 999);
+              isoExpiresAt = targetDate.toISOString();
+            }
           }
         }
       } catch (err) {
         console.warn('Erro ao formatar data de expiração:', err);
+      }
+
+      if (!isoExpiresAt) {
+        const endOfToday = new Date();
+        endOfToday.setHours(23, 59, 59, 999);
+        isoExpiresAt = endOfToday.toISOString();
       }
 
       const isMock = selectedChallengeId.startsWith('chal');

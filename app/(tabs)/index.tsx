@@ -170,20 +170,20 @@ export default function DashboardScreen() {
       rawTasks = tasks
         .filter((t: any) => t.challenge_id === challengeId)
         .map((t: any) => {
-          let parsed = { title: 'Tarefa Extra', description: '', type: 'general', active: true, points: 30, expires_at: '', start_time: '' };
+          let parsed: any = {};
           try {
             parsed = JSON.parse(t.description);
           } catch (e) {}
           return {
             id: t.id,
             challenge_id: t.challenge_id,
-            title: parsed.title || 'Tarefa Extra',
-            description: parsed.description || t.description,
-            type: (parsed.type && parsed.type !== 'other' ? parsed.type : (t.type && t.type !== 'other' ? t.type : 'general')),
-            points: t.points || 30,
-            active: parsed.active !== false,
-            expires_at: parsed.expires_at || t.created_at,
-            start_time: parsed.start_time || undefined
+            title: t.title || parsed.title || 'Tarefa Extra',
+            description: (parsed.description !== undefined ? parsed.description : t.description) || '',
+            type: (t.type && t.type !== 'other' ? t.type : (parsed.type && parsed.type !== 'other' ? parsed.type : 'general')),
+            points: t.points || parsed.points || 30,
+            active: t.active !== undefined ? t.active !== false : (parsed.active !== false),
+            expires_at: t.expires_at || parsed.expires_at || t.created_at,
+            start_time: t.start_time || parsed.start_time || undefined
           };
         });
     }

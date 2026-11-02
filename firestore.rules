@@ -60,11 +60,11 @@ service cloud.firestore {
 
     // Tarefas Extras (Tasks)
     match /tasks/{taskId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isAuthenticated();
     }
     match /extra_tasks/{taskId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isAuthenticated();
     }
 
