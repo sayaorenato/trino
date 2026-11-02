@@ -18,11 +18,18 @@ import { useAuth } from '../../context/auth';
 import { api } from '../../lib/api';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
 import { SupportCard } from '../../components/SupportCard';
+import { 
+  MOCK_RANKINGS, 
+  getMockRankings, 
+  getChallengeRequests, 
+  ChallengeRequest 
+} from '../../constants/mock-data';
 
 export default function ChallengesDashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [challenges, setChallenges] = useState<any[]>([]);
+  const [challengeRequests, setChallengeRequests] = useState<ChallengeRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
@@ -32,6 +39,10 @@ export default function ChallengesDashboardScreen() {
 
       // Buscar todos os grupos em que o usuário participa e seus desafios correspondentes
       api.getUserGroups(user.id).then(async (userGroups) => {
+        await getMockRankings();
+        const reqs = await getChallengeRequests();
+        setChallengeRequests(reqs);
+
         const list: any[] = [];
         await Promise.all(
           userGroups.map(async (group: any) => {
@@ -40,6 +51,7 @@ export default function ChallengesDashboardScreen() {
               list.push({
                 ...chal,
                 groupName: group.name,
+                groupRole: group.role,
               });
             });
           })
@@ -127,6 +139,12 @@ export default function ChallengesDashboardScreen() {
               <View style={styles.list}>
                 {activeChallenges.map(chal => {
                   const daysLeft = getDaysLeft(chal.end_date);
+                  const ranking = MOCK_RANKINGS[chal.id] || [];
+                  const isUserAdmin = chal.groupRole === 'admin';
+                  const isCreator = chal.created_by === user?.id;
+                  const isParticipating = isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user?.id);
+                  const isPending = !isParticipating && challengeRequests.some(r => r.challenge_id === chal.id && r.user_id === user?.id && r.status === 'pending');
+
                   return (
                     <TouchableOpacity
                       key={chal.id}
@@ -142,9 +160,19 @@ export default function ChallengesDashboardScreen() {
                             <Text style={styles.chalTitle}>{chal.title || chal.name}</Text>
                             <Text style={styles.groupName}>{chal.groupName}</Text>
                           </View>
-                          <View style={styles.badgeActive}>
-                            <Text style={styles.badgeActiveText}>Ativo</Text>
-                          </View>
+                          {isParticipating ? (
+                            <View style={styles.badgeParticipating}>
+                              <Text style={styles.badgeParticipatingText}>Participando</Text>
+                            </View>
+                          ) : isPending ? (
+                            <View style={styles.badgePending}>
+                              <Text style={styles.badgePendingText}>Aguardando Liberação</Text>
+                            </View>
+                          ) : (
+                            <View style={styles.badgeAvailable}>
+                              <Text style={styles.badgeAvailableText}>Disponível (Solicitar)</Text>
+                            </View>
+                          )}
                         </View>
                         <Text style={styles.dates}>
                           Período: {formatDateDisplay(chal.start_date)} até {formatDateDisplay(chal.end_date)}
@@ -245,6 +273,24 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.secondaryMuted, paddingHorizontal: SPACING.sm, paddingVertical: 2, borderRadius: BORDER_RADIUS.md,
   },
   badgeActiveText: {
+    color: COLORS.secondary, fontSize: 10, fontFamily: FONTS.family.bodyBold, fontWeight: FONTS.weight.bold,
+  },
+  badgeParticipating: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)', paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: BORDER_RADIUS.md,
+  },
+  badgeParticipatingText: {
+    color: '#059669', fontSize: 10, fontFamily: FONTS.family.bodyBold, fontWeight: FONTS.weight.bold,
+  },
+  badgePending: {
+    backgroundColor: 'rgba(217, 119, 6, 0.15)', paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: BORDER_RADIUS.md,
+  },
+  badgePendingText: {
+    color: COLORS.goldDark, fontSize: 10, fontFamily: FONTS.family.bodyBold, fontWeight: FONTS.weight.bold,
+  },
+  badgeAvailable: {
+    backgroundColor: COLORS.secondaryMuted, paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: BORDER_RADIUS.md,
+  },
+  badgeAvailableText: {
     color: COLORS.secondary, fontSize: 10, fontFamily: FONTS.family.bodyBold, fontWeight: FONTS.weight.bold,
   },
   badgeFinished: {

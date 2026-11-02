@@ -110,7 +110,7 @@ export default function DashboardScreen() {
           const ranking = MOCK_RANKINGS[challenge.id] || [];
           const isUserAdmin = g.role === 'admin';
           const isCreator = challenge.created_by === user?.id;
-          const userParticipates = isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user?.id) || ranking.length === 0;
+          const userParticipates = isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user?.id);
           
           if (userParticipates) {
             if (!acc.some((item: any) => item.challenge.id === challenge.id)) {
@@ -120,25 +120,6 @@ export default function DashboardScreen() {
                 challenge: challenge
               });
             }
-          }
-        }
-      });
-    }
-    return acc;
-  }, []);
-
-  // Lista 2: Todos os Desafios Ativos de Todos os Grupos (Para os Check-ins de Hoje)
-  const allActiveChallenges = groups.reduce((acc: any[], g: any) => {
-    if (g.challenges && Array.isArray(g.challenges)) {
-      g.challenges.forEach((challenge: any) => {
-        const isChallengeActive = checkIsChallengeActive(challenge.end_date);
-        if (isChallengeActive) {
-          if (!acc.some((item: any) => item.challenge.id === challenge.id)) {
-            acc.push({
-              groupId: g.id,
-              groupName: g.name,
-              challenge: challenge
-            });
           }
         }
       });
@@ -501,7 +482,7 @@ export default function DashboardScreen() {
   let totalTasksCount = 0;
   let completedTasksCount = 0;
 
-  allActiveChallenges.forEach((item: any) => {
+  myActiveChallenges.forEach((item: any) => {
     // 3 hábitos diários por desafio
     totalTasksCount += 3;
     

@@ -555,14 +555,20 @@ export const api = {
         } catch {}
       }
 
+      const { MOCK_RANKINGS } = require('../constants/mock-data');
+      const allowedRanking = MOCK_RANKINGS[challengeId] || [];
+
       const participantsMap = new Map<string, any>();
       members.forEach((m: any) => {
-        participantsMap.set(m.user_id, {
-          user_id: m.user_id,
-          name: m.full_name || 'Participante',
-          avatar_url: m.avatar_url || null,
-          streak: 0,
-        });
+        const isApproved = m.role === 'admin' || chal.created_by === m.user_id || allowedRanking.some((r: any) => r.user_id === m.user_id);
+        if (isApproved) {
+          participantsMap.set(m.user_id, {
+            user_id: m.user_id,
+            name: m.full_name || 'Participante',
+            avatar_url: m.avatar_url || null,
+            streak: 0,
+          });
+        }
       });
 
       const ranking = Array.from(participantsMap.values()).map(p => {

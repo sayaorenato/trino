@@ -43,10 +43,20 @@ import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/
 export default function ChallengeScreen() {
   const router = useRouter();
   const { challengeId } = useLocalSearchParams<{ challengeId?: string }>();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   
   // Obter o ID do desafio atual (dinâmico ou padrão)
   const currentChallengeId = challengeId || 'chal_1';
+  
+  const [restrictedChallengeInfo, setRestrictedChallengeInfo] = useState<{
+    challengeId: string;
+    challengeTitle: string;
+    groupId: string;
+    groupName: string;
+    startDate?: string;
+    endDate?: string;
+    rules?: string;
+  } | null>(null);
   
   const [challenge, setChallenge] = useState<any>(null);
   const [group, setGroup] = useState<any>(null);
@@ -146,7 +156,7 @@ export default function ChallengeScreen() {
             const ranking = MOCK_RANKINGS[c.id] || [];
             const isUserAdmin = g.role === 'admin';
             const isCreator = c.created_by === user.id;
-            const userParticipates = isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user.id) || true;
+            const userParticipates = isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user.id);
             
             if (userParticipates) {
               allowedChallenges.push({
@@ -176,6 +186,41 @@ export default function ChallengeScreen() {
 
         // 2. Carregar os dados do desafio selecionado
         const selectedAllowed = allowedChallenges.find(ac => ac.challengeId === targetChallengeId);
+
+        // Se o usuário tentou acessar um desafio em que ainda não foi aceito/não participa
+        if (!selectedAllowed) {
+          let restrictedTargetChallenge: any = null;
+          let restrictedTargetGroup: any = null;
+
+          userGroups.forEach((g: any) => {
+            if (g.challenges && Array.isArray(g.challenges)) {
+              const found = g.challenges.find((c: any) => c.id === targetChallengeId);
+              if (found) {
+                restrictedTargetGroup = g;
+                restrictedTargetChallenge = found;
+              }
+            }
+          });
+
+          if (!restrictedTargetChallenge && targetChallengeId.startsWith('chal') && MOCK_CHALLENGES[targetChallengeId]) {
+            restrictedTargetChallenge = MOCK_CHALLENGES[targetChallengeId];
+            restrictedTargetGroup = MOCK_GROUPS.find(g => g.id === restrictedTargetChallenge.group_id);
+          }
+
+          setRestrictedChallengeInfo({
+            challengeId: targetChallengeId,
+            challengeTitle: restrictedTargetChallenge?.title || restrictedTargetChallenge?.name || 'Desafio',
+            groupId: restrictedTargetGroup?.id || '',
+            groupName: restrictedTargetGroup?.name || 'Grupo',
+            startDate: restrictedTargetChallenge?.start_date,
+            endDate: restrictedTargetChallenge?.end_date,
+            rules: restrictedTargetChallenge?.rules
+          });
+          setHasNoAccess(true);
+          setLoading(false);
+          return;
+        }
+
         const isMock = selectedAllowed ? selectedAllowed.isMock : (targetChallengeId.startsWith('chal') && !!MOCK_CHALLENGES[targetChallengeId]);
         
         if (isMock) {
@@ -188,16 +233,7 @@ export default function ChallengeScreen() {
           setExtraTasks((MOCK_EXTRA_TASKS[targetChallengeId!] || []).filter((t: ExtraTask) => t.active !== false));
           
           // Carrega o ranking do Mock
-          const mRank = MOCK_RANKINGS[targetChallengeId!] || [
-            {
-              user_id: user.id,
-              name: user.email?.split('@')[0] || 'Renato Mello',
-              avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-              points: 0,
-              streak: 12,
-              rounds_won: 0
-            }
-          ];
+          const mRank = MOCK_RANKINGS[targetChallengeId!] || [];
           setRankingData(mRank);
           setLoading(false);
         } else {
@@ -405,6 +441,43 @@ export default function ChallengeScreen() {
     }
   };
 
+  const handleRequestParticipation = async (cId: string, cTitle: string, gId: string) => {
+    if (!user || !cId) return;
+
+    const hasPending = challengeRequests.some(
+      r => r.challenge_id === cId && r.user_id === user.id && r.status === 'pending'
+    );
+    if (hasPending) {
+      if (Platform.OS === 'web') {
+        window.alert('Você já enviou uma solicitação para este desafio. Aguarde a liberação do administrador.');
+      } else {
+        Alert.alert('Aviso', 'Você já enviou uma solicitação para este desafio. Aguarde a liberação do administrador.');
+      }
+      return;
+    }
+
+    const newRequest: ChallengeRequest = {
+      id: `req_${Date.now()}`,
+      challenge_id: cId,
+      challenge_name: cTitle,
+      group_id: gId,
+      user_id: user.id,
+      user_name: profile?.full_name || user.email?.split('@')[0] || 'Novo Membro',
+      user_avatar: profile?.avatar_url || null,
+      status: 'pending'
+    };
+
+    const updated = [...challengeRequests, newRequest];
+    setChallengeRequests(updated);
+    await saveChallengeRequests(updated);
+
+    if (Platform.OS === 'web') {
+      window.alert(`Sua solicitação para entrar no desafio "${cTitle}" foi enviada. Aguarde a aprovação do administrador do grupo!`);
+    } else {
+      Alert.alert('Solicitação Enviada', `Sua solicitação para entrar no desafio "${cTitle}" foi enviada. Aguarde a aprovação do administrador do grupo!`);
+    }
+  };
+
   if (loading) {
     return (
       <WebContainer>
@@ -417,17 +490,93 @@ export default function ChallengeScreen() {
 
   // RENDER SE O USUÁRIO TENTOU ACESSAR UM DESAFIO ESPECÍFICO E NÃO PARTICIPA DELE AINDA
   if (hasNoAccess) {
+    const isPending = challengeRequests.some(
+      r => r.challenge_id === restrictedChallengeInfo?.challengeId && r.user_id === user?.id && r.status === 'pending'
+    );
+
     return (
       <WebContainer>
-        <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: SPACING.xl }]}>
-          <MaterialCommunityIcons name="lock-outline" size={48} color={COLORS.gold} style={{ marginBottom: SPACING.md }} />
-          <Text style={{ color: COLORS.text, fontFamily: FONTS.family.heading, fontSize: FONTS.size.md, fontWeight: 'bold', marginBottom: SPACING.sm, textAlign: 'center' }}>
-            Acesso Restrito
-          </Text>
-          <Text style={{ color: COLORS.textSecondary, fontFamily: FONTS.family.body, fontSize: FONTS.size.sm, textAlign: 'center', marginBottom: SPACING.lg }}>
-            Você precisa ser aceito no desafio deste grupo para poder visualizar os rankings e rounds. Peça acesso na aba de Grupos.
-          </Text>
-          <Button title="Voltar" variant="primary" onPress={() => router.back()} style={{ width: 120 }} />
+        <SafeAreaView style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={{ padding: SPACING.xs, marginRight: SPACING.sm }}>
+              <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.text} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Desafio do Grupo</Text>
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: SPACING.lg, alignItems: 'center' }}>
+            <Card variant="default" style={{ width: '100%', maxWidth: 500, padding: SPACING.xl, alignItems: 'center', marginTop: SPACING.lg }}>
+              <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: isPending ? 'rgba(217, 119, 6, 0.15)' : 'rgba(59, 130, 246, 0.15)', justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md }}>
+                <MaterialCommunityIcons 
+                  name={isPending ? "clock-outline" : "shield-account-outline"} 
+                  size={36} 
+                  color={isPending ? COLORS.gold : COLORS.secondary} 
+                />
+              </View>
+
+              <Text style={{ color: COLORS.text, fontFamily: FONTS.family.heading, fontSize: FONTS.size.lg, fontWeight: 'bold', marginBottom: SPACING.xs, textAlign: 'center' }}>
+                {restrictedChallengeInfo?.challengeTitle || 'Desafio do Grupo'}
+              </Text>
+
+              {restrictedChallengeInfo?.groupName && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md }}>
+                  <MaterialCommunityIcons name="account-group" size={16} color={COLORS.textSecondary} style={{ marginRight: 4 }} />
+                  <Text style={{ color: COLORS.textSecondary, fontFamily: FONTS.family.body, fontSize: FONTS.size.sm }}>
+                    {restrictedChallengeInfo.groupName}
+                  </Text>
+                </View>
+              )}
+
+              {restrictedChallengeInfo?.startDate && restrictedChallengeInfo?.endDate && (
+                <Text style={{ color: COLORS.textLight, fontFamily: FONTS.family.body, fontSize: FONTS.size.xs, marginBottom: SPACING.md }}>
+                  Período: {new Date(restrictedChallengeInfo.startDate).toLocaleDateString('pt-BR')} até {new Date(restrictedChallengeInfo.endDate).toLocaleDateString('pt-BR')}
+                </Text>
+              )}
+
+              <View style={{ width: '100%', height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.md }} />
+
+              {isPending ? (
+                <View style={{ alignItems: 'center', paddingVertical: SPACING.sm }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(217, 119, 6, 0.12)', paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: BORDER_RADIUS.full, marginBottom: SPACING.md }}>
+                    <MaterialCommunityIcons name="clock-outline" size={16} color={COLORS.goldDark} style={{ marginRight: 6 }} />
+                    <Text style={{ color: COLORS.goldDark, fontFamily: FONTS.family.body, fontSize: FONTS.size.sm, fontWeight: 'bold' }}>
+                      Aguardando Liberação do Administrador
+                    </Text>
+                  </View>
+                  <Text style={{ color: COLORS.textSecondary, fontFamily: FONTS.family.body, fontSize: FONTS.size.sm, textAlign: 'center', lineHeight: 20 }}>
+                    Sua solicitação de participação já foi enviada. O administrador do grupo precisa aprovar sua entrada para que você possa pontuar no ranking e registrar seus check-ins diários.
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ alignItems: 'center', paddingVertical: SPACING.sm, width: '100%' }}>
+                  <Text style={{ color: COLORS.text, fontFamily: FONTS.family.heading, fontSize: FONTS.size.md, fontWeight: '600', marginBottom: SPACING.xs, textAlign: 'center' }}>
+                    Solicitar Participação
+                  </Text>
+                  <Text style={{ color: COLORS.textSecondary, fontFamily: FONTS.family.body, fontSize: FONTS.size.sm, textAlign: 'center', marginBottom: SPACING.lg, lineHeight: 20 }}>
+                    Você já é membro deste grupo! Para entrar neste desafio de hábitos e constância, solicite a participação para que o administrador aprove sua entrada.
+                  </Text>
+                  <Button
+                    title="Solicitar Entrada no Desafio"
+                    variant="primary"
+                    icon={<MaterialCommunityIcons name="plus-circle-outline" size={18} color="#fff" />}
+                    onPress={() => handleRequestParticipation(
+                      restrictedChallengeInfo?.challengeId || '',
+                      restrictedChallengeInfo?.challengeTitle || 'Desafio',
+                      restrictedChallengeInfo?.groupId || ''
+                    )}
+                    style={{ width: '100%' }}
+                  />
+                </View>
+              )}
+
+              <Button
+                title="Voltar para Início"
+                variant="ghost"
+                onPress={() => router.push('/(tabs)')}
+                style={{ marginTop: SPACING.md, width: '100%' }}
+              />
+            </Card>
+          </ScrollView>
         </SafeAreaView>
       </WebContainer>
     );

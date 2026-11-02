@@ -29,7 +29,8 @@ import {
   MOCK_CURRENT_USER,
   ExtraTask, 
   Checkin,
-  checkExtraTaskAvailability
+  checkExtraTaskAvailability,
+  getMockRankings
 } from '../../constants/mock-data';
 import { COLORS, SPACING, BORDER_RADIUS, FONTS, SHADOWS } from '../../constants/theme';
 
@@ -80,7 +81,8 @@ export default function CheckinScreen() {
     }
     setLoadingRound(true);
 
-    api.getDashboardData(user.id).then(({ groups }) => {
+    api.getDashboardData(user.id).then(async ({ groups }) => {
+      await getMockRankings();
       const list: any[] = [];
 
       groups.forEach((g: any) => {
@@ -101,15 +103,22 @@ export default function CheckinScreen() {
           : g.challenges[0];
 
         if (challengeToUse) {
-          list.push({
-            groupId: g.id,
-            groupName: g.name,
-            challengeId: challengeToUse.id,
-            // mocks usam 'name', o banco usa 'title'
-            challengeTitle: challengeToUse.title || challengeToUse.name || 'Desafio',
-            rounds: challengeToUse.rounds || [],
-            isMock: isMockGroup,
-          });
+          const ranking = MOCK_RANKINGS[challengeToUse.id] || [];
+          const isUserAdmin = g.role === 'admin';
+          const isCreator = challengeToUse.created_by === user.id;
+          const userParticipates = isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user.id);
+
+          if (userParticipates) {
+            list.push({
+              groupId: g.id,
+              groupName: g.name,
+              challengeId: challengeToUse.id,
+              // mocks usam 'name', o banco usa 'title'
+              challengeTitle: challengeToUse.title || challengeToUse.name || 'Desafio',
+              rounds: challengeToUse.rounds || [],
+              isMock: isMockGroup,
+            });
+          }
         }
       });
 
