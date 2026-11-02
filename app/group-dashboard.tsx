@@ -104,7 +104,7 @@ export default function GroupDashboardScreen() {
     );
   }
 
-  const isAdmin = userRole === 'admin';
+  const isAdmin = userRole === 'admin' || group?.created_by === user?.id;
   const now = new Date();
   const today = new Date();
   today.setHours(0, 0, 0, 0);

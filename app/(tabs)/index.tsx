@@ -51,11 +51,16 @@ export default function DashboardScreen() {
 
   // Pedidos pendentes de aprovação para grupos onde o usuário é admin
   const adminPendingRequests = useMemo(() => {
-    const adminGroups = groups.filter((g: any) => g.role === 'admin');
-    return challengeRequests.filter((r: any) => 
-      r.status === 'pending' && adminGroups.some((g: any) => g.id === r.group_id)
-    );
-  }, [groups, challengeRequests]);
+    const adminGroups = groups.filter((g: any) => g.role === 'admin' || g.created_by === user?.id);
+    return challengeRequests.filter((r: any) => {
+      if (r.status !== 'pending') return false;
+      if (r.user_id === user?.id) return false;
+      if (adminGroups.length > 0) {
+        return adminGroups.some((g: any) => g.id === r.group_id);
+      }
+      return true;
+    });
+  }, [groups, challengeRequests, user?.id]);
 
 
 

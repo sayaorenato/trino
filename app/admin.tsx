@@ -68,6 +68,7 @@ export default function AdminScreen() {
     if (selectedGroupId && r.group_id === selectedGroupId) return true;
     if (challenges.some(c => c.id === r.challenge_id)) return true;
     if (adminGroups.some(g => g.id === r.group_id)) return true;
+    if (adminGroups.length === 0 || !selectedGroupId) return true;
     return false;
   });
 
@@ -1577,7 +1578,9 @@ export default function AdminScreen() {
 
               {/* ABA: GERENCIAR SOLICITAÇÕES DE LIBERAÇÃO (APROVAÇÕES) */}
               {activeTab === 'approvals' && (() => {
-                const pendingRequests = pendingRequestsForAdmin;
+                const pendingRequests = pendingRequestsForAdmin.length > 0 
+                  ? pendingRequestsForAdmin 
+                  : challengeRequests.filter(r => r.status === 'pending');
                 return (
                   <View style={styles.listSection}>
                     <Text style={styles.sectionTitle}>Pedidos de Liberação de Desafios ({pendingRequests.length})</Text>

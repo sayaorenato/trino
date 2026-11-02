@@ -145,6 +145,10 @@ export async function getChallengeRequests(): Promise<ChallengeRequest[]> {
       CHALLENGE_REQUESTS = fsReqs;
       await AsyncStorage.setItem('TRINO_CHALLENGE_REQUESTS', JSON.stringify(fsReqs));
       return fsReqs;
+    } else {
+      CHALLENGE_REQUESTS = [];
+      await AsyncStorage.setItem('TRINO_CHALLENGE_REQUESTS', JSON.stringify([]));
+      return [];
     }
   } catch (err) {
     console.warn('Erro ao ler challenge_requests do Firestore:', err);
