@@ -1187,50 +1187,51 @@ export default function AdminScreen() {
             </TouchableOpacity>
           )}
 
-          {/* NAVEGAÇÃO POR BOTÕES DO PAINEL ADMIN */}
-          <View style={styles.navButtonsContainer}>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.navButtonsScroll}
-            >
+          {/* NAVEGAÇÃO POR ABAS DO PAINEL ADMIN (SEM BARRA DE ROLAGEM, VISÍVEL EM MÚLTIPLAS LINHAS) */}
+          <View style={styles.adminTabsContainer}>
+            <View style={styles.adminTabsGrid}>
               {[
                 { key: 'group', label: 'Grupo', icon: 'cog-outline' },
+                { key: 'tasks', label: 'Tarefas Extras', icon: 'star-outline' },
                 { 
                   key: 'approvals', 
                   label: 'Aprovações', 
                   icon: 'clipboard-check-outline',
                   badgeCount: pendingRequestsForAdmin.length
                 },
-                { key: 'tasks', label: 'Tarefas Extras', icon: 'star-outline' },
-                { key: 'members', label: 'Membros', icon: 'account-group-outline' },
                 { key: 'challenges', label: 'Desafios', icon: 'trophy-outline' },
+                { key: 'members', label: 'Membros', icon: 'account-group-outline' },
               ].map(item => {
                 const isActive = activeTab === item.key;
                 return (
                   <TouchableOpacity
                     key={item.key}
-                    activeOpacity={0.8}
+                    activeOpacity={0.75}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: isActive }}
                     style={[
-                      styles.navButton,
-                      isActive && styles.navButtonActive
+                      styles.adminTabItem,
+                      isActive && styles.adminTabItemActive
                     ]}
                     onPress={() => setActiveTab(item.key as any)}
                   >
                     <MaterialCommunityIcons 
                       name={item.icon as any} 
-                      size={20} 
+                      size={18} 
                       color={isActive ? '#fff' : COLORS.primary} 
                     />
-                    <Text style={[
-                      styles.navButtonText,
-                      isActive && styles.navButtonTextActive
-                    ]}>
+                    <Text 
+                      numberOfLines={1}
+                      style={[
+                        styles.adminTabText,
+                        isActive && styles.adminTabTextActive
+                      ]}
+                    >
                       {item.label}
                     </Text>
                     {item.badgeCount ? (
-                      <View style={[styles.navBadgeCount, isActive && styles.navBadgeCountActive]}>
-                        <Text style={[styles.navBadgeCountText, isActive && styles.navBadgeCountTextActive]}>
+                      <View style={[styles.adminTabBadge, isActive && styles.adminTabBadgeActive]}>
+                        <Text style={[styles.adminTabBadgeText, isActive && styles.adminTabBadgeTextActive]}>
                           {item.badgeCount}
                         </Text>
                       </View>
@@ -1238,7 +1239,7 @@ export default function AdminScreen() {
                   </TouchableOpacity>
                 );
               })}
-            </ScrollView>
+            </View>
           </View>
 
           {loadingGroupDetails ? (
@@ -2035,66 +2036,70 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family.bodySemibold,
   },
 
-  // Botões de Navegação do Painel Admin
-  navButtonsContainer: {
-    backgroundColor: COLORS.surface,
-    paddingVertical: SPACING.md,
+  // Abas de Navegação do Painel Admin (Multi-linha e sem scrollbar)
+  adminTabsContainer: {
+    backgroundColor: COLORS.surfaceCard,
+    padding: SPACING.xs + 2,
     marginBottom: SPACING.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
+    borderRadius: BORDER_RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    ...SHADOWS.light,
   },
-  navButtonsScroll: {
-    paddingHorizontal: SPACING.lg,
-    gap: SPACING.sm,
+  adminTabsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
     alignItems: 'center',
   },
-  navButton: {
+  adminTabItem: {
+    flexGrow: 1,
+    flexBasis: '30%',
+    minWidth: 105,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surfaceCard,
-    borderWidth: 1.5,
+    justifyContent: 'center',
+    backgroundColor: COLORS.surfaceVariant,
+    paddingVertical: 10,
+    paddingHorizontal: SPACING.sm,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
     borderColor: COLORS.border,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm + 2,
-    borderRadius: BORDER_RADIUS.md,
-    gap: 8,
+    gap: 6,
   },
-  navButtonActive: {
+  adminTabItemActive: {
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
+    ...SHADOWS.medium,
   },
-  navButtonText: {
-    fontSize: FONTS.size.sm, // 14px - bem nítido e legível!
+  adminTabText: {
+    fontSize: FONTS.size.xs + 1,
     fontFamily: FONTS.family.heading,
-    fontWeight: FONTS.weight.bold,
+    fontWeight: FONTS.weight.semibold,
     color: COLORS.primary,
   },
-  navButtonTextActive: {
+  adminTabTextActive: {
     color: '#fff',
+    fontWeight: FONTS.weight.bold,
   },
-  navBadgeCount: {
+  adminTabBadge: {
     backgroundColor: COLORS.secondary,
     paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 10,
+    paddingVertical: 1.5,
+    borderRadius: BORDER_RADIUS.full,
     marginLeft: 2,
   },
-  navBadgeCountActive: {
+  adminTabBadgeActive: {
     backgroundColor: '#fff',
   },
-  navBadgeCountText: {
+  adminTabBadgeText: {
     color: '#fff',
-    fontSize: 11,
-    fontWeight: 'bold',
-    fontFamily: FONTS.family.body,
+    fontSize: 10,
+    fontFamily: FONTS.family.bodyBold,
   },
-  navBadgeCountTextActive: {
+  adminTabBadgeTextActive: {
     color: COLORS.primary,
+    fontWeight: 'bold',
   },
 
   // Empty state para abas
