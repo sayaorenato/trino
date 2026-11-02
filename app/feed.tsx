@@ -17,7 +17,7 @@ import {
   KeyboardAvoidingView,
   Alert,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from '../components/ui/Card';
 import { Avatar } from '../components/ui/Avatar';
@@ -241,7 +241,14 @@ export default function FeedScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [groupId]);
+  }, [groupId, user?.id]);
+
+  // Recarregar o feed automaticamente sempre que a tela for focada
+  useFocusEffect(
+    useCallback(() => {
+      fetchFeed();
+    }, [fetchFeed])
+  );
 
   // ── Paginação — carregar mais ──
   const fetchMore = useCallback(async () => {
@@ -347,10 +354,6 @@ export default function FeedScreen() {
       color: habit.color,
     };
   };
-
-  useEffect(() => {
-    fetchFeed();
-  }, [fetchFeed]);
 
   // ── Reações estilo Facebook (Toggle e Popover) ──
   const handleToggleReaction = async (checkinId: string, emoji: string) => {

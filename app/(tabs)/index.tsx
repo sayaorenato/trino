@@ -124,7 +124,7 @@ export default function DashboardScreen() {
           const ranking = MOCK_RANKINGS[challenge.id] || [];
           const isUserAdmin = g.role === 'admin';
           const isCreator = challenge.created_by === user?.id;
-          const userParticipates = isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user?.id);
+          const userParticipates = challenge.userParticipates || isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user?.id);
           
           if (userParticipates) {
             if (!acc.some((item: any) => item.challenge.id === challenge.id)) {

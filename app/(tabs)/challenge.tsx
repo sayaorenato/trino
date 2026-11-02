@@ -156,7 +156,7 @@ export default function ChallengeScreen() {
             const ranking = MOCK_RANKINGS[c.id] || [];
             const isUserAdmin = g.role === 'admin';
             const isCreator = c.created_by === user.id;
-            const userParticipates = isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user.id);
+            const userParticipates = c.userParticipates || isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user.id);
             
             if (userParticipates) {
               allowedChallenges.push({

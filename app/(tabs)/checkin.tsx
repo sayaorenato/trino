@@ -44,7 +44,7 @@ const HABIT_DB_TYPE: Record<HabitType, 'pray' | 'bible' | 'workout'> = {
 export default function CheckinScreen() {
   const router = useRouter();
   const { challengeId: queryChallengeId, habit: queryHabit, taskId: queryTaskId } = useLocalSearchParams<{ challengeId?: string, habit?: string, taskId?: string }>();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   // Estados do Fluxo de Check-in
   const [step, setStep] = useState<'select' | 'upload' | 'success'>('select');
@@ -85,16 +85,27 @@ export default function CheckinScreen() {
       await getMockRankings();
       const list: any[] = [];
 
+      const checkIsActive = (endDateStr: string | null | undefined): boolean => {
+        if (!endDateStr) return true;
+        const today = new Date();
+        if (endDateStr.includes('-')) {
+          const parts = endDateStr.split('T')[0].split('-');
+          const end = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 23, 59, 59, 999);
+          return end >= today;
+        }
+        const end = new Date(endDateStr);
+        end.setHours(23, 59, 59, 999);
+        return end >= today;
+      };
+
       groups.forEach((g: any) => {
         if (!g.challenges || !Array.isArray(g.challenges) || g.challenges.length === 0) return;
 
         const isMockGroup = Boolean(g.id?.startsWith('group'));
-        const now = new Date();
 
         // Filtrar desafios vigentes (data de término maior ou igual a hoje)
         const activeChallenges = g.challenges.filter((c: any) => {
-          if (!c.end_date) return true;
-          return new Date(c.end_date) >= now;
+          return checkIsActive(c.end_date);
         });
 
         // Pegar o desafio ativo vigente ou o mais recente como fallback
@@ -106,7 +117,7 @@ export default function CheckinScreen() {
           const ranking = MOCK_RANKINGS[challengeToUse.id] || [];
           const isUserAdmin = g.role === 'admin';
           const isCreator = challengeToUse.created_by === user.id;
-          const userParticipates = isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user.id);
+          const userParticipates = challengeToUse.userParticipates || isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user.id);
 
           if (userParticipates) {
             list.push({
@@ -407,11 +418,19 @@ export default function CheckinScreen() {
       return;
     }
 
-    // Para hábitos padrão multi-grupo, permitir mesmo sem activeRoundId se houver desafios selecionados
-    const isMultiGroup = !selectedTask && selectedChallengeIds.size > 0;
-    if (!activeRoundId && !isMultiGroup) {
-      Alert.alert('Sem Desafio Ativo', 'Você precisa participar de um grupo com desafio ativo para fazer check-in.');
+    if (activeChallengesList.length === 0) {
+      Alert.alert(
+        'Sem Desafio Ativo',
+        'Você não está participando de nenhum desafio ativo no momento. Peça ao administrador do grupo para liberar sua participação.'
+      );
       return;
+    }
+
+    // Auto-selecionar desafios se nenhum estiver marcado
+    let currentSelectedIds = selectedChallengeIds;
+    if (!selectedTask && currentSelectedIds.size === 0) {
+      currentSelectedIds = new Set(activeChallengesList.map(i => i.challengeId));
+      setSelectedChallengeIds(currentSelectedIds);
     }
 
     setLoading(true);
@@ -433,10 +452,16 @@ export default function CheckinScreen() {
         finalImageUrl = imageUri;
       }
 
+      const userName = profile?.full_name || user.displayName || user.email?.split('@')[0] || 'Membro Trino';
+      const userAvatar = profile?.avatar_url || user.photoURL || null;
+
       if (selectedTask) {
         // ── TAREFA EXTRA (afeta apenas o desafio selecionado) ──
-        const challengeId = selectedChallenge.challengeId;
-        const isMock = selectedChallenge.isMock === true;
+        const targetChallenge = selectedChallenge || activeChallengesList[0];
+        const challengeId = targetChallenge?.challengeId;
+        const isMock = targetChallenge?.isMock === true;
+        const targetGroupId = activeGroupId || targetChallenge?.groupId || 'group_1';
+        const targetRoundId = activeRoundId || (targetChallenge?.rounds && targetChallenge.rounds[0]?.id) || `round_${challengeId}_1`;
 
         if (isMock) {
           MOCK_EXTRA_TASKS[challengeId] = (MOCK_EXTRA_TASKS[challengeId] || []).map(t => {
@@ -458,9 +483,9 @@ export default function CheckinScreen() {
           const newCheckin: Checkin = {
             id: `check_extra_${Date.now()}`,
             user_id: user.id,
-            user_name: user.email?.split('@')[0] || 'Usuário',
-            user_avatar: MOCK_CURRENT_USER.avatar_url,
-            group_id: activeGroupId || 'group_1',
+            user_name: userName,
+            user_avatar: userAvatar || MOCK_CURRENT_USER.avatar_url,
+            group_id: targetGroupId,
             habit_type: 'prayer',
             media_url: finalImageUrl || imageUri,
             is_late: false,
@@ -471,11 +496,6 @@ export default function CheckinScreen() {
           };
           MOCK_FEED.unshift(newCheckin);
         } else {
-          const targetRoundId = activeRoundId || (selectedChallenge?.rounds && selectedChallenge.rounds[0]?.id) || `round_${challengeId}_1`;
-          const targetGroupId = activeGroupId || selectedChallenge?.groupId || 'group_1';
-          const userName = user.displayName || user.email?.split('@')[0] || 'Membro Trino';
-          const userAvatar = user.photoURL || null;
-
           await api.createCheckin({
             user_id: user.id,
             user_name: userName,
@@ -494,20 +514,18 @@ export default function CheckinScreen() {
         }
       } else {
         // ── HÁBITO PADRÃO MULTI-GRUPO ──
-        // Determina os itens de desafio que correspondem aos desafios selecionados
-        const targetItems = activeChallengesList.filter(item => selectedChallengeIds.has(item.challengeId));
-        let hasSaved = false;
+        const targetItems = activeChallengesList.filter(item => currentSelectedIds.has(item.challengeId));
+        const itemsToSave = targetItems.length > 0 ? targetItems : activeChallengesList;
 
-        for (const item of targetItems) {
+        for (const item of itemsToSave) {
           const isMock = item.isMock === true;
 
           if (isMock) {
-            // Adiciona no feed mock para cada grupo selecionado
             const newCheckin: Checkin = {
               id: `check_${item.groupId}_${Date.now()}`,
               user_id: user.id,
-              user_name: user.email?.split('@')[0] || 'Usuário',
-              user_avatar: MOCK_CURRENT_USER.avatar_url,
+              user_name: userName,
+              user_avatar: userAvatar || MOCK_CURRENT_USER.avatar_url,
               group_id: item.groupId,
               habit_type: selectedHabit as 'prayer' | 'bible' | 'exercise',
               media_url: finalImageUrl || imageUri,
@@ -518,7 +536,6 @@ export default function CheckinScreen() {
               reactions: []
             };
             MOCK_FEED.unshift(newCheckin);
-            hasSaved = true;
           } else {
             // Encontra o round ativo do item para o grupo real
             const rounds = item.rounds || [];
@@ -534,8 +551,6 @@ export default function CheckinScreen() {
               );
             }
             const roundId = currentRound?.id || (rounds.length > 0 ? rounds[0].id : `round_${item.challengeId}_1`);
-            const userName = user.displayName || user.email?.split('@')[0] || 'Membro Trino';
-            const userAvatar = user.photoURL || null;
 
             await api.createCheckin({
               user_id: user.id,
@@ -552,12 +567,7 @@ export default function CheckinScreen() {
               points: 10,
               verified: false,
             });
-            hasSaved = true;
           }
-        }
-
-        if (!hasSaved && targetItems.length > 0) {
-          throw new Error('Não foi possível realizar o check-in. O desafio selecionado não possui nenhum round ativo cadastrado.');
         }
       }
 

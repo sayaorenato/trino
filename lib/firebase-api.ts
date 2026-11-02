@@ -599,10 +599,24 @@ export const api = {
   async getDashboardData(userId: string) {
     const groups = await this.getUserGroups(userId);
 
+    // Buscar quais desafios o usuário participa oficialmente no Firestore
+    const userChallengeIds = new Set<string>();
+    if (userId && !userId.startsWith('user_')) {
+      try {
+        const cpQ = query(collection(db, 'challenge_participants'), where('user_id', '==', userId));
+        const cpSnap = await getDocs(cpQ);
+        cpSnap.docs.forEach(d => {
+          const cId = d.data().challenge_id;
+          if (cId) userChallengeIds.add(cId);
+        });
+      } catch (cpErr) {
+        console.warn('Erro ao verificar challenge_participants do usuário:', cpErr);
+      }
+    }
+
     const groupsWithChallenges = await Promise.all(
       groups.map(async (group: any) => {
         const challenges = await this.getGroupChallenges(group.id);
-        const challenge = challenges.length > 0 ? challenges[0] : null;
 
         let memberCount = 5;
         try {
@@ -615,7 +629,19 @@ export const api = {
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const activeChallengesCount = challenges.filter((c: any) => {
+
+        const enrichedChallenges = challenges.map((c: any) => {
+          const isUserAdmin = group.role === 'admin';
+          const isCreator = c.created_by === userId;
+          const isParticipant = userChallengeIds.has(c.id);
+          const inMockRanking = (MOCK_RANKINGS[c.id] || []).some((m: any) => m.user_id === userId);
+          return {
+            ...c,
+            userParticipates: isUserAdmin || isCreator || isParticipant || inMockRanking
+          };
+        });
+
+        const activeChallengesCount = enrichedChallenges.filter((c: any) => {
           if (!c.end_date) return true;
           const parts = c.end_date.split('-');
           if (parts.length === 3) {
@@ -629,31 +655,17 @@ export const api = {
 
         return {
           ...group,
-          challenges,
-          challenge,
+          challenges: enrichedChallenges,
+          challenge: enrichedChallenges[0] || null,
           memberCount,
           activeChallengesCount
         };
       })
     );
 
-    const allRoundIds = groupsWithChallenges
-      .flatMap((g: any) => (g.challenges || []).flatMap((c: any) => c.rounds || []))
-      .map((r: any) => r.id);
-
     const allChallengeIds = groupsWithChallenges
       .flatMap((g: any) => (g.challenges || []))
       .map((c: any) => c.id);
-
-    if (allRoundIds.length === 0) {
-      return {
-        groups: groupsWithChallenges,
-        habits: { prayer: false, bible: false, exercise: false },
-        todayCheckins: [],
-        tasks: [],
-        streakCount: 0
-      };
-    }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -697,9 +709,9 @@ export const api = {
 
     const habitsState = { prayer: false, bible: false, exercise: false };
     todayCheckins.forEach((c: any) => {
-      if (c.type === 'pray') habitsState.prayer = true;
-      if (c.type === 'bible') habitsState.bible = true;
-      if (c.type === 'workout') habitsState.exercise = true;
+      if (c.type === 'pray' || c.habit_type === 'prayer') habitsState.prayer = true;
+      if (c.type === 'bible' || c.habit_type === 'bible') habitsState.bible = true;
+      if (c.type === 'workout' || c.habit_type === 'exercise') habitsState.exercise = true;
     });
 
     const streakCount = await this.calculateUserStreak(userId);
@@ -877,16 +889,17 @@ export const api = {
 
   async getGroupFeed(groupId: string, limitCount = 20, offset = 0) {
     try {
-      let snap;
+      let rawDocs: any[] = [];
       if (groupId && !groupId.startsWith('group')) {
         const q = query(
           collection(db, 'checkins'),
           where('group_id', '==', groupId)
         );
-        snap = await getDocs(q);
+        const snap = await getDocs(q);
+        rawDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
         // Se ainda não encontrou por group_id, tenta também pelos IDs de desafio do grupo
-        if (snap.empty) {
+        if (rawDocs.length === 0) {
           const challenges = await this.getGroupChallenges(groupId);
           const cIds = challenges.map((c: any) => c.id).filter(Boolean);
           if (cIds.length > 0) {
@@ -894,60 +907,39 @@ export const api = {
               collection(db, 'checkins'),
               where('challenge_id', 'in', cIds.slice(0, 10))
             );
-            snap = await getDocs(cq);
+            const cSnap = await getDocs(cq);
+            rawDocs = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
           }
-        }
-
-        if (!snap.empty) {
-          const list = snap.docs.map(d => {
-            const data = d.data();
-            return {
-              id: d.id,
-              ...data,
-              media_url: data.media_url || data.image_url || null,
-              caption: data.caption || data.note || null,
-              habit_type: data.type === 'pray' ? 'prayer' : (data.type === 'workout' ? 'exercise' : (data.type || 'bible')),
-              profiles: {
-                id: data.user_id,
-                full_name: data.user_name || 'Membro Trino',
-                avatar_url: data.user_avatar || null
-              },
-              reactions: data.reactions || [],
-              comments_count: data.comments_count || 0
-            };
-          });
-          list.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-          return list.slice(offset, offset + limitCount);
-        } else {
-          return [];
         }
       } else {
         const q = query(
           collection(db, 'checkins'),
-          limit(limitCount)
+          limit(limitCount * 2)
         );
-        snap = await getDocs(q);
-        if (!snap.empty) {
-          const list = snap.docs.map(d => {
-            const data = d.data();
-            return {
-              id: d.id,
-              ...data,
-              media_url: data.media_url || data.image_url || null,
-              caption: data.caption || data.note || null,
-              habit_type: data.type === 'pray' ? 'prayer' : (data.type === 'workout' ? 'exercise' : (data.type || 'bible')),
-              profiles: {
-                id: data.user_id,
-                full_name: data.user_name || 'Membro Trino',
-                avatar_url: data.user_avatar || null
-              },
-              reactions: data.reactions || [],
-              comments_count: data.comments_count || 0
-            };
-          });
-          list.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-          return list.slice(offset, offset + limitCount);
-        }
+        const snap = await getDocs(q);
+        rawDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      }
+
+      if (rawDocs.length > 0) {
+        const list = rawDocs.map(data => {
+          return {
+            id: data.id,
+            ...data,
+            media_url: data.media_url || data.image_url || null,
+            image_url: data.image_url || data.media_url || null,
+            caption: data.caption || data.note || null,
+            habit_type: data.type === 'pray' ? 'prayer' : (data.type === 'workout' ? 'exercise' : (data.type || 'bible')),
+            profiles: {
+              id: data.user_id,
+              full_name: data.user_name || 'Membro Trino',
+              avatar_url: data.user_avatar || null
+            },
+            reactions: data.reactions || [],
+            comments_count: data.comments_count || 0
+          };
+        });
+        list.sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+        return list.slice(offset, offset + limitCount);
       }
     } catch (err) {
       console.warn('Erro ao buscar feed do grupo:', err);
@@ -968,7 +960,34 @@ export const api = {
         payload[key] = checkinData[key];
       }
     });
+
+    if (payload.image_url && !payload.media_url) {
+      payload.media_url = payload.image_url;
+    }
+    if (payload.media_url && !payload.image_url) {
+      payload.image_url = payload.media_url;
+    }
+
     const docRef = await addDoc(collection(db, 'checkins'), payload);
+
+    // Atualizar pontos em challenge_participants se existir
+    if (payload.challenge_id && payload.user_id) {
+      try {
+        const partId = `${payload.challenge_id}_${payload.user_id}`;
+        const partRef = doc(db, 'challenge_participants', partId);
+        const partSnap = await getDoc(partRef);
+        if (partSnap.exists()) {
+          const currentPoints = partSnap.data().points || 0;
+          await updateDoc(partRef, {
+            points: currentPoints + (payload.points || 10),
+            last_checkin: payload.created_at
+          });
+        }
+      } catch (err) {
+        console.warn('Erro ao atualizar pontos em challenge_participants:', err);
+      }
+    }
+
     return { id: docRef.id, ...payload };
   },
 
