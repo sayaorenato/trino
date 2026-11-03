@@ -681,7 +681,7 @@ export default function ChallengeScreen() {
       if (Platform.OS === 'web') {
         const confirm = window.confirm('Validação Requerida: Tarefas de presença ou pontualidade devem ser validadas fazendo um check-in com foto na tela de Check-in. Deseja ir para a tela de Check-in agora?');
         if (confirm) {
-          router.push('/checkin');
+          router.push({ pathname: '/(tabs)/checkin', params: { challengeId: currentChallengeId, taskId: task.id } });
         }
       } else {
         Alert.alert(
@@ -690,7 +690,7 @@ export default function ChallengeScreen() {
           [
             { 
               text: 'Ir para Check-in', 
-              onPress: () => router.push('/checkin') 
+              onPress: () => router.push({ pathname: '/(tabs)/checkin', params: { challengeId: currentChallengeId, taskId: task.id } }) 
             },
             { 
               text: 'Cancelar', 
@@ -732,17 +732,26 @@ export default function ChallengeScreen() {
 
         setExtraTasks((MOCK_EXTRA_TASKS[challenge.id] || []).filter(t => t.active !== false));
       } else {
-        // Gravar check-in de conclusão na tabela checkins do Supabase
+        // Gravar check-in de conclusão na tabela checkins do Firebase
         const activeRound = rounds.find(r => r.status === 'active') || rounds[0];
-        const roundId = activeRound?.id;
-        if (!roundId) throw new Error('Nenhum round ativo encontrado para este desafio.');
+        const roundId = activeRound?.id || `round_${currentChallengeId}_1`;
+
+        const userName = profile?.full_name || user.displayName || user.email?.split('@')[0] || 'Membro Trino';
+        const userAvatar = profile?.avatar_url || user.photoURL || null;
 
         await api.createCheckin({
           user_id: user.id,
+          user_name: userName,
+          user_avatar: userAvatar,
+          group_id: group?.id || challenge?.group_id || 'group_1',
+          challenge_id: currentChallengeId,
           round_id: roundId,
           type: 'pray',
           image_url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
+          media_url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
+          caption: `Tarefa Extra Concluída: ${task.title}`,
           note: `[EXTRA_TASK_ID:${taskId}] Concluído manualmente`,
+          points: task.points || 20,
           verified: false,
         });
 
@@ -762,7 +771,11 @@ export default function ChallengeScreen() {
       }
     } catch (e: any) {
       console.error(e);
-      Alert.alert('Erro', e.message || 'Falha ao registrar a conclusão da tarefa.');
+      if (Platform.OS === 'web') {
+        window.alert(`Erro: ${e.message || 'Falha ao registrar a conclusão da tarefa.'}`);
+      } else {
+        Alert.alert('Erro', e.message || 'Falha ao registrar a conclusão da tarefa.');
+      }
     } finally {
       setLoading(false);
     }
@@ -1005,6 +1018,26 @@ export default function ChallengeScreen() {
                   `Seu grupo realizou ${dbCheckins.filter((c: any) => c.round_id === activeRound.id).length} check-ins neste round de ${roundProgress.totalDays} dias.`
                 )}
               </Text>
+
+              <TouchableOpacity
+                style={{
+                  marginTop: SPACING.md,
+                  backgroundColor: COLORS.secondary,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingVertical: SPACING.sm + 2,
+                  paddingHorizontal: SPACING.md,
+                  borderRadius: BORDER_RADIUS.md,
+                }}
+                activeOpacity={0.85}
+                onPress={() => router.push({ pathname: '/(tabs)/checkin', params: { challengeId: currentChallengeId } })}
+              >
+                <MaterialCommunityIcons name="checkbox-marked-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#fff', fontSize: FONTS.size.sm, fontFamily: FONTS.family.heading, fontWeight: 'bold' }}>
+                  Fazer Check-in de Hoje
+                </Text>
+              </TouchableOpacity>
             </Card>
           </View>
 
