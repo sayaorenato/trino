@@ -55,8 +55,12 @@ export async function getMockRankings(): Promise<Record<string, RankingMember[]>
           if (!MOCK_RANKINGS[p.challenge_id]) {
             MOCK_RANKINGS[p.challenge_id] = [];
           }
-          const already = MOCK_RANKINGS[p.challenge_id].some(m => m.user_id === p.user_id);
-          if (!already) {
+          const existing = MOCK_RANKINGS[p.challenge_id].find(m => m.user_id === p.user_id);
+          if (existing) {
+            existing.points = Math.max(p.points || 0, existing.points || 0);
+            if (p.user_name) existing.name = p.user_name;
+            if (p.user_avatar) existing.avatar_url = p.user_avatar;
+          } else {
             MOCK_RANKINGS[p.challenge_id].push({
               user_id: p.user_id,
               name: p.user_name || p.name || 'Participante',

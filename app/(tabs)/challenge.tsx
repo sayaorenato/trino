@@ -246,9 +246,15 @@ export default function ChallengeScreen() {
           setRounds(MOCK_ROUNDS[targetChallengeId!] || []);
           setExtraTasks((MOCK_EXTRA_TASKS[targetChallengeId!] || []).filter((t: ExtraTask) => t.active !== false));
           
-          // Carrega o ranking do Mock
-          const mRank = MOCK_RANKINGS[targetChallengeId!] || [];
-          setRankingData(mRank);
+          // Carrega o ranking dinâmico do desafio
+          try {
+            const calculatedRanking = await api.getChallengeRanking(targetChallengeId!);
+            setRankingData(calculatedRanking);
+          } catch (rErr) {
+            console.warn('Erro ao carregar ranking:', rErr);
+            const mRank = MOCK_RANKINGS[targetChallengeId!] || [];
+            setRankingData(mRank);
+          }
           setLoading(false);
         } else {
           api.getChallengeById(targetChallengeId).then(async (data: any) => {
@@ -287,50 +293,16 @@ export default function ChallengeScreen() {
 
                 // --- CALCULO DINÂMICO DO RANKING REAL DO BANCO ---
                 try {
-                  const members = await api.getGroupMembers(data.group_id);
-                  const roundIds = sortedRounds.map((r: any) => r.id);
-                  
-                  let dbCheckinsData: any[] = [];
-                  if (roundIds.length > 0) {
-                    const uCheckins = await api.getUserCheckins(user.id);
-                    dbCheckinsData = uCheckins || [];
-                  }
-                  setDbCheckins(dbCheckinsData);
-
-                  // Mapeia pontuação de cada membro participante aprovado
-                  const allowedRanking = MOCK_RANKINGS[targetChallengeId!] || [];
-                  const activeMembers = members.filter((m: any) => 
-                    m.role === 'admin' || allowedRanking.some((r: any) => r.user_id === m.user_id)
-                  );
-
-                  const calculatedRanking: RankingMember[] = activeMembers.map((m: any) => {
-                    const userCheckins = dbCheckinsData.filter((c: any) => c.user_id === m.user_id);
-                    
-                    let points = 0;
-                    userCheckins.forEach((c: any) => {
-                      if (c.note && c.note.startsWith('[EXTRA_TASK_ID:')) {
-                        // Pontos de tarefas extras (calculamos 30 pts padrão)
-                        points += 30;
-                      } else {
-                        // 10 pts por hábito diário concluído
-                        points += 10;
-                      }
-                    });
-
-                    return {
-                      user_id: m.user_id,
-                      name: m.full_name || 'Participante',
-                      avatar_url: m.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-                      points: points,
-                      streak: m.streak || 0,
-                      rounds_won: 0
-                    };
-                  });
-
+                  const calculatedRanking = await api.getChallengeRanking(targetChallengeId!);
                   setRankingData(calculatedRanking);
                 } catch (rankErr) {
                   console.error('Erro ao calcular ranking real:', rankErr);
                 }
+
+                try {
+                  const uCheckins = await api.getUserCheckins(user.id);
+                  setDbCheckins(uCheckins || []);
+                } catch {}
 
                 // Carregar tarefas extras via Firebase API
                 api.getTasksForChallenges([targetChallengeId]).then(async (tasksData: any[]) => {
@@ -1245,24 +1217,39 @@ export default function ChallengeScreen() {
           {/* RANKING / CLASSIFICAÇÃO DOS PARTICIPANTES */}
           <View style={styles.section}>
             <View style={styles.rankingHeaderRow}>
-              <Text style={styles.sectionTitle}>Ranking dos Participantes</Text>
-              {userRole === 'admin' && (
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionTitle}>Ranking dos Participantes</Text>
+                <Text style={{ fontSize: FONTS.size.xs, color: COLORS.textSecondary, fontFamily: FONTS.family.body }}>
+                  {isFinished ? 'Classificação final do desafio' : 'Acompanhe a pontuação de todos os membros'}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: SPACING.xs, alignItems: 'center' }}>
                 <TouchableOpacity
                   activeOpacity={0.8}
-                  style={styles.inviteBtn}
-                  onPress={() => router.push({ pathname: '/challenge-invite', params: { challengeId: currentChallengeId } })}
+                  style={[styles.inviteBtn, { backgroundColor: COLORS.goldLight + '25', borderColor: COLORS.gold, borderWidth: 1 }]}
+                  onPress={() => router.push({ pathname: '/ranking', params: { challengeId: challenge?.id || currentChallengeId } })}
                 >
-                  <MaterialCommunityIcons name="account-plus" size={16} color={COLORS.secondary} />
-                  <Text style={styles.inviteBtnText}>Convidar</Text>
+                  <MaterialCommunityIcons name="podium-gold" size={16} color={COLORS.goldDark} />
+                  <Text style={[styles.inviteBtnText, { color: COLORS.goldDark }]}>Ver Todos</Text>
                 </TouchableOpacity>
-              )}
+                {userRole === 'admin' && (
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.inviteBtn}
+                    onPress={() => router.push({ pathname: '/challenge-invite', params: { challengeId: currentChallengeId } })}
+                  >
+                    <MaterialCommunityIcons name="account-plus" size={16} color={COLORS.secondary} />
+                    <Text style={styles.inviteBtnText}>Convidar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
             
-            {/* Mostrar PÓDIO TOP 3 somente se o desafio já foi encerrado */}
-            {isFinished && (
+            {/* PÓDIO TOP 3 (Líderes Atuais ou Vencedores Finais) */}
+            {sortedRanking.length > 0 && (
               <View style={styles.podiumContainer}>
                 {/* Segundo Lugar */}
-                {top2 && (
+                {top2 ? (
                   <View style={styles.podiumCol}>
                     <View style={styles.avatarWrapper}>
                       <Avatar source={top2.avatar_url} name={top2.name} size={48} />
@@ -1276,10 +1263,12 @@ export default function ChallengeScreen() {
                       <Text style={styles.podiumBaseText}>2º</Text>
                     </View>
                   </View>
+                ) : (
+                  <View style={styles.podiumCol} />
                 )}
 
                 {/* Primeiro Lugar */}
-                {top1 && (
+                {top1 ? (
                   <View style={[styles.podiumCol, styles.podiumColCenter]}>
                     <MaterialCommunityIcons name="crown" size={20} color={COLORS.gold} style={styles.crownIcon} />
                     <View style={styles.avatarWrapperCenter}>
@@ -1294,10 +1283,12 @@ export default function ChallengeScreen() {
                       <Text style={styles.podiumBaseText}>1º</Text>
                     </View>
                   </View>
+                ) : (
+                  <View style={[styles.podiumCol, styles.podiumColCenter]} />
                 )}
 
                 {/* Terceiro Lugar */}
-                {top3 && (
+                {top3 ? (
                   <View style={styles.podiumCol}>
                     <View style={styles.avatarWrapper}>
                       <Avatar source={top3.avatar_url} name={top3.name} size={48} />
@@ -1311,48 +1302,76 @@ export default function ChallengeScreen() {
                       <Text style={styles.podiumBaseText}>3º</Text>
                     </View>
                   </View>
+                ) : (
+                  <View style={styles.podiumCol} />
                 )}
               </View>
             )}
 
-            {/* Listagem Geral */}
-            <Card variant="default" style={styles.leaderboardCard}>
-              {sortedRanking.map((member, index) => (
-                <View 
-                  key={member.user_id} 
-                  style={[
-                    styles.leaderboardRow,
-                    index === sortedRanking.length - 1 && { borderBottomWidth: 0 }
-                  ]}
-                >
-                  <Text style={styles.positionText}>{member.position}</Text>
-                  <View style={styles.userCol}>
-                    <Avatar source={member.avatar_url} name={member.name} size={36} />
-                    <View style={{ marginLeft: SPACING.sm }}>
-                      <Text style={styles.userNameText}>{member.name}</Text>
-                      <View style={styles.detailsRow}>
-                        {member.streak > 0 && (
-                          <View style={styles.streakBadgeInline}>
-                            <MaterialCommunityIcons name="fire" size={12} color="#ff4e50" />
-                            <Text style={styles.streakTextInline}>{member.streak}d</Text>
+            {/* Listagem Geral dos Participantes */}
+            {sortedRanking.length === 0 ? (
+              <Card variant="flat" style={{ padding: SPACING.lg, alignItems: 'center' }}>
+                <MaterialCommunityIcons name="trophy-outline" size={32} color={COLORS.textLight} style={{ marginBottom: 6 }} />
+                <Text style={{ fontSize: FONTS.size.xs, color: COLORS.textSecondary, fontFamily: FONTS.family.body, textAlign: 'center' }}>
+                  Nenhum participante pontuou neste desafio ainda.{'\n'}Faça seu primeiro check-in e lidere o ranking!
+                </Text>
+              </Card>
+            ) : (
+              <Card variant="default" style={styles.leaderboardCard}>
+                {sortedRanking.map((member, index) => {
+                  const isCurrentUser = member.user_id === user?.id;
+                  return (
+                    <View 
+                      key={member.user_id} 
+                      style={[
+                        styles.leaderboardRow,
+                        isCurrentUser && { backgroundColor: COLORS.goldLight + '15' },
+                        index === sortedRanking.length - 1 && { borderBottomWidth: 0 }
+                      ]}
+                    >
+                      <Text style={[styles.positionText, isCurrentUser && { color: COLORS.goldDark, fontWeight: 'bold' }]}>
+                        {member.position}º
+                      </Text>
+                      <View style={styles.userCol}>
+                        <Avatar source={member.avatar_url} name={member.name} size={36} />
+                        <View style={{ marginLeft: SPACING.sm, flex: 1 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={[styles.userNameText, isCurrentUser && { color: COLORS.primary, fontWeight: 'bold' }]}>
+                              {member.name}
+                            </Text>
+                            {isCurrentUser && (
+                              <View style={{ backgroundColor: COLORS.secondary, paddingHorizontal: 6, paddingVertical: 1, borderRadius: BORDER_RADIUS.sm }}>
+                                <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>Você</Text>
+                              </View>
+                            )}
                           </View>
-                        )}
-                        {member.rounds_won > 0 && (
-                          <View style={styles.roundsBadgeInline}>
-                            <MaterialCommunityIcons name="crown" size={12} color={COLORS.gold} />
-                            <Text style={styles.roundsTextInline}>{member.rounds_won} rd</Text>
+                          <View style={styles.detailsRow}>
+                            {member.streak > 0 && (
+                              <View style={styles.streakBadgeInline}>
+                                <MaterialCommunityIcons name="fire" size={12} color="#ff4e50" />
+                                <Text style={styles.streakTextInline}>{member.streak}d</Text>
+                              </View>
+                            )}
+                            {member.rounds_won > 0 && (
+                              <View style={styles.roundsBadgeInline}>
+                                <MaterialCommunityIcons name="crown" size={12} color={COLORS.gold} />
+                                <Text style={styles.roundsTextInline}>{member.rounds_won} rd</Text>
+                              </View>
+                            )}
                           </View>
-                        )}
+                        </View>
+                      </View>
+                      <View style={styles.pointsCol}>
+                        <Text style={[styles.pointsValueText, isCurrentUser && { color: COLORS.secondary, fontWeight: 'bold' }]}>
+                          {member.points}
+                        </Text>
+                        <Text style={styles.pointsLabelText}>pts</Text>
                       </View>
                     </View>
-                  </View>
-                  <View style={styles.pointsCol}>
-                    <Text style={styles.pointsValueText}>{member.points}</Text>
-                    <Text style={styles.pointsLabelText}>pts</Text>
-                  </View>
-                </View>
-              ))}
-            </Card>
+                  );
+                })}
+              </Card>
+            )}
           </View>
 
           {/* Doação CTA rápido */}

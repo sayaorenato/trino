@@ -533,64 +533,175 @@ export const api = {
 
   async getChallengeRanking(challengeId: string): Promise<any[]> {
     if (!challengeId) return [];
-    if (challengeId.startsWith('chal')) {
-      const { MOCK_RANKINGS } = require('../constants/mock-data');
-      return MOCK_RANKINGS[challengeId] || [];
-    }
 
     try {
-      const chal = await this.getChallengeById(challengeId);
-      if (!chal) return [];
-
-      const members = chal.group_id ? await this.getGroupMembers(chal.group_id) : [];
-      const roundIds = (chal.rounds || []).map((r: any) => r.id);
+      // 1. Buscar os check-ins feitos para este desafio no Firestore
       let checkinsList: any[] = [];
-      if (roundIds.length > 0) {
+      try {
+        const cQ = query(
+          collection(db, 'checkins'),
+          where('challenge_id', '==', challengeId)
+        );
+        const cSnap = await getDocs(cQ);
+        checkinsList = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (err) {
+        console.warn('Erro ao buscar checkins por challenge_id:', err);
+      }
+
+      // Se não encontrou checkins diretos e tiver rounds, tentar buscar por round_ids
+      if (checkinsList.length === 0) {
         try {
-          const cQ = query(
-            collection(db, 'checkins'),
-            where('round_id', 'in', roundIds.slice(0, 10))
-          );
-          const cSnap = await getDocs(cQ);
-          checkinsList = cSnap.docs.map(d => d.data());
+          const chal = await this.getChallengeById(challengeId);
+          const roundIds = (chal?.rounds || []).map((r: any) => r.id).filter(Boolean);
+          if (roundIds.length > 0) {
+            const rQ = query(
+              collection(db, 'checkins'),
+              where('round_id', 'in', roundIds.slice(0, 10))
+            );
+            const rSnap = await getDocs(rQ);
+            checkinsList = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          }
         } catch {}
       }
 
-      const { MOCK_RANKINGS } = require('../constants/mock-data');
-      const allowedRanking = MOCK_RANKINGS[challengeId] || [];
+      // 2. Buscar participantes oficiais da coleção 'challenge_participants'
+      let participantsList: any[] = [];
+      try {
+        const partQ = query(
+          collection(db, 'challenge_participants'),
+          where('challenge_id', '==', challengeId)
+        );
+        const partSnap = await getDocs(partQ);
+        participantsList = partSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (err) {
+        console.warn('Erro ao buscar challenge_participants:', err);
+      }
 
+      // 3. Buscar membros do grupo associado ao desafio (se houver)
+      let groupMembers: any[] = [];
+      try {
+        const chal = await this.getChallengeById(challengeId);
+        if (chal?.group_id) {
+          groupMembers = await this.getGroupMembers(chal.group_id);
+        }
+      } catch {}
+
+      // 4. Carregar mock rankings persistidos se existirem
+      const { MOCK_RANKINGS, getMockRankings } = require('../constants/mock-data');
+      await getMockRankings();
+      const mockMembers = MOCK_RANKINGS[challengeId] || [];
+
+      // 5. Unificar todos os participantes em um Map por user_id
       const participantsMap = new Map<string, any>();
-      members.forEach((m: any) => {
-        const isApproved = m.role === 'admin' || chal.created_by === m.user_id || allowedRanking.some((r: any) => r.user_id === m.user_id);
-        if (isApproved) {
+
+      // Adicionar mock members (base de demonstração/inicial)
+      mockMembers.forEach((m: any) => {
+        participantsMap.set(m.user_id, {
+          user_id: m.user_id,
+          name: m.name || m.full_name || 'Participante',
+          avatar_url: m.avatar_url || null,
+          points: m.points || 0,
+          streak: m.streak || 0,
+          rounds_won: m.rounds_won || 0,
+          checkin_count: m.checkin_count || 0
+        });
+      });
+
+      // Adicionar membros do grupo
+      groupMembers.forEach((m: any) => {
+        if (!participantsMap.has(m.user_id)) {
           participantsMap.set(m.user_id, {
             user_id: m.user_id,
             name: m.full_name || 'Participante',
             avatar_url: m.avatar_url || null,
-            streak: 0,
+            points: 0,
+            streak: m.streak || 0,
+            rounds_won: 0,
+            checkin_count: 0
           });
         }
       });
 
-      const ranking = Array.from(participantsMap.values()).map(p => {
-        const uCheckins = checkinsList.filter(c => c.user_id === p.user_id);
-        let points = 0;
-        uCheckins.forEach((c: any) => {
-          if (c.note && c.note.startsWith('[TAREFA EXTRA]')) {
-            points += 30;
-          } else {
-            points += 10;
+      // Adicionar challenge_participants
+      participantsList.forEach((p: any) => {
+        const existing = participantsMap.get(p.user_id);
+        participantsMap.set(p.user_id, {
+          user_id: p.user_id,
+          name: p.user_name || p.full_name || existing?.name || 'Participante',
+          avatar_url: p.user_avatar || p.avatar_url || existing?.avatar_url || null,
+          points: Math.max(p.points || 0, existing?.points || 0),
+          streak: p.streak || existing?.streak || 0,
+          rounds_won: p.rounds_won || existing?.rounds_won || 0,
+          checkin_count: existing?.checkin_count || 0
+        });
+      });
+
+      // Adicionar qualquer usuário que tenha feito checkin
+      checkinsList.forEach((c: any) => {
+        if (c.user_id && !participantsMap.has(c.user_id)) {
+          participantsMap.set(c.user_id, {
+            user_id: c.user_id,
+            name: c.user_name || 'Participante',
+            avatar_url: c.user_avatar || null,
+            points: 0,
+            streak: 0,
+            rounds_won: 0,
+            checkin_count: 0
+          });
+        }
+      });
+
+      // 6. Recalcular os pontos com base em TODOS os check-ins reais encontrados
+      const finalRanking = Array.from(participantsMap.values()).map(participant => {
+        const userCheckins = checkinsList.filter(c => c.user_id === participant.user_id);
+        
+        let calculatedPoints = 0;
+        let lastCheckinIso: string | null = null;
+
+        userCheckins.forEach((c: any) => {
+          let pts = 10;
+          if (typeof c.points === 'number' && c.points > 0) {
+            pts = c.points;
+          } else if (c.note && (c.note.startsWith('[TAREFA EXTRA]') || c.note.startsWith('[EXTRA_TASK_ID:'))) {
+            pts = 30;
+          }
+          calculatedPoints += pts;
+
+          if (c.created_at) {
+            if (!lastCheckinIso || c.created_at > lastCheckinIso) {
+              lastCheckinIso = c.created_at;
+            }
           }
         });
+
+        // Garantir que a pontuação reflita os pontos calculados de check-ins ou pontos salvos
+        const totalPoints = Math.max(calculatedPoints, participant.points || 0);
+
         return {
-          ...p,
-          points,
-          checkin_count: uCheckins.length
+          ...participant,
+          points: totalPoints,
+          checkin_count: Math.max(userCheckins.length, participant.checkin_count || 0),
+          last_checkin: lastCheckinIso
         };
       });
 
-      ranking.sort((a, b) => b.points - a.points);
-      return ranking.map((item, idx) => ({ ...item, rank: idx + 1 }));
+      // 7. Ordenar estritamente decrescente por pontos (quem tem maior pontuação no topo)
+      finalRanking.sort((a, b) => {
+        if (b.points !== a.points) {
+          return b.points - a.points;
+        }
+        if ((b.checkin_count || 0) !== (a.checkin_count || 0)) {
+          return (b.checkin_count || 0) - (a.checkin_count || 0);
+        }
+        return (a.name || '').localeCompare(b.name || '');
+      });
+
+      // 8. Atribuir posição sequencial (1, 2, 3...)
+      return finalRanking.map((item, idx) => ({
+        ...item,
+        position: idx + 1,
+        rank: idx + 1
+      }));
     } catch (e) {
       console.warn('Erro ao calcular ranking:', e);
       return [];
@@ -971,8 +1082,9 @@ export const api = {
 
     const docRef = await addDoc(collection(db, 'checkins'), payload);
 
-    // Atualizar pontos em challenge_participants se existir
+    // Atualizar pontos em challenge_participants no Firestore
     if (payload.challenge_id && payload.user_id) {
+      const ptsToAdd = typeof payload.points === 'number' ? payload.points : 10;
       try {
         const partId = `${payload.challenge_id}_${payload.user_id}`;
         const partRef = doc(db, 'challenge_participants', partId);
@@ -980,12 +1092,56 @@ export const api = {
         if (partSnap.exists()) {
           const currentPoints = partSnap.data().points || 0;
           await updateDoc(partRef, {
-            points: currentPoints + (payload.points || 10),
-            last_checkin: payload.created_at
+            points: currentPoints + ptsToAdd,
+            last_checkin: payload.created_at,
+            user_name: payload.user_name || partSnap.data().user_name,
+            user_avatar: payload.user_avatar || partSnap.data().user_avatar
           });
+        } else {
+          await setDoc(partRef, {
+            id: partId,
+            challenge_id: payload.challenge_id,
+            group_id: payload.group_id || null,
+            user_id: payload.user_id,
+            user_name: payload.user_name || 'Participante',
+            user_avatar: payload.user_avatar || null,
+            points: ptsToAdd,
+            joined_at: payload.created_at,
+            last_checkin: payload.created_at,
+            streak: 1,
+            role: 'member'
+          }, { merge: true });
         }
       } catch (err) {
         console.warn('Erro ao atualizar pontos em challenge_participants:', err);
+      }
+
+      // Sincronizar em memória com MOCK_RANKINGS caso esteja em execução mock/local
+      try {
+        const { MOCK_RANKINGS, saveMockRankings } = require('../constants/mock-data');
+        if (MOCK_RANKINGS) {
+          if (!MOCK_RANKINGS[payload.challenge_id]) {
+            MOCK_RANKINGS[payload.challenge_id] = [];
+          }
+          const existing = MOCK_RANKINGS[payload.challenge_id].find((m: any) => m.user_id === payload.user_id);
+          if (existing) {
+            existing.points = (existing.points || 0) + ptsToAdd;
+            if (payload.user_name) existing.name = payload.user_name;
+            if (payload.user_avatar) existing.avatar_url = payload.user_avatar;
+          } else {
+            MOCK_RANKINGS[payload.challenge_id].push({
+              user_id: payload.user_id,
+              name: payload.user_name || 'Participante',
+              avatar_url: payload.user_avatar || null,
+              points: ptsToAdd,
+              streak: 1,
+              rounds_won: 0
+            });
+          }
+          await saveMockRankings();
+        }
+      } catch (mockErr) {
+        console.warn('Erro ao sincronizar mock ranking:', mockErr);
       }
     }
 

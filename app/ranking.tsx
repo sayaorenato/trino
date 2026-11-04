@@ -72,20 +72,13 @@ export default function RankingScreen() {
       setLoadingRanking(true);
       await getMockRankings();
 
-      const isMock = selectedChallengeId.startsWith('chal');
-      if (isMock) {
-        const mRank = MOCK_RANKINGS[selectedChallengeId] || [];
-        setRankingData(mRank);
-        setLoadingRanking(false);
-        return;
-      }
-
       try {
         const calculatedRanking = await api.getChallengeRanking(selectedChallengeId);
         setRankingData(calculatedRanking);
       } catch (e) {
         console.error('Erro ao buscar ranking dinâmico:', e);
-        setRankingData([]);
+        const mRank = MOCK_RANKINGS[selectedChallengeId] || [];
+        setRankingData(mRank);
       } finally {
         setLoadingRanking(false);
       }
