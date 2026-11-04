@@ -160,6 +160,8 @@ export default function CheckinScreen() {
         setSelectedChallenge(found);
         setSelectedHabit(queryHabit as HabitType);
         setSelectedTask(null);
+        setImageUri(null);
+        setCaption('');
         setStep('upload');
       }
 
@@ -324,6 +326,8 @@ export default function CheckinScreen() {
   const handleSelectHabit = (type: HabitType) => {
     setSelectedHabit(type);
     setSelectedTask(null);
+    setImageUri(null);
+    setCaption('');
     setStep('upload');
   };
 
@@ -434,9 +438,17 @@ export default function CheckinScreen() {
       return;
     }
 
-    // Se o usuário não anexou foto manual, preenche com imagem de alta qualidade do hábito para não travar
+    // Se o usuário não anexou foto manual ou está com imagem padrão do hábito anterior, atualiza para o hábito atual
+    const defaultHabitPhotos = [
+      'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1504052434569-70ad5836ab90?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1508962914676-134849a727f0?auto=format&fit=crop&w=600&q=80'
+    ];
     let photoToUse = imageUri;
-    if (!photoToUse) {
+    const isPreviousDefault = defaultHabitPhotos.includes(photoToUse || '');
+    if (!photoToUse || isPreviousDefault) {
       if (selectedTask) {
         if (selectedTask.type === 'presence') {
           photoToUse = 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=600&q=80';
@@ -452,7 +464,6 @@ export default function CheckinScreen() {
       } else {
         photoToUse = 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80';
       }
-      setImageUri(photoToUse);
     }
 
     // Auto-selecionar desafios se nenhum estiver marcado
@@ -1086,6 +1097,13 @@ export default function CheckinScreen() {
           </Text>
 
           <View style={styles.successActionButtons}>
+            <Button
+              title="Fazer Outro Check-in"
+              variant="secondary"
+              size="lg"
+              onPress={handleReset}
+              style={[styles.successBtn, { marginBottom: SPACING.sm }]}
+            />
             <Button
               title="Ir para o Feed do Grupo"
               variant="primary"

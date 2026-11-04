@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { 
   collection, 
   doc, 
@@ -993,33 +994,142 @@ export const api = {
 
   async uploadCheckinImage(userId: string, localUri: string): Promise<string | null> {
     try {
+      // 1. No Web, se for blob/file/data, gera base64 otimizado rapidamente para garantir que nunca trave
+      let optimizedDataUrl: string | null = null;
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof document !== 'undefined') {
+        try {
+          optimizedDataUrl = await new Promise<string>((resolve) => {
+            const img = new (window as any).Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+              try {
+                const canvas = document.createElement('canvas');
+                let width = img.width || 600;
+                let height = img.height || 600;
+                const maxDim = 800;
+                if (width > maxDim || height > maxDim) {
+                  if (width > height) {
+                    height = Math.round((height * maxDim) / width);
+                    width = maxDim;
+                  } else {
+                    width = Math.round((width * maxDim) / height);
+                    height = maxDim;
+                  }
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                  ctx.drawImage(img, 0, 0, width, height);
+                  resolve(canvas.toDataURL('image/jpeg', 0.65));
+                  return;
+                }
+              } catch {}
+              resolve(localUri);
+            };
+            img.onerror = () => resolve(localUri);
+            img.src = localUri;
+          });
+        } catch {
+          optimizedDataUrl = localUri;
+        }
+      }
+
+      // 2. Tentar upload no Firebase Storage com timeout estrito de 3 segundos
       const { ext, contentType } = getFileInfo(localUri);
       const filePath = `checkins/${userId}_${Date.now()}.${ext}`;
       const storageRef = ref(storage, filePath);
 
-      const response = await fetch(localUri);
-      const blob = await response.blob();
-      await uploadBytes(storageRef, blob, { contentType });
-      return await getDownloadURL(storageRef);
+      const uploadPromise = (async () => {
+        const response = await fetch(localUri);
+        const blob = await response.blob();
+        await uploadBytes(storageRef, blob, { contentType });
+        return await getDownloadURL(storageRef);
+      })();
+
+      const timeoutPromise = new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), 3000);
+      });
+
+      const uploadedUrl = await Promise.race([uploadPromise, timeoutPromise]);
+      if (uploadedUrl) {
+        return uploadedUrl;
+      }
+
+      // Se Firebase Storage falhou ou demorou mais que 3s, usa a imagem otimizada
+      return optimizedDataUrl || localUri;
     } catch (err) {
-      console.error('Erro ao fazer upload da imagem de checkin:', err);
-      return null;
+      console.warn('Erro ou timeout no upload de imagem de checkin, usando fallback:', err);
+      return localUri;
     }
   },
 
   async uploadAvatarImage(userId: string, localUri: string): Promise<string | null> {
     try {
+      let optimizedDataUrl: string | null = null;
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof document !== 'undefined') {
+        try {
+          optimizedDataUrl = await new Promise<string>((resolve) => {
+            const img = new (window as any).Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+              try {
+                const canvas = document.createElement('canvas');
+                let width = img.width || 400;
+                let height = img.height || 400;
+                const maxDim = 400;
+                if (width > maxDim || height > maxDim) {
+                  if (width > height) {
+                    height = Math.round((height * maxDim) / width);
+                    width = maxDim;
+                  } else {
+                    width = Math.round((width * maxDim) / height);
+                    height = maxDim;
+                  }
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                  ctx.drawImage(img, 0, 0, width, height);
+                  resolve(canvas.toDataURL('image/jpeg', 0.7));
+                  return;
+                }
+              } catch {}
+              resolve(localUri);
+            };
+            img.onerror = () => resolve(localUri);
+            img.src = localUri;
+          });
+        } catch {
+          optimizedDataUrl = localUri;
+        }
+      }
+
       const { ext, contentType } = getFileInfo(localUri);
       const filePath = `avatars/${userId}_${Date.now()}.${ext}`;
       const storageRef = ref(storage, filePath);
 
-      const response = await fetch(localUri);
-      const blob = await response.blob();
-      await uploadBytes(storageRef, blob, { contentType });
-      return await getDownloadURL(storageRef);
+      const uploadPromise = (async () => {
+        const response = await fetch(localUri);
+        const blob = await response.blob();
+        await uploadBytes(storageRef, blob, { contentType });
+        return await getDownloadURL(storageRef);
+      })();
+
+      const timeoutPromise = new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), 3000);
+      });
+
+      const uploadedUrl = await Promise.race([uploadPromise, timeoutPromise]);
+      if (uploadedUrl) {
+        return uploadedUrl;
+      }
+
+      return optimizedDataUrl || localUri;
     } catch (err) {
-      console.error('Erro ao fazer upload de avatar:', err);
-      return null;
+      console.warn('Erro ou timeout no upload de avatar, usando fallback:', err);
+      return localUri;
     }
   },
 
