@@ -1263,6 +1263,23 @@ export const api = {
     return { id: taskId, ...taskData };
   },
 
+  async completeExtraTask(taskId: string, userId: string) {
+    try {
+      const taskRef = doc(db, 'tasks', taskId);
+      const snap = await getDoc(taskRef);
+      if (snap.exists()) {
+        const completedBy = snap.data().completed_by || [];
+        if (!completedBy.includes(userId)) {
+          await updateDoc(taskRef, {
+            completed_by: [...completedBy, userId]
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao atualizar completed_by em tasks:', e);
+    }
+  },
+
 
   async getWeeklyTheme(): Promise<WeeklyTheme> {
     try {

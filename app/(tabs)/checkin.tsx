@@ -216,7 +216,7 @@ export default function CheckinScreen() {
       const filteredMock = (MOCK_EXTRA_TASKS[challengeId] || []).filter(t => t.active !== false);
       setExtraTasks(filteredMock);
       
-      if (queryTaskId) {
+      if (queryTaskId && step !== 'success') {
         const foundTask = filteredMock.find(t => t.id === queryTaskId);
         const isCompleted = foundTask?.completed_by.includes(user?.id || '');
         if (foundTask && !isCompleted) {
@@ -275,7 +275,7 @@ export default function CheckinScreen() {
           const filteredTasks = parsedTasks.filter(t => t.active !== false);
           setExtraTasks(filteredTasks);
           
-          if (queryTaskId) {
+          if (queryTaskId && step !== 'success') {
             const foundTask = filteredTasks.find(t => t.id === queryTaskId);
             const isCompleted = foundTask?.completed_by.includes(user?.id || '');
             if (foundTask && !isCompleted) {
@@ -286,7 +286,7 @@ export default function CheckinScreen() {
           }
         });
     }
-  }, [selectedChallenge, step, queryTaskId, user]);
+  }, [selectedChallenge, queryTaskId, user]);
 
   // Atualiza hábitos concluídos hoje para o desafio/round ativo
   useEffect(() => {
@@ -553,6 +553,15 @@ export default function CheckinScreen() {
             points: selectedTask.points || 30,
             verified: false,
           });
+
+          setExtraTasks(prev => prev.map(t => {
+            if (t.id === selectedTask.id) {
+              return { ...t, completed_by: [...t.completed_by, user.id] };
+            }
+            return t;
+          }));
+
+          api.completeExtraTask(selectedTask.id, user.id).catch(() => {});
         }
       } else {
         // ── HÁBITO PADRÃO MULTI-GRUPO ──
@@ -645,6 +654,9 @@ export default function CheckinScreen() {
     setSelectedTask(null);
     setImageUri(null);
     setCaption('');
+    try {
+      router.setParams({ taskId: undefined, habit: undefined });
+    } catch {}
   };
 
   // Tela de loading enquanto busca round ativo
