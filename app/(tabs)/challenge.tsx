@@ -597,9 +597,6 @@ export default function ChallengeScreen() {
     .map((member, index) => ({ ...member, position: index + 1 }));
 
   const isFinished = challenge ? new Date(challenge.end_date) < new Date() : false;
-  const top1 = sortedRanking.find(m => m.position === 1);
-  const top2 = sortedRanking.find(m => m.position === 2);
-  const top3 = sortedRanking.find(m => m.position === 3);
 
   const activeRound = rounds.find(r => r.status === 'active') || rounds[0] || { id: null, round_number: 1, start_date: challenge.start_date, end_date: challenge.end_date, status: 'active' };
   const roundProgress = calculateRoundProgress(activeRound.start_date, activeRound.end_date);
@@ -1244,69 +1241,7 @@ export default function ChallengeScreen() {
                 )}
               </View>
             </View>
-            
-            {/* PÓDIO TOP 3 (Líderes Atuais ou Vencedores Finais) */}
-            {sortedRanking.length > 0 && (
-              <View style={styles.podiumContainer}>
-                {/* Segundo Lugar */}
-                {top2 ? (
-                  <View style={styles.podiumCol}>
-                    <View style={styles.avatarWrapper}>
-                      <Avatar source={top2.avatar_url} name={top2.name} size={48} />
-                      <View style={[styles.podiumBadge, { backgroundColor: '#a0a0a5' }]}>
-                        <Text style={styles.podiumBadgeText}>2</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.podiumName} numberOfLines={1}>{top2.name.split(' ')[0]}</Text>
-                    <Text style={styles.podiumPoints}>{top2.points} pts</Text>
-                    <View style={[styles.podiumBase, styles.podium2]}>
-                      <Text style={styles.podiumBaseText}>2º</Text>
-                    </View>
-                  </View>
-                ) : (
-                  <View style={styles.podiumCol} />
-                )}
 
-                {/* Primeiro Lugar */}
-                {top1 ? (
-                  <View style={[styles.podiumCol, styles.podiumColCenter]}>
-                    <MaterialCommunityIcons name="crown" size={20} color={COLORS.gold} style={styles.crownIcon} />
-                    <View style={styles.avatarWrapperCenter}>
-                      <Avatar source={top1.avatar_url} name={top1.name} size={60} style={styles.goldAvatarBorder} />
-                      <View style={[styles.podiumBadge, { backgroundColor: COLORS.gold }]}>
-                        <Text style={styles.podiumBadgeText}>1</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.podiumNameCenter} numberOfLines={1}>{top1.name.split(' ')[0]}</Text>
-                    <Text style={styles.podiumPointsCenter}>{top1.points} pts</Text>
-                    <View style={[styles.podiumBase, styles.podium1]}>
-                      <Text style={styles.podiumBaseText}>1º</Text>
-                    </View>
-                  </View>
-                ) : (
-                  <View style={[styles.podiumCol, styles.podiumColCenter]} />
-                )}
-
-                {/* Terceiro Lugar */}
-                {top3 ? (
-                  <View style={styles.podiumCol}>
-                    <View style={styles.avatarWrapper}>
-                      <Avatar source={top3.avatar_url} name={top3.name} size={48} />
-                      <View style={[styles.podiumBadge, { backgroundColor: '#cd7f32' }]}>
-                        <Text style={styles.podiumBadgeText}>3</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.podiumName} numberOfLines={1}>{top3.name.split(' ')[0]}</Text>
-                    <Text style={styles.podiumPoints}>{top3.points} pts</Text>
-                    <View style={[styles.podiumBase, styles.podium3]}>
-                      <Text style={styles.podiumBaseText}>3º</Text>
-                    </View>
-                  </View>
-                ) : (
-                  <View style={styles.podiumCol} />
-                )}
-              </View>
-            )}
 
             {/* Listagem Geral dos Participantes */}
             {sortedRanking.length === 0 ? (
