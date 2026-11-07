@@ -30,27 +30,50 @@ export default function RankingScreen() {
   const [loading, setLoading] = useState(true);
   const [loadingRanking, setLoadingRanking] = useState(false);
 
-  // 1. Carregar lista de desafios disponíveis (do grupo ou gerais)
+  // 1. Carregar lista de desafios disponíveis (do grupo selecionado ou dos grupos do usuário)
   useEffect(() => {
     async function loadChallenges() {
       try {
         setLoading(true);
         let list: any[] = [];
 
-        if (groupId) {
-          list = await api.getGroupChallenges(groupId);
-        } else {
+        let targetGroupId = groupId;
+        if (!targetGroupId && challengeId) {
+          try {
+            const chalObj = await api.getChallengeById(challengeId);
+            if (chalObj?.group_id) {
+              targetGroupId = chalObj.group_id;
+            }
+          } catch {}
+        }
+
+        if (targetGroupId) {
+          list = await api.getGroupChallenges(targetGroupId);
+        } else if (user?.id) {
+          // Carregar desafios apenas dos grupos em que o usuário realmente participa
+          const userGroups = await api.getUserGroups(user.id);
+          const chalPromises = userGroups.map((g: any) => api.getGroupChallenges(g.id));
+          const chalResults = await Promise.all(chalPromises);
+          const combined = chalResults.flat();
+          const seen = new Set();
+          list = combined.filter((c: any) => {
+            if (seen.has(c.id)) return false;
+            seen.add(c.id);
+            return true;
+          });
+        }
+
+        // Se ainda não encontrou (ex: primeiro acesso sem grupo), buscar desafios ativos
+        if (list.length === 0) {
           list = await api.getAllChallenges();
         }
 
-        const fullList = list;
+        setChallengesList(list);
 
-        setChallengesList(fullList);
-
-        if (fullList.length > 0) {
+        if (list.length > 0) {
           // Selecionar por padrão o challengeId recebido ou o primeiro da lista
-          let defaultId = fullList[0].id;
-          if (challengeId && fullList.some(c => c.id === challengeId)) {
+          let defaultId = list[0].id;
+          if (challengeId && list.some(c => c.id === challengeId)) {
             defaultId = challengeId;
           }
           setSelectedChallengeId(defaultId);
@@ -62,7 +85,7 @@ export default function RankingScreen() {
       }
     }
     loadChallenges();
-  }, [groupId, challengeId]);
+  }, [groupId, challengeId, user]);
 
   // 2. Carregar e calcular o ranking dinâmico sempre que o desafio selecionado mudar
   useEffect(() => {

@@ -791,7 +791,13 @@ export default function ChallengeScreen() {
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.headerActionButton}
-              onPress={() => router.push({ pathname: '/ranking', params: { challengeId: challenge.id } })}
+              onPress={() => router.push({ 
+                pathname: '/ranking', 
+                params: { 
+                  challengeId: challenge.id,
+                  groupId: challenge.group_id || group?.id 
+                } 
+              })}
             >
               <MaterialCommunityIcons name="podium" size={20} color={COLORS.secondary} />
             </TouchableOpacity>
@@ -1224,7 +1230,13 @@ export default function ChallengeScreen() {
                 <TouchableOpacity
                   activeOpacity={0.8}
                   style={[styles.inviteBtn, { backgroundColor: COLORS.goldLight + '25', borderColor: COLORS.gold, borderWidth: 1 }]}
-                  onPress={() => router.push({ pathname: '/ranking', params: { challengeId: challenge?.id || currentChallengeId } })}
+                  onPress={() => router.push({ 
+                    pathname: '/ranking', 
+                    params: { 
+                      challengeId: challenge?.id || currentChallengeId,
+                      groupId: challenge?.group_id || group?.id
+                    } 
+                  })}
                 >
                   <MaterialCommunityIcons name="podium-gold" size={16} color={COLORS.goldDark} />
                   <Text style={[styles.inviteBtnText, { color: COLORS.goldDark }]}>Ver Todos</Text>

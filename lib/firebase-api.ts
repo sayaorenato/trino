@@ -468,14 +468,57 @@ export const api = {
     if (!challengeId) return true;
     try {
       await deleteDoc(doc(db, 'challenges', challengeId));
-      const rQ = query(collection(db, 'rounds'), where('challenge_id', '==', challengeId));
-      const rSnap = await getDocs(rQ);
+
       const batch = writeBatch(db);
-      rSnap.docs.forEach(d => batch.delete(d.ref));
-      const tQ = query(collection(db, 'tasks'), where('challenge_id', '==', challengeId));
-      const tSnap = await getDocs(tQ);
-      tSnap.docs.forEach(d => batch.delete(d.ref));
+
+      // Limpar rounds
+      try {
+        const rQ = query(collection(db, 'rounds'), where('challenge_id', '==', challengeId));
+        const rSnap = await getDocs(rQ);
+        rSnap.docs.forEach(d => batch.delete(d.ref));
+      } catch {}
+
+      // Limpar tasks
+      try {
+        const tQ = query(collection(db, 'tasks'), where('challenge_id', '==', challengeId));
+        const tSnap = await getDocs(tQ);
+        tSnap.docs.forEach(d => batch.delete(d.ref));
+      } catch {}
+
+      // Limpar extra_tasks
+      try {
+        const etQ = query(collection(db, 'extra_tasks'), where('challenge_id', '==', challengeId));
+        const etSnap = await getDocs(etQ);
+        etSnap.docs.forEach(d => batch.delete(d.ref));
+      } catch {}
+
+      // Limpar challenge_participants
+      try {
+        const cpQ = query(collection(db, 'challenge_participants'), where('challenge_id', '==', challengeId));
+        const cpSnap = await getDocs(cpQ);
+        cpSnap.docs.forEach(d => batch.delete(d.ref));
+      } catch {}
+
+      // Limpar challenge_requests
+      try {
+        const crQ = query(collection(db, 'challenge_requests'), where('challenge_id', '==', challengeId));
+        const crSnap = await getDocs(crQ);
+        crSnap.docs.forEach(d => batch.delete(d.ref));
+      } catch {}
+
       await batch.commit();
+
+      // Limpar mocks em memória e storage local se existirem
+      try {
+        const { MOCK_CHALLENGES, MOCK_ROUNDS, MOCK_RANKINGS, MOCK_EXTRA_TASKS, saveMockRankings } = require('../constants/mock-data');
+        if (MOCK_CHALLENGES) delete MOCK_CHALLENGES[challengeId];
+        if (MOCK_ROUNDS) delete MOCK_ROUNDS[challengeId];
+        if (MOCK_RANKINGS) {
+          delete MOCK_RANKINGS[challengeId];
+          await saveMockRankings();
+        }
+        if (MOCK_EXTRA_TASKS) delete MOCK_EXTRA_TASKS[challengeId];
+      } catch {}
     } catch (e) {
       console.warn('Erro ao deletar desafio:', e);
     }
