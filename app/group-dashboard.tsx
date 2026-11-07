@@ -124,74 +124,39 @@ export default function GroupDashboardScreen() {
   // Filtrar os desafios ativos gerais do grupo (end_date >= hoje)
   const activeGroupChallenges = challenges.filter(c => isChallengeActive(c.end_date));
 
-  // Desafios ativos nos quais o usuário já participa do ranking (ou se for o admin do grupo ou criador)
+  // Desafios ativos nos quais o usuário já participa (criador ou já ingressou no ranking)
   const activeChallenges = activeGroupChallenges.filter(c => {
-    if (isAdmin || c.created_by === user?.id) return true;
+    if (c.created_by === user?.id) return true;
     const ranking = MOCK_RANKINGS[c.id] || [];
     return ranking.some((m: any) => m.user_id === user?.id);
   });
 
-  // Desafios disponíveis nos quais o usuário ainda não participa do ranking (admins nunca veem disponíveis)
+  // Desafios disponíveis nos quais o usuário ainda não entrou (ele deve clicar para entrar espontaneamente)
   const availableChallenges = activeGroupChallenges.filter(c => {
-    if (isAdmin || c.created_by === user?.id) return false;
+    if (c.created_by === user?.id) return false;
     const ranking = MOCK_RANKINGS[c.id] || [];
     return !ranking.some((m: any) => m.user_id === user?.id);
   });
 
   const pastChallenges = challenges.filter(c => !isChallengeActive(c.end_date));
 
-  const handleRequestJoinChallenge = async (challengeId: string, challengeName: string) => {
+  const handleJoinChallenge = async (challengeId: string, challengeName: string) => {
     if (!user || !groupId) return;
 
-    // Se for administrador do grupo, entra no ranking na hora sem aprovação
-    if (isAdmin) {
-      if (!MOCK_RANKINGS[challengeId]) {
-        MOCK_RANKINGS[challengeId] = [];
-      }
-      const alreadyInRank = MOCK_RANKINGS[challengeId].some(m => m.user_id === user.id);
-      if (!alreadyInRank) {
-        MOCK_RANKINGS[challengeId].push({
-          user_id: user.id,
-          name: profile?.full_name || user.email?.split('@')[0] || 'Administrador',
-          avatar_url: profile?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-          points: 0,
-          streak: 0,
-          rounds_won: 0
-        });
-      }
-      showAlert('Sucesso!', `Você entrou no desafio "${challengeName}" como administrador!`);
+    try {
+      await api.joinChallenge(challengeId, user.id, profile);
+      showAlert('Sucesso!', `Você entrou no desafio "${challengeName}" com sucesso! Agora você já pode registrar seus check-ins e acompanhar seus pontos.`);
       setRequestTrigger(prev => prev + 1);
-      return;
+    } catch (e: any) {
+      showAlert('Erro', e.message || 'Erro ao entrar no desafio.');
     }
-
-    // Verificar se já existe uma solicitação pendente
-    const hasPending = challengeRequests.some(
-      r => r.challenge_id === challengeId && r.user_id === user.id && r.status === 'pending'
-    );
-
-    if (hasPending) {
-      showAlert('Aviso', 'Você já enviou uma solicitação para este desafio. Aguarde a liberação do administrador.');
-      return;
-    }
-
-    // Criar solicitação
-    const newRequest = {
-      id: `req_${Date.now()}`,
-      challenge_id: challengeId,
-      challenge_name: challengeName,
-      group_id: groupId,
-      user_id: user.id,
-      user_name: profile?.full_name || user.email?.split('@')[0] || 'Novo Membro',
-      user_avatar: profile?.avatar_url || null,
-      status: 'pending' as const
-    };
-
-    const updated = [...challengeRequests, newRequest];
-    setChallengeRequests(updated);
-    await saveChallengeRequests(updated);
-    showAlert('Solicitação Enviada', `Sua solicitação para entrar no desafio "${challengeName}" foi enviada. Aguarde a liberação do administrador!`);
-    setRequestTrigger(prev => prev + 1);
   };
+
+  const handleRequestJoinChallenge = async (challengeId: string, challengeName: string) => {
+    return handleJoinChallenge(challengeId, challengeName);
+  };
+
+
 
   const handleApproveChallengeRequest = async (requestId: string, approve: boolean) => {
     const targetRequest = challengeRequests.find((r: any) => r.id === requestId);
@@ -532,11 +497,11 @@ export default function GroupDashboardScreen() {
                         </View>
                       ) : (
                         <Button
-                          title={isAdmin ? "Participar do Desafio" : "Solicitar Entrada"}
+                          title="Entrar no Desafio"
                           variant="secondary"
                           size="sm"
-                          icon={<MaterialCommunityIcons name="plus" size={14} color="#fff" />}
-                          onPress={() => handleRequestJoinChallenge(challenge.id, challenge.title || challenge.name)}
+                          icon={<MaterialCommunityIcons name="checkbox-marked-circle-outline" size={16} color="#fff" />}
+                          onPress={() => handleJoinChallenge(challenge.id, challenge.title || challenge.name)}
                           style={{ marginTop: SPACING.md, alignSelf: 'flex-start' }}
                         />
                       )}

@@ -154,9 +154,8 @@ export default function ChallengeScreen() {
           if (!g.challenges || !Array.isArray(g.challenges)) return;
           g.challenges.forEach((c: any) => {
             const ranking = MOCK_RANKINGS[c.id] || [];
-            const isUserAdmin = g.role === 'admin';
             const isCreator = c.created_by === user.id;
-            const userParticipates = c.userParticipates || isUserAdmin || isCreator || ranking.some((m: any) => m.user_id === user.id);
+            const userParticipates = c.userParticipates || isCreator || ranking.some((m: any) => m.user_id === user.id);
             
             if (userParticipates) {
               allowedChallenges.push({
@@ -436,37 +435,21 @@ export default function ChallengeScreen() {
   const handleRequestParticipation = async (cId: string, cTitle: string, gId: string) => {
     if (!user || !cId) return;
 
-    const hasPending = challengeRequests.some(
-      r => r.challenge_id === cId && r.user_id === user.id && r.status === 'pending'
-    );
-    if (hasPending) {
+    try {
+      await api.joinChallenge(cId, user.id, profile);
       if (Platform.OS === 'web') {
-        window.alert('Você já enviou uma solicitação para este desafio. Aguarde a liberação do administrador.');
+        window.alert(`Sucesso: Você entrou no desafio "${cTitle}"! Bons treinos e constância.`);
       } else {
-        Alert.alert('Aviso', 'Você já enviou uma solicitação para este desafio. Aguarde a liberação do administrador.');
+        Alert.alert('Bem-vindo ao Desafio!', `Você entrou no desafio "${cTitle}"! Bons treinos e constância.`);
       }
-      return;
-    }
-
-    const newRequest: ChallengeRequest = {
-      id: `req_${Date.now()}`,
-      challenge_id: cId,
-      challenge_name: cTitle,
-      group_id: gId,
-      user_id: user.id,
-      user_name: profile?.full_name || user.email?.split('@')[0] || 'Novo Membro',
-      user_avatar: profile?.avatar_url || null,
-      status: 'pending'
-    };
-
-    const updated = [...challengeRequests, newRequest];
-    setChallengeRequests(updated);
-    await saveChallengeRequests(updated);
-
-    if (Platform.OS === 'web') {
-      window.alert(`Sua solicitação para entrar no desafio "${cTitle}" foi enviada. Aguarde a aprovação do administrador do grupo!`);
-    } else {
-      Alert.alert('Solicitação Enviada', `Sua solicitação para entrar no desafio "${cTitle}" foi enviada. Aguarde a aprovação do administrador do grupo!`);
+      setHasNoAccess(false);
+      setReqTrigger(prev => prev + 1);
+    } catch (e: any) {
+      if (Platform.OS === 'web') {
+        window.alert(`Erro ao entrar no desafio: ${e.message}`);
+      } else {
+        Alert.alert('Erro', e.message || 'Erro ao entrar no desafio.');
+      }
     }
   };
 
@@ -542,15 +525,15 @@ export default function ChallengeScreen() {
               ) : (
                 <View style={{ alignItems: 'center', paddingVertical: SPACING.sm, width: '100%' }}>
                   <Text style={{ color: COLORS.text, fontFamily: FONTS.family.heading, fontSize: FONTS.size.md, fontWeight: '600', marginBottom: SPACING.xs, textAlign: 'center' }}>
-                    Solicitar Participação
+                    Entrar no Desafio
                   </Text>
                   <Text style={{ color: COLORS.textSecondary, fontFamily: FONTS.family.body, fontSize: FONTS.size.sm, textAlign: 'center', marginBottom: SPACING.lg, lineHeight: 20 }}>
-                    Você já é membro deste grupo! Para entrar neste desafio de hábitos e constância, solicite a participação para que o administrador aprove sua entrada.
+                    Você é membro deste grupo! Para começar a registrar seus check-ins diários e pontuar no ranking, clique abaixo para entrar no desafio.
                   </Text>
                   <Button
-                    title="Solicitar Entrada no Desafio"
+                    title="Entrar no Desafio"
                     variant="primary"
-                    icon={<MaterialCommunityIcons name="plus-circle-outline" size={18} color="#fff" />}
+                    icon={<MaterialCommunityIcons name="checkbox-marked-circle-outline" size={18} color="#fff" />}
                     onPress={() => handleRequestParticipation(
                       restrictedChallengeInfo?.challengeId || '',
                       restrictedChallengeInfo?.challengeTitle || 'Desafio',

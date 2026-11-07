@@ -431,6 +431,17 @@ export const api = {
     return null;
   },
 
+  async getUserProfile(userId: string): Promise<any> {
+    if (!userId) return null;
+    try {
+      const snap = await getDoc(doc(db, 'users', userId));
+      if (snap.exists()) {
+        return { id: snap.id, ...snap.data() };
+      }
+    } catch {}
+    return null;
+  },
+
   async createChallenge(data: {
     groupId: string;
     title: string;
@@ -452,7 +463,107 @@ export const api = {
       created_at: new Date().toISOString()
     };
     const ref = await addDoc(collection(db, 'challenges'), payload);
+
+    // O criador do desafio entra automaticamente como o primeiro participante
+    if (data.createdBy) {
+      try {
+        const partId = `${ref.id}_${data.createdBy}`;
+        let creatorProfile: any = null;
+        try {
+          creatorProfile = await this.getUserProfile(data.createdBy);
+        } catch {}
+
+        await setDoc(doc(db, 'challenge_participants', partId), {
+          id: partId,
+          challenge_id: ref.id,
+          group_id: data.groupId,
+          user_id: data.createdBy,
+          user_name: creatorProfile?.full_name || 'Criador do Desafio',
+          user_avatar: creatorProfile?.avatar_url || null,
+          role: 'admin',
+          joined_at: payload.created_at,
+          points: 0,
+          streak: 0,
+          rounds_won: 0
+        });
+
+        // Sincronizar MOCK_RANKINGS localmente
+        const { MOCK_RANKINGS, saveMockRankings } = require('../constants/mock-data');
+        if (MOCK_RANKINGS) {
+          MOCK_RANKINGS[ref.id] = [
+            {
+              user_id: data.createdBy,
+              name: creatorProfile?.full_name || 'Você',
+              avatar_url: creatorProfile?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+              points: 0,
+              streak: 0,
+              rounds_won: 0
+            }
+          ];
+          await saveMockRankings();
+        }
+      } catch (cpErr) {
+        console.warn('Erro ao registrar criador como primeiro participante:', cpErr);
+      }
+    }
+
     return { id: ref.id, ...payload };
+  },
+
+  async joinChallenge(challengeId: string, userId: string, profile?: any) {
+    if (!challengeId || !userId) return;
+    try {
+      const partId = `${challengeId}_${userId}`;
+      const chal = await this.getChallengeById(challengeId);
+
+      let userName = profile?.full_name || profile?.name;
+      let userAvatar = profile?.avatar_url;
+      if (!userName) {
+        try {
+          const uProf = await this.getUserProfile(userId);
+          if (uProf) {
+            userName = uProf.full_name;
+            userAvatar = uProf.avatar_url;
+          }
+        } catch {}
+      }
+
+      await setDoc(doc(db, 'challenge_participants', partId), {
+        id: partId,
+        challenge_id: challengeId,
+        group_id: chal?.group_id || null,
+        user_id: userId,
+        user_name: userName || 'Participante',
+        user_avatar: userAvatar || null,
+        role: 'member',
+        joined_at: new Date().toISOString(),
+        points: 0,
+        streak: 0,
+        rounds_won: 0
+      }, { merge: true });
+
+      // Atualizar MOCK_RANKINGS
+      const { MOCK_RANKINGS, saveMockRankings } = require('../constants/mock-data');
+      if (MOCK_RANKINGS) {
+        if (!MOCK_RANKINGS[challengeId]) {
+          MOCK_RANKINGS[challengeId] = [];
+        }
+        const already = MOCK_RANKINGS[challengeId].some((m: any) => m.user_id === userId);
+        if (!already) {
+          MOCK_RANKINGS[challengeId].push({
+            user_id: userId,
+            name: userName || 'Participante',
+            avatar_url: userAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+            points: 0,
+            streak: 0,
+            rounds_won: 0
+          });
+          await saveMockRankings();
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao entrar espontaneamente no desafio:', e);
+    }
   },
 
   async updateChallenge(challengeId: string, data: any) {
@@ -620,13 +731,10 @@ export const api = {
         console.warn('Erro ao buscar challenge_participants:', err);
       }
 
-      // 3. Buscar membros do grupo associado ao desafio (se houver)
-      let groupMembers: any[] = [];
+      // 3. Buscar informações do desafio para garantir o criador como participante
+      let challengeObj: any = null;
       try {
-        const chal = await this.getChallengeById(challengeId);
-        if (chal?.group_id) {
-          groupMembers = await this.getGroupMembers(chal.group_id);
-        }
+        challengeObj = await this.getChallengeById(challengeId);
       } catch {}
 
       // 4. Carregar mock rankings persistidos se existirem
@@ -636,6 +744,23 @@ export const api = {
 
       // 5. Unificar todos os participantes em um Map por user_id
       const participantsMap = new Map<string, any>();
+
+      // Adicionar criador do desafio como primeiro participante oficial
+      if (challengeObj?.created_by) {
+        let creatorProfile: any = null;
+        try {
+          creatorProfile = await this.getUserProfile(challengeObj.created_by);
+        } catch {}
+        participantsMap.set(challengeObj.created_by, {
+          user_id: challengeObj.created_by,
+          name: creatorProfile?.full_name || 'Criador do Desafio',
+          avatar_url: creatorProfile?.avatar_url || null,
+          points: 0,
+          streak: 0,
+          rounds_won: 0,
+          checkin_count: 0
+        });
+      }
 
       // Adicionar mock members (base de demonstração/inicial)
       mockMembers.forEach((m: any) => {
@@ -648,21 +773,6 @@ export const api = {
           rounds_won: m.rounds_won || 0,
           checkin_count: m.checkin_count || 0
         });
-      });
-
-      // Adicionar membros do grupo
-      groupMembers.forEach((m: any) => {
-        if (!participantsMap.has(m.user_id)) {
-          participantsMap.set(m.user_id, {
-            user_id: m.user_id,
-            name: m.full_name || 'Participante',
-            avatar_url: m.avatar_url || null,
-            points: 0,
-            streak: m.streak || 0,
-            rounds_won: 0,
-            checkin_count: 0
-          });
-        }
       });
 
       // Adicionar challenge_participants
@@ -792,7 +902,7 @@ export const api = {
           const inMockRanking = (MOCK_RANKINGS[c.id] || []).some((m: any) => m.user_id === userId);
           return {
             ...c,
-            userParticipates: isUserAdmin || isCreator || isParticipant || inMockRanking
+            userParticipates: isCreator || isParticipant || inMockRanking
           };
         });
 
